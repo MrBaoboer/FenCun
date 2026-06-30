@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   氛寸 · 设计系统（Design Tokens）
+   基调：东方编辑感的克制奢华 —— 宣纸暖白 / 墨绿 / 香槟金，
+   衬线配英文与数字、留白、近乎无形的阴影、克制的动效。
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  /* 色彩 —— 暖中性底 + 单一沉静主色 + 低饱和点缀 */
+  --color-paper: #f6f3ee;        /* 宣纸暖白（页面底） */
+  --color-paper-deep: #efeae1;   /* 略深的底，用于分区 */
+  --color-surface: #fffdf9;      /* 卡片面 */
+  --color-sunken: #f0ece4;       /* 凹陷/输入底 */
+
+  --color-ink: #211d18;          /* 近黑暖棕（主文字） */
+  --color-ink-soft: #574f45;     /* 次要文字 */
+  --color-ink-faint: #948b7d;    /* 第三级/说明 */
+  --color-line: #e4ded2;         /* 发丝分割线 */
+  --color-line-strong: #d6cfc0;
+
+  --color-brand: #3a5a47;        /* 墨绿（主色） */
+  --color-brand-soft: #6d8a78;   /* 墨绿浅 */
+  --color-brand-wash: #eef1ec;   /* 墨绿极浅底 */
+
+  --color-accent: #c2a05f;       /* 香槟金（极少强调） */
+  --color-accent-soft: #e6d4a8;
+  --color-warn: #b07d4f;         /* 暖琥珀（分寸提醒，不用刺眼红） */
+  --color-warn-wash: #f6ede2;
+
+  /* 字体 */
+  --font-display: var(--font-fraunces), "Songti SC", "Noto Serif SC", serif;
+  --font-sans: "PingFang SC", "Microsoft YaHei", "HarmonyOS Sans SC",
+    "Source Han Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif-zh: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+
+  /* 圆角 */
+  --radius-card: 18px;
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
+
+  /* 阴影 —— 几乎看不见，只留浮起感 */
+  --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.04), 0 10px 30px -12px rgba(33, 29, 24, 0.12);
+  --shadow-float: 0 2px 6px rgba(33, 29, 24, 0.06), 0 20px 50px -20px rgba(33, 29, 24, 0.22);
+
+  /* 动效 */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  /* 极淡的暖色氛围渐变作为固定底层（避免 background-attachment:fixed 的滚动重绘开销） */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1200px 600px at 80% -10%, rgba(194, 160, 95, 0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(58, 90, 71, 0.06), transparent 55%);
+  }
+  /* 数字用衬线、等宽对齐，更精致 */
+  .tnum {
+    font-family: var(--font-display);
+    font-feature-settings: "tnum" 1, "ss01" 1;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: rgba(58, 90, 71, 0.16);
+  }
+}
+
+@layer components {
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+  .hairline {
+    border-color: var(--color-line);
+  }
+  /* 胶囊标签 */
+  .chip {
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-line-strong);
+    color: var(--color-ink-soft);
+    background: transparent;
+    transition: all 0.2s var(--ease-out-soft);
+  }
+  .chip[data-active="true"] {
+    background: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-paper);
+  }
+  /* 细体大写英文小标签 */
+  .eyebrow {
+    font-family: var(--font-display);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    font-size: 0.66rem;
+    color: var(--color-ink-faint);
+    font-weight: 500;
+  }
+}
+
+/* ── 动效：仅用于卡片入场 / 证据条生长 / 换瓶重排 ── */
+@keyframes fc-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fc-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes fc-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-up {
+  animation: fc-fade-up 0.6s var(--ease-out-soft) both;
+}
+.animate-fade-in {
+  animation: fc-fade-in 0.5s var(--ease-out-soft) both;
+}
+.bar-grow {
+  transform-origin: left center;
+  animation: fc-grow 0.7s var(--ease-out-soft) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-fade-in, .bar-grow { animation: none; }
+}
