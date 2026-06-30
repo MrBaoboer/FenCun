@@ -1,0 +1,6 @@
+# 原始香水数据集（636MB，运行期不需要，构建产物已在 public/data/）
+ledecanteur
+# 构建中间产物
+.scratch
+# 文档（运行期不需要）
+docs
