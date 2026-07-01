@@ -38,14 +38,14 @@ export function ChangeBottleSheet({
                 onClose();
               }}
               data-active={p.id === currentId}
-              className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left transition-colors hover:bg-sunken data-[active=true]:bg-brand-wash"
+              className="flex w-full items-center justify-between rounded-md px-3 py-3 text-left transition-colors hover:bg-sunken data-[active=true]:bg-sunken"
             >
               <div className="min-w-0">
                 {(() => {
                   const np = nameParts(p);
                   return (
                     <>
-                      <div className={`truncate text-[1.02rem] text-ink ${np.primaryIsZh ? "" : "font-display"}`}>
+                      <div className={`truncate text-[1.02rem] text-ink ${np.primaryIsZh ? "serif font-semibold" : "disp"}`}>
                         {np.primary}
                       </div>
                       <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
@@ -56,7 +56,7 @@ export function ChangeBottleSheet({
                   );
                 })()}
               </div>
-              <span className="ml-3 shrink-0 text-[0.72rem] text-ink-soft">
+              <span className="disp ml-3 shrink-0 text-[0.72rem] text-ink-soft">
                 {SILLAGE_WORD[p.sillageTier]}
               </span>
             </button>

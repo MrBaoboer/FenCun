@@ -1,6 +1,6 @@
-// 推荐编排：打分 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由
-import type { Perfume, Context, ScoredPick } from "./types";
-import { score } from "./scoring";
+// 推荐编排：打分 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
+import type { Perfume, Context, ScoredPick, Verdict } from "./types";
+import { score, type ScoreParts } from "./scoring";
 import { computeUsage, computeRisks, buildReasons } from "./usage";
 
 export interface Bias {
@@ -8,8 +8,21 @@ export interface Bias {
   perceivedStrength: number;
 }
 
+// 用香裁决 —— 不迁就用户：确实不合的场景明确判 avoid
+function computeVerdict(p: Perfume, ctx: Context, parts: ScoreParts, risks: string[]): Verdict {
+  const entries = Object.entries(p.seasonPct) as [keyof typeof p.seasonPct, number][];
+  const best = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
+  const seasonMiss = best[0] !== ctx.season && best[1] - p.seasonPct[ctx.season] >= 0.22;
+  const closed = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
+  const tooLoudClosed = p.sillageTier === 4 && closed;
+  if (parts.weather <= 0.82 || seasonMiss || tooLoudClosed) return "avoid";
+  if (risks.length > 0 || parts.weather < 0.95) return "caution";
+  return "good";
+}
+
 export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   const parts = score(p, ctx, bias);
+  const risks = computeRisks(p, ctx);
   return {
     perfume: p,
     score: parts.total,
@@ -21,12 +34,13 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
       quality: parts.quality,
     },
     usage: computeUsage(p, ctx),
-    risks: computeRisks(p, ctx),
+    risks,
     reasons: buildReasons(p, ctx, {
       season: parts.season,
       weather: parts.weather,
       occasion: parts.occasion,
     }),
+    verdict: computeVerdict(p, ctx, parts, risks),
   };
 }
 

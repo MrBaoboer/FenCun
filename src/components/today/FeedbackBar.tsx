@@ -31,16 +31,16 @@ export function FeedbackBar({ perfumeId, ctx }: { perfumeId: number; ctx: Contex
   return (
     <div className="card px-5 py-4">
       {done ? (
-        <p className="animate-fade-in text-sm text-ink-soft">{done}</p>
+        <p className="serif animate-fade-in text-[0.95rem] font-medium text-ink-soft">{done}</p>
       ) : (
         <>
           <Eyebrow>今天，刚好吗</Eyebrow>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3.5 flex gap-2.5">
             {OPTIONS.map((o) => (
               <button
                 key={o.key}
                 onClick={() => submit(o)}
-                className="chip flex-1 py-2 text-sm hover:border-brand-soft hover:text-ink"
+                className="chip serif flex-1 py-2.5 text-[0.9rem] hover:text-ink"
               >
                 {o.label}
               </button>
