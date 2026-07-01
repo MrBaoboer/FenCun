@@ -46,7 +46,7 @@ export const useStore = create<State>()(
             u.perfumeId === id ? { ...u, lastWornAt: Date.now() } : u
           ),
         })),
-      addFeedback: (fb) => set((s) => ({ feedbacks: [...s.feedbacks, fb] })),
+      addFeedback: (fb) => set((s) => ({ feedbacks: [...s.feedbacks, fb].slice(-400) })),
       setCity: (c) => set({ city: c }),
       setOccasion: (o) => set({ occasion: o, scene: null }), // 手动选场合即清除自然语言场景
       setScene: (s) => set({ scene: s }),

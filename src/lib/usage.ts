@@ -14,7 +14,11 @@ const DENSITY: Record<string, "dense" | "closed" | "normal" | "open"> = {
   sport: "open",
 };
 
-export function computeUsage(p: Perfume, ctx: Context): Usage {
+export function computeUsage(
+  p: Perfume,
+  ctx: Context,
+  bias?: { likeScore: number; perceivedStrength: number }
+): Usage {
   const sil = p.sillage ?? 2.5;
   // 喷量基础档：扩散越强，喷越少
   let lo: number, hi: number;
@@ -38,6 +42,14 @@ export function computeUsage(p: Perfume, ctx: Context): Usage {
   if (ctx.avoid?.includes("too_strong")) {
     lo = Math.max(1, lo - 1);
     hi = Math.max(lo, hi - 1);
+  }
+  // 反馈闭环：你多次觉得"太冲"(perceivedStrength>0)→少喷；"太淡"(<0)→多喷。兑现"下次帮你少喷半下"
+  const ps = bias?.perceivedStrength ?? 0;
+  if (ps >= 0.4) {
+    hi = Math.max(1, hi - 1);
+    if (ps >= 0.7) lo = Math.max(1, lo - 1);
+  } else if (ps <= -0.4) {
+    hi = Math.min(hi + 1, 5);
   }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;

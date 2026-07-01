@@ -1,13 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { useLibraryPerfumes } from "@/lib/hooks";
+import { useLibraryPerfumes, DUSTY_MS } from "@/lib/hooks";
 import { Eyebrow } from "@/components/ui";
 import { SearchAdd } from "@/components/library/SearchAdd";
 import { ShelfCard } from "@/components/library/ShelfCard";
 import { PerfumeCard } from "@/components/library/PerfumeCard";
-
-const DUSTY_MS = 30 * 24 * 3600 * 1000;
 
 export default function LibraryPage() {
   const lib = useLibraryPerfumes();

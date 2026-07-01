@@ -33,7 +33,7 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
       weather: parts.weather,
       quality: parts.quality,
     },
-    usage: computeUsage(p, ctx),
+    usage: computeUsage(p, ctx, bias),
     risks,
     reasons: buildReasons(p, ctx, {
       season: parts.season,

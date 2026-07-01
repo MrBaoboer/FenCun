@@ -56,7 +56,9 @@ export function NudgeCard({ nudge, onPick }: { nudge: Nudge; onPick: (id: number
       <div className="flex items-start gap-3">
         <AlertIcon />
         <div className="min-w-0 flex-1">
-          <Eyebrow className="!text-warn">天气突变 · 你常喷的这瓶要留意</Eyebrow>
+          <Eyebrow className="!text-warn">
+            {nudge.basis === "habit" ? "天气突变 · 你常喷的这瓶要留意" : "天气突变 · 这瓶今天要留意"}
+          </Eyebrow>
           <p className="serif mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
             <span className="font-bold text-ink">{hp.primary}</span>：{nudge.reason}
           </p>

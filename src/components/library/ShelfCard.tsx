@@ -34,26 +34,25 @@ export function ShelfCard({
         {p.brandZh}
       </div>
 
-      <div className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-ink-faint">
-        <span className="serif text-ink-soft">{p.styleTags[0]}</span>
-        <span className="disp tracking-wide">
+      <div className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-[0.68rem] text-ink-faint">
+        <span className="serif shrink-0 text-ink-soft">{p.styleTags[0]}</span>
+        <span className="disp ml-auto min-w-0 truncate tracking-wide">
           {SILLAGE_WORD[p.sillageTier]} · {durationShort(p.longevity)}
         </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="-mr-1 shrink-0 p-1 text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
+          aria-label="移出香柜"
+          title="移出香柜"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
-
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute bottom-3.5 right-3 text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
-        aria-label="移出香柜"
-        title="移出香柜"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
     </div>
   );
 }
