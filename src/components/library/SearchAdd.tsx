@@ -41,7 +41,7 @@ export function SearchAdd() {
 
   return (
     <div ref={boxRef} className="relative">
-      <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 focus-within:border-brand">
+      <div className="card flex items-center gap-2 px-3.5 py-3 focus-within:border-accent">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="shrink-0">
           <circle cx="11" cy="11" r="6.5" stroke="var(--color-ink-faint)" strokeWidth="1.6" />
           <path d="M20 20l-4-4" stroke="var(--color-ink-faint)" strokeWidth="1.6" strokeLinecap="round" />
@@ -82,7 +82,7 @@ export function SearchAdd() {
                           const np = nameParts(p);
                           return (
                             <>
-                              <div className={`truncate text-[1rem] text-ink ${np.primaryIsZh ? "" : "font-display"}`}>
+                              <div className={`truncate text-[1rem] text-ink ${np.primaryIsZh ? "serif font-semibold" : "disp"}`}>
                                 {np.primary}
                               </div>
                               <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { Perfume, Weather } from "@/lib/types";
 import { loadCatalog } from "@/lib/perfumes";
+import { feelFromWeather } from "@/lib/season";
 import { useStore } from "@/lib/store";
 
 type LocState = "idle" | "locating" | "ok" | "denied" | "error";
@@ -36,6 +37,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     useStore.persist.rehydrate();
   }, []);
+
+  // 天气/时间成光：按真实时段切昼夜主题，按体感微调氛围色温
+  useEffect(() => {
+    const root = document.documentElement;
+    const hour = new Date().getHours();
+    root.dataset.theme = hour >= 6 && hour < 18 ? "day" : "night";
+    if (weather) {
+      const feel = feelFromWeather(weather.tempC, weather.humidity);
+      if (feel === "cold" || feel === "hot_humid") root.dataset.weather = feel;
+      else root.removeAttribute("data-weather");
+    }
+  }, [weather]);
 
   // 目录
   useEffect(() => {

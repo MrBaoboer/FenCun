@@ -6,50 +6,51 @@ export function ShelfCard({
   p,
   dusty,
   onRemove,
+  onOpen,
 }: {
   p: Perfume;
   dusty?: boolean;
   onRemove: () => void;
+  onOpen: () => void;
 }) {
+  const np = nameParts(p);
   return (
-    <div className="card relative flex flex-col px-4 py-4">
+    <div
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
+      className="card relative flex cursor-pointer flex-col p-4 transition-shadow hover:border-line-strong"
+    >
       {dusty && (
-        <span className="absolute right-3 top-3 rounded-pill bg-warn-wash px-2 py-0.5 text-[0.64rem] text-warn">
-          很久没用
-        </span>
+        <span className="eyebrow absolute right-3 top-3.5 !text-[0.55rem] !text-warn">很久没用</span>
       )}
-      {(() => {
-        const np = nameParts(p);
-        return (
-          <>
-            <div className={`truncate pr-16 text-[1.05rem] text-ink ${np.primaryIsZh ? "" : "font-display"}`}>
-              {np.primary}
-            </div>
-            <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
-              {np.secondary ? `${np.secondary} · ` : ""}
-              {p.brandZh}
-            </div>
-          </>
-        );
-      })()}
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        {p.styleTags.slice(0, 2).map((t) => (
-          <span key={t} className="rounded-pill bg-brand-wash px-2 py-0.5 text-[0.68rem] text-brand">
-            {t}
-          </span>
-        ))}
+      <div className={`truncate pr-14 text-[1.08rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
+        {np.primary}
       </div>
-      <div className="mt-3 flex items-center justify-between border-t border-line pt-2.5 text-[0.7rem] text-ink-faint">
-        <span>扩散 {SILLAGE_WORD[p.sillageTier]}</span>
-        <span>留香 {durationShort(p.longevity)}</span>
+      <div className="mt-1 truncate text-[0.72rem] text-ink-faint">
+        {np.secondary ? <span className="en-italic">{np.secondary}</span> : null}
+        {np.secondary ? " · " : ""}
+        {p.brandZh}
       </div>
+
+      <div className="mt-auto flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-ink-faint">
+        <span className="serif text-ink-soft">{p.styleTags[0]}</span>
+        <span className="disp tracking-wide">
+          {SILLAGE_WORD[p.sillageTier]} · {durationShort(p.longevity)}
+        </span>
+      </div>
+
       <button
-        onClick={onRemove}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
         className="absolute bottom-3.5 right-3 text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
         aria-label="移出香柜"
         title="移出香柜"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>

@@ -16,15 +16,15 @@ export function OccasionChips() {
   const occasion = useStore((s) => s.occasion);
   const setOccasion = useStore((s) => s.setOccasion);
   return (
-    <div className="flex flex-col gap-2">
-      <span className="eyebrow px-1">今天的场合</span>
-      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="flex flex-col gap-2.5">
+      <span className="eyebrow eyebrow-mute">今天去哪儿</span>
+      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {OCCASIONS.map((o) => (
           <button
             key={o.key}
             data-active={occasion === o.key}
             onClick={() => setOccasion(o.key)}
-            className="chip shrink-0 px-4 py-1.5 text-sm"
+            className="chip serif shrink-0 px-3.5 py-1.5 text-[0.88rem]"
           >
             {o.label}
           </button>

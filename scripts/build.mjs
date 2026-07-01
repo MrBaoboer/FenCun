@@ -57,27 +57,50 @@ function sillageTier(s) {
 
 // 用英文 accord 键做规则匹配
 function accStrength(accords, en) { const a = accords.find((x) => x.name === en); return a ? a.strength : 0; }
-function anyStrength(accords, names, min) { return names.some((n) => accStrength(accords, n) >= min); }
+function famMax(accords, names) { return names.reduce((m, n) => Math.max(m, accStrength(accords, n)), 0); }
 
+// 风格标签：按"香调家族聚合 + 排除项"判定，避免"有柑橘前调就判清新"这类误判
+// （如 大地 Terre d'Hermès：citrus100 但 woody88+earthy43 → 木质矿物，绝不是清新）
 function styleTags(raw) {
   const a = raw.accords;
   const dp = daypartPct(raw.daypart);
   const sp = seasonPct(raw.seasons);
   const sil = raw.sillage ?? 2.5;
+
+  const fresh = famMax(a, ['citrus', 'aquatic', 'marine', 'ozonic', 'green', 'watery', 'mentholated']);
+  const sweet = famMax(a, ['sweet', 'vanilla', 'caramel', 'honey', 'chocolate', 'cacao', 'coffee', 'gourmand']);
+  const amberWoody = famMax(a, ['amber', 'woody', 'oud', 'sandalwood', 'cedar', 'resinous', 'balsamic']);
+  const earthyDark = famMax(a, ['earthy', 'leather', 'tobacco', 'smoky', 'animalic', 'patchouli']);
+  const floral = famMax(a, ['floral', 'white floral', 'yellow floral', 'rose', 'jasmine', 'tuberose', 'violet', 'iris']);
+  const spicy = famMax(a, ['warm spicy', 'spicy', 'fresh spicy', 'cinnamon', 'soft spicy']);
+  const springSummer = sp.spring + sp.summer;
+  const winterAutumn = sp.winter + sp.autumn;
+
   const tags = [];
-  if (anyStrength(a, ['citrus', 'aquatic', 'marine', 'green', 'fresh'], 55) && accStrength(a, 'sweet') < 40 && dp.day >= 0.55)
+  // 清新通勤：清新家族主导，且无明显泥土/皮革/烟草，木质不过重（除非强偏春夏）
+  if (fresh >= 58 && sweet < 48 && earthyDark < 25 && (amberWoody < 70 || springSummer >= 0.62))
     tags.push('清新通勤');
-  if (anyStrength(a, ['sweet', 'vanilla', 'amber', 'caramel', 'honey'], 50) && dp.night >= 0.5)
-    tags.push('暖甜约会');
-  if (anyStrength(a, ['woody', 'aromatic', 'leather'], 50) && accStrength(a, 'sweet') < 38 && sil >= 1.9 && sil <= 3.1)
-    tags.push('正式商务');
-  if (sil >= 3.2 && anyStrength(a, ['sweet', 'amber', 'oud', 'leather', 'tobacco', 'resinous'], 50))
-    tags.push('浓郁夜场');
-  if (sp.summer >= 0.36 && anyStrength(a, ['citrus', 'aquatic', 'marine', 'green'], 45))
+  // 盛夏轻盈：夏季票重 + 清新 + 轻
+  if (sp.summer >= 0.38 && fresh >= 50 && earthyDark < 25 && sweet < 58 && sil < 2.5)
     tags.push('盛夏轻盈');
-  if ((sp.winter + sp.autumn) >= 0.58 && anyStrength(a, ['amber', 'warm spicy', 'woody', 'vanilla', 'resinous', 'oud'], 45))
+  // 暖甜约会：甜香主导 + 偏夜
+  if (sweet >= 55 && dp.night >= 0.46)
+    tags.push('暖甜约会');
+  // 秋冬暖香：秋冬票重 + 暖调
+  if (winterAutumn >= 0.6 && (sweet >= 48 || amberWoody >= 55 || spicy >= 62))
     tags.push('秋冬暖香');
-  return tags.length ? tags : ['日常百搭'];
+  // 浓郁夜场：扩散强 + 厚重
+  if (sil >= 3.0 && (sweet >= 55 || amberWoody >= 60 || earthyDark >= 55))
+    tags.push('浓郁夜场');
+  // 正式商务：木质/琥珀沉稳、不甜、扩散适中，且非清新主导
+  if (amberWoody >= 55 && sweet < 48 && sil >= 1.9 && sil <= 3.2 && !tags.includes('清新通勤'))
+    tags.push('正式商务');
+  // 优雅花香：花香主导、不甜腻
+  if (floral >= 62 && sweet < 58 && amberWoody < 60)
+    tags.push('优雅花香');
+
+  const uniq = [...new Set(tags)].slice(0, 2);
+  return uniq.length ? uniq : ['日常百搭'];
 }
 
 const out = selected.map((r) => {

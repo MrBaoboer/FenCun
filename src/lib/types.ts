@@ -76,6 +76,8 @@ export interface Usage {
   suitable: boolean;
 }
 
+export type Verdict = "good" | "caution" | "avoid";
+
 export interface ScoredPick {
   perfume: Perfume;
   score: number;
@@ -89,6 +91,7 @@ export interface ScoredPick {
   usage: Usage;
   risks: string[];
   reasons: string[]; // 规则生成的要点，DeepSeek 不可用时即为兜底解释
+  verdict: Verdict; // 用香裁决：good 推荐 / caution 留意 / avoid 今天不建议
 }
 
 export interface UserPerfume {
