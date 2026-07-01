@@ -6,9 +6,11 @@ import {
   useRecommendation,
   useLibraryPerfumes,
   useExplain,
+  useNudges,
 } from "@/lib/hooks";
 import { buildPick, aggregateBias } from "@/lib/recommend";
 import { ContextBar } from "@/components/today/ContextBar";
+import { NudgeCard } from "@/components/today/NudgeCard";
 import { RecommendationCard } from "@/components/today/RecommendationCard";
 import { AltList } from "@/components/today/AltList";
 import { FeedbackBar } from "@/components/today/FeedbackBar";
@@ -44,10 +46,19 @@ export default function TodayPage() {
   );
 
   const explain = useExplain(activePick, ctx);
+  const nudges = useNudges(ctx, rec);
 
   return (
     <div className="flex flex-col gap-5">
       <ContextBar ctx={ctx} />
+
+      {hydrated && lib.length > 0 && ctx && nudges.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {nudges.map((n, i) => (
+            <NudgeCard key={i} nudge={n} onPick={(id) => setSelectedId(id)} />
+          ))}
+        </div>
+      )}
 
       {!hydrated ? (
         <div className="h-56 animate-pulse bg-sunken/50" />

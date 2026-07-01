@@ -40,12 +40,18 @@ const SEED = `(async () => {
   try {
     const all = await (await fetch('/data/perfumes.min.json')).json();
     const want = ['Aventus','Sauvage','Black Opium','Wild Bluebell','Tobacco Vanille','Light Blue'];
-    const picks = [];
-    for (const w of want) { const p = all.find(x => x.name === w); if (p) picks.push(p.id); }
-    const now = 1782800000000;
-    const store = { state: { userPerfumes: picks.map((id,i)=>({perfumeId:id, addedAt: now - i*8.64e7})), feedbacks: [], city: '上海', occasion: 'commute' }, version: 0 };
-    localStorage.setItem('fencun-store', JSON.stringify(store));
-    return picks.length;
+    const id = {};
+    for (const w of want) { const p = all.find(x => x.name === w); if (p) id[w] = p.id; }
+    const now = 1782800000000, D = 8.64e7;
+    const userPerfumes = Object.entries(id).map(([n, pid], i) => ({
+      perfumeId: pid,
+      addedAt: n === 'Wild Bluebell' ? now - 40*D : now - i*D,  // 蓝风铃入柜40天没碰 → 吃灰
+    }));
+    // 烟草香草被喷过3次 → 常用香（夏天不合适，触发天气突变预警）
+    const tv = id['Tobacco Vanille'];
+    const feedbacks = tv ? [-3,-12,-22].map(d => ({ perfumeId: tv, at: now + d*D, context: { season: 'winter', daypart: 'night', tempC: 6, occasion: 'date' }, rating: 'perfect' })) : [];
+    localStorage.setItem('fencun-store', JSON.stringify({ state: { userPerfumes, feedbacks, city: '上海', occasion: 'commute' }, version: 0 }));
+    return userPerfumes.length;
   } catch(e) { return 'seed-fail:'+e.message; }
 })()`;
 

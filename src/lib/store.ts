@@ -2,13 +2,14 @@
 // 客户端状态（香水库 + 反馈 + 偏好），持久化到 localStorage
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { UserPerfume, Feedback, Occasion } from "./types";
+import type { UserPerfume, Feedback, Occasion, ScenePatch } from "./types";
 
 interface State {
   userPerfumes: UserPerfume[];
   feedbacks: Feedback[];
   city: string | null; // 手动城市覆盖（定位失败时用）
   occasion: Occasion;
+  scene: ScenePatch | null; // 自然语言场景（覆盖 occasion）
   hydrated: boolean;
 
   addPerfume: (id: number) => void;
@@ -17,6 +18,7 @@ interface State {
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
   setOccasion: (o: Occasion) => void;
+  setScene: (s: ScenePatch | null) => void;
   hasPerfume: (id: number) => boolean;
 }
 
@@ -27,6 +29,7 @@ export const useStore = create<State>()(
       feedbacks: [],
       city: null,
       occasion: "commute",
+      scene: null,
       hydrated: false,
 
       addPerfume: (id) =>
@@ -45,7 +48,8 @@ export const useStore = create<State>()(
         })),
       addFeedback: (fb) => set((s) => ({ feedbacks: [...s.feedbacks, fb] })),
       setCity: (c) => set({ city: c }),
-      setOccasion: (o) => set({ occasion: o }),
+      setOccasion: (o) => set({ occasion: o, scene: null }), // 手动选场合即清除自然语言场景
+      setScene: (s) => set({ scene: s }),
       hasPerfume: (id) => get().userPerfumes.some((u) => u.perfumeId === id),
     }),
     {

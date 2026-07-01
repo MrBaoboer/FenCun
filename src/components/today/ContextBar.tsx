@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { Eyebrow } from "@/components/ui";
 import { OccasionChips } from "@/components/today/OccasionChips";
+import { SceneInput } from "@/components/today/SceneInput";
 import { FEEL_ZH } from "@/lib/season";
 import { weatherGreeting } from "@/lib/greeting";
 import type { Context } from "@/lib/types";
@@ -122,9 +123,12 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
         </div>
       )}
 
-      {/* 场合选择 —— 并入此刻卡片 */}
+      {/* 场合选择 + 自然语言场景 —— 并入此刻卡片 */}
       <div className="mt-5 border-t border-line pt-4">
         <OccasionChips />
+        <div className="mt-3">
+          <SceneInput />
+        </div>
       </div>
     </div>
   );

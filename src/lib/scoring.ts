@@ -104,6 +104,23 @@ export interface ScoreParts {
   quality: number;
 }
 
+// 场景规避惩罚：自然语言解析出的 avoid（别太甜/太冲/太正式…）→ 乘性降权
+export function avoidPenalty(p: Perfume, avoid?: string[]): number {
+  if (!avoid || avoid.length === 0) return 1;
+  let m = 1;
+  const has = (t: string) => avoid.includes(t);
+  if (has("too_sweet") || has("cloying")) {
+    if (maxStrength(p, ["sweet", "vanilla", "amber", "honey", "caramel"]) >= 50) m *= 0.68;
+  }
+  if (has("too_strong")) {
+    if (p.sillageTier >= 4) m *= 0.6;
+    else if (p.sillageTier === 3) m *= 0.8;
+  }
+  if (has("too_formal") && p.styleTags.includes("正式商务")) m *= 0.8;
+  if (has("too_casual") && (p.styleTags.includes("日常百搭") || p.styleTags.includes("清新通勤"))) m *= 0.85;
+  return m;
+}
+
 // 个人偏置：likeScore ∈ [-1,1] → 居中 0.5..1.5 的乘子；perceivedStrength 影响后续用法（此处不用）
 export function score(
   p: Perfume,
@@ -119,6 +136,6 @@ export function score(
   // 线性组合（权重显式、可单测、可向用户解释）
   const linear = 0.34 * sSeason + 0.16 * sDay + 0.32 * sOcc + 0.18 * 0.5;
   const biasMul = 1 + (bias?.likeScore ?? 0) * 0.25;
-  const total = linear * W * Q * biasMul;
+  const total = linear * W * Q * biasMul * avoidPenalty(p, ctx.avoid);
   return { total, season: sSeason, daypart: sDay, occasion: sOcc, weather: W, quality: Q };
 }
