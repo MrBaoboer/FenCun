@@ -1,5 +1,6 @@
 // 情境感知：服务端代理和风天气（保护 key），带 30 分钟网格缓存，失败优雅降级
 import { NextRequest, NextResponse } from "next/server";
+import { allow, clientKey } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,10 @@ export async function GET(req: NextRequest) {
   if (!HOST || !KEY) {
     return NextResponse.json({ error: "weather_unconfigured" }, { status: 200 });
   }
+  // 限流：单客户端 60 秒最多 20 次（切城市/定位）
+  if (!allow(`ctx:${clientKey(req)}`, 20, 60_000)) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 200 });
+  }
 
   try {
     let lonNum: number, latNum: number, cityName: string;
@@ -51,6 +56,9 @@ export async function GET(req: NextRequest) {
     if (lon && lat) {
       lonNum = parseFloat(lon);
       latNum = parseFloat(lat);
+      if (Number.isNaN(lonNum) || Number.isNaN(latNum)) {
+        return NextResponse.json({ error: "bad_coords" }, { status: 400 });
+      }
       cityName = "";
     } else if (city) {
       const geo = await qweather("/geo/v2/city/lookup", { location: city });
@@ -84,11 +92,17 @@ export async function GET(req: NextRequest) {
     if (w?.code !== "200" || !w?.now) {
       return NextResponse.json({ error: "weather_failed" }, { status: 200 });
     }
+    const tempC = parseFloat(w.now.temp);
+    if (Number.isNaN(tempC)) {
+      return NextResponse.json({ error: "weather_failed" }, { status: 200 });
+    }
+    const humidity = parseFloat(w.now.humidity);
+    const windSpeed = parseFloat(w.now.windSpeed);
     const data: WeatherResult = {
-      tempC: parseFloat(w.now.temp),
-      humidity: parseFloat(w.now.humidity),
-      windSpeed: parseFloat(w.now.windSpeed),
-      text: w.now.text,
+      tempC,
+      humidity: Number.isNaN(humidity) ? 50 : humidity,
+      windSpeed: Number.isNaN(windSpeed) ? 0 : windSpeed,
+      text: w.now.text || "—",
       city: cityName,
     };
     cache.set(ck, { at: Date.now(), data });

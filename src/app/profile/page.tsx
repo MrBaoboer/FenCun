@@ -2,6 +2,7 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { useLibraryPerfumes } from "@/lib/hooks";
+import { aggregateBias } from "@/lib/recommend";
 import { Eyebrow } from "@/components/ui";
 import { OCCASION_LABEL } from "@/lib/format";
 
@@ -10,15 +11,22 @@ export default function ProfilePage() {
   const feedbacks = useStore((s) => s.feedbacks);
   const hydrated = useStore((s) => s.hydrated);
 
-  // 偏好画像：从反馈里读出"全局硬偏移"（简单可感，不需大数据）
+  // 偏好画像：按"每瓶各自的反馈"聚合（与打分/用法引擎口径一致——偏移是单香维度的，不是全局默认）
   const learned = useMemo(() => {
-    const strong = feedbacks.filter((f) => f.rating === "too_strong").length;
-    const weak = feedbacks.filter((f) => f.rating === "too_weak").length;
+    const bias = aggregateBias(feedbacks);
+    let strongN = 0;
+    let weakN = 0;
+    for (const b of bias.values()) {
+      if (b.perceivedStrength >= 0.4) strongN++;
+      else if (b.perceivedStrength <= -0.4) weakN++;
+    }
     const lines: string[] = [];
-    if (strong >= 3) lines.push("你多次觉得偏冲——氛寸已默认帮你调低扩散与喷量建议。");
-    else if (strong > 0) lines.push("你偶尔觉得偏冲，氛寸在慢慢学着帮你收一点。");
-    if (weak >= 3) lines.push("你多次觉得偏淡——氛寸会建议你略增喷量或选更持久的。");
-    if (lines.length === 0) lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你的分寸。");
+    if (strongN > 0)
+      lines.push(`有 ${strongN} 瓶你反馈过偏冲——推荐它们时，氛寸已按你的反馈各自帮你收一点喷量与扩散。`);
+    if (weakN > 0)
+      lines.push(`有 ${weakN} 瓶你反馈过偏淡——推荐它们时，氛寸会建议略增喷量。`);
+    if (lines.length === 0)
+      lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
     return lines;
   }, [feedbacks]);
 

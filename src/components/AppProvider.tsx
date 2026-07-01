@@ -1,6 +1,6 @@
 "use client";
 // 全局：一次性加载香水目录 + 解析实时情境（定位→和风天气），跨页共享
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import type { Perfume, Weather } from "@/lib/types";
 import { loadCatalog } from "@/lib/perfumes";
 import { feelFromWeather } from "@/lib/season";
@@ -38,11 +38,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     useStore.persist.rehydrate();
   }, []);
 
-  // 天气/时间成光：按真实时段切昼夜主题，按体感微调氛围色温
+  // 天气/时间成光：按真实时段切昼夜主题（尊重用户手动选择），按体感微调氛围色温
   useEffect(() => {
     const root = document.documentElement;
     const hour = new Date().getHours();
-    root.dataset.theme = hour >= 6 && hour < 18 ? "day" : "night";
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("fencun-theme");
+    } catch {}
+    root.dataset.theme = saved || (hour >= 6 && hour < 18 ? "day" : "night");
     if (weather) {
       const feel = feelFromWeather(weather.tempC, weather.humidity);
       if (feel === "cold" || feel === "hot_humid") root.dataset.weather = feel;
@@ -98,10 +102,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const lastCityRef = useRef<string | null>(null);
+  const inflightRef = useRef(false);
   const resolveByCity = useCallback(
     async (city: string) => {
+      if (inflightRef.current) return false; // 防并发重复请求
+      if (lastCityRef.current === city) return true; // 同城去重，不重复打接口
+      inflightRef.current = true;
       const ok = await fetchByCity(city);
-      if (ok) setStoredCity(city);
+      inflightRef.current = false;
+      if (ok) {
+        setStoredCity(city);
+        lastCityRef.current = city;
+      }
       return ok;
     },
     [fetchByCity, setStoredCity]
@@ -112,7 +125,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated || weather || locState === "locating") return;
     const city = useStore.getState().city;
     if (city) {
-      fetchByCity(city);
+      // 记忆城市：接口失败/超时也要落到 error，触发 useResolvedContext 的季节+时段降级（否则返场用户卡在 idle→零推荐）
+      fetchByCity(city).then((ok) => {
+        if (!ok) setLocState("error");
+      });
     } else {
       resolveByCoords();
     }

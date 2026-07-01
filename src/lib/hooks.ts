@@ -10,28 +10,19 @@ import type { Context, Perfume, ScoredPick } from "./types";
 // 发现型钩子（S4 天气突变预警 / S5 吃灰提醒）
 export type Nudge =
   | { kind: "dusty"; perfume: Perfume; days: number; pick: ScoredPick }
-  | { kind: "weather"; habitual: Perfume; better: Perfume | null; reason: string };
+  | { kind: "weather"; habitual: Perfume; better: Perfume | null; reason: string; basis: "habit" | "cold" };
 
 type RecResult = ReturnType<typeof recommend>;
 
 // 实时情境（天气 + 季节/体感/时段 + 场景）
 export function useResolvedContext(): Context | null {
-  const { weather } = useApp();
+  const { weather, locState } = useApp();
   const occasion = useStore((s) => s.occasion);
   const scene = useStore((s) => s.scene);
   return useMemo(() => {
-    if (!weather) return null;
     const now = new Date();
-    return {
-      tempC: weather.tempC,
-      humidity: weather.humidity,
-      windSpeed: weather.windSpeed,
-      weatherText: weather.text,
-      city: weather.city,
-      feel: feelFromWeather(weather.tempC, weather.humidity),
-      daypart: daypartFromHour(now.getHours()),
-      season: seasonFromDateTemp(now, weather.tempC),
-      // 自然语言场景优先于 chip
+    // 场景补丁（自然语言优先于 chip）
+    const sceneFields = {
       occasion: scene?.occasion ?? occasion,
       formality: scene?.formality,
       intimacy: scene?.intimacy,
@@ -39,9 +30,40 @@ export function useResolvedContext(): Context | null {
       notePreference: scene?.notePreference,
       sceneLabel: scene?.label,
       rawText: scene?.rawText,
-      approximate: weather.approximate,
     };
-  }, [weather, occasion, scene]);
+    if (weather) {
+      return {
+        tempC: weather.tempC,
+        humidity: weather.humidity,
+        windSpeed: weather.windSpeed,
+        weatherText: weather.text,
+        city: weather.city,
+        feel: feelFromWeather(weather.tempC, weather.humidity),
+        daypart: daypartFromHour(now.getHours()),
+        season: seasonFromDateTemp(now, weather.tempC),
+        ...sceneFields,
+        approximate: weather.approximate,
+      };
+    }
+    // 拿不到天气（拒绝定位/失败）→ 季节+时段降级情境，仍能推荐（不再死路）；still locating 时返回 null
+    if (locState === "denied" || locState === "error") {
+      const season = seasonFromDateTemp(now, null);
+      const seasonalTemp = season === "summer" ? 27 : season === "winter" ? 6 : season === "spring" ? 18 : 16;
+      return {
+        tempC: seasonalTemp,
+        humidity: 50,
+        windSpeed: 0,
+        weatherText: "",
+        city: "",
+        feel: "mild", // 中性，天气乘子 W=1，不臆造体感
+        daypart: daypartFromHour(now.getHours()),
+        season,
+        ...sceneFields,
+        approximate: true,
+      };
+    }
+    return null;
+  }, [weather, locState, occasion, scene]);
 }
 
 // 用户库内的香水对象
@@ -67,7 +89,7 @@ export function useRecommendation(ctx: Context | null) {
 }
 
 const DAY_MS = 24 * 3600 * 1000;
-const DUSTY_MS = 21 * DAY_MS; // 用过但很久没碰
+export const DUSTY_MS = 21 * DAY_MS; // 用过但很久没碰（全应用统一口径：吃灰=21 天）
 const NEVER_MS = 14 * DAY_MS; // 从没用过、入柜超两周
 
 // 发现型钩子：吃灰提醒(S5) + 天气突变预警(S4)——传播主线
@@ -83,6 +105,7 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
     const primaryId = rec.primary?.perfume.id;
     const byId = new Map(lib.map((p) => [p.id, p]));
     const uById = new Map(userPerfumes.map((u) => [u.perfumeId, u]));
+    const hasHistory = feedbacks.length >= 2; // 已有用香习惯
     const nudges: Nudge[] = [];
 
     // S5 吃灰提醒：搁置已久、但今天恰好合适(verdict good)、且不是今天的主推
@@ -90,7 +113,9 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
       .filter((p) => {
         const u = uById.get(p.id);
         if (!u) return false;
-        return u.lastWornAt ? now - u.lastWornAt > DUSTY_MS : now - u.addedAt > NEVER_MS;
+        if (u.lastWornAt) return now - u.lastWornAt > DUSTY_MS;
+        // 从没用过：入柜超两周；或已有用香习惯却独独没碰它、入柜超 3 天（冷启动更早触发）
+        return now - u.addedAt > NEVER_MS || (hasHistory && now - u.addedAt > 3 * DAY_MS);
       })
       .map((p) => {
         const u = uById.get(p.id)!;
@@ -116,6 +141,15 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
         habitualId = id;
       }
     }
+    let basis: "habit" | "cold" = habitualId != null ? "habit" : "cold";
+    // 冷启动兜底：还没形成用香习惯时，退回"库里今天最相关、却被判 avoid 的那瓶"——让旗舰钩子第一周不哑火
+    if (habitualId == null) {
+      const flagged = rec.ranked.find((r) => r.verdict === "avoid" && r.perfume.id !== primaryId);
+      if (flagged) {
+        habitualId = flagged.perfume.id;
+        basis = "cold"; // 不是"常喷"，只是今天库里被判不宜的一瓶 → 文案不能冒称个性化
+      }
+    }
     if (habitualId != null && habitualId !== primaryId) {
       const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
       if (hp.verdict === "avoid") {
@@ -125,6 +159,7 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
           habitual: byId.get(habitualId)!,
           better,
           reason: hp.risks[0] || "今天的天气不太适合它",
+          basis,
         });
       }
     }
@@ -151,6 +186,13 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
   useEffect(() => {
     if (!pick || !ctx) {
       setText("");
+      setLoading(false);
+      return;
+    }
+    // 无天气降级：不调 DeepSeek（避免臆造天气），直接用规则要点
+    if (ctx.approximate) {
+      setText(pick.reasons.join("，") + "。");
+      setSource("template");
       setLoading(false);
       return;
     }

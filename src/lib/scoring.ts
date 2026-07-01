@@ -44,55 +44,61 @@ export function weatherMultiplier(p: Perfume, feel: Feel): number {
   return Math.max(0.7, Math.min(1.3, w));
 }
 
-// 场景适配 0..1（基于预计算风格标签 + 关键香调）
+// 场景适配 0..1（按真实香调家族判定，让不同气质的香在不同场合明显拉开）
 export function occasionFit(p: Perfume, ctx: Context): number {
-  const t = new Set(p.styleTags);
+  const fresh = maxStrength(p, ["citrus", "aquatic", "marine", "ozonic", "green", "fresh", "watery"]);
+  const sweet = maxStrength(p, ["sweet", "vanilla", "caramel", "honey", "chocolate", "coffee", "gourmand"]);
+  const amberWoody = maxStrength(p, ["amber", "woody", "oud", "sandalwood", "cedar", "resinous", "balsamic"]);
+  const floral = maxStrength(p, ["floral", "white floral", "yellow floral", "rose", "jasmine", "tuberose", "violet", "iris"]);
+  const earthyDark = maxStrength(p, ["earthy", "leather", "tobacco", "smoky", "animalic", "patchouli"]);
+  const spicy = maxStrength(p, ["warm spicy", "spicy", "fresh spicy", "cinnamon", "soft spicy"]);
   const tier = p.sillageTier;
-  let s = 0.55; // 基线
-  const has = (x: string) => t.has(x);
+  const n = (v: number) => v / 100;
+  let s = 0.5;
   switch (ctx.occasion) {
-    case "commute":
-    case "work":
-      if (has("清新通勤")) s += 0.3;
-      if (has("正式商务")) s += 0.2;
-      if (has("浓郁夜场")) s -= 0.3;
-      if (tier >= 4) s -= 0.2; // 上班不宜过张扬
+    case "date":
+    case "social":
+      // 浪漫/social：甜、花最讨喜；泥土/木质/辛辣不浪漫；纯清冽也不够暧昧
+      s += 0.4 * n(Math.max(sweet, floral));
+      s += 0.12 * n(amberWoody > 60 ? 0 : amberWoody);
+      s -= 0.3 * n(Math.max(earthyDark, spicy * 0.5));
+      if (fresh > 70 && sweet < 30 && floral < 30) s -= 0.15;
+      if (ctx.occasion === "date" && tier >= 4) s -= 0.15;
       break;
     case "formal":
-      if (has("正式商务")) s += 0.35;
-      if (has("浓郁夜场")) s -= 0.1;
-      if (has("盛夏轻盈")) s -= 0.05;
-      if (tier === 1) s -= 0.05;
-      break;
-    case "date":
-      if (has("暖甜约会")) s += 0.32;
-      if (has("浓郁夜场")) s += 0.1;
-      if (tier >= 2 && tier <= 3) s += 0.08;
-      break;
-    case "social":
-      if (has("暖甜约会") || has("浓郁夜场")) s += 0.2;
-      if (tier >= 3) s += 0.08;
+    case "work":
+    case "commute":
+      // 得体：干净木质/柑橘/草本；反甜、反花、反脏气、反爆炸
+      s += 0.3 * n(Math.max(amberWoody * 0.75, fresh, spicy * 0.6));
+      s -= 0.42 * n(sweet);
+      s -= 0.22 * n(floral);
+      s -= 0.18 * n(earthyDark);
+      if (tier >= 4) s -= 0.2;
       break;
     case "sport":
-      if (has("清新通勤") || has("盛夏轻盈")) s += 0.3;
-      if (has("浓郁夜场") || has("秋冬暖香")) s -= 0.25;
+      // 清爽：清新/柑橘/水生；强烈反甜、反重、反木
+      s += 0.42 * n(fresh);
+      s -= 0.45 * n(Math.max(sweet, amberWoody, earthyDark));
+      if (tier >= 3) s -= 0.1;
       break;
     case "home":
     case "casual":
-      if (has("日常百搭") || has("清新通勤")) s += 0.15;
-      if (tier >= 4) s -= 0.12; // 居家无需外放
+      // 放松：柔和舒适皆可，反强扩散
+      s += 0.18 * n(Math.max(sweet * 0.7, amberWoody * 0.6, fresh * 0.6, floral * 0.6));
+      if (tier >= 4) s -= 0.15;
       break;
   }
-  return Math.max(0, Math.min(1, s));
+  return Math.max(0.05, Math.min(1, s));
 }
 
-// 质量先验：贝叶斯收缩，低票降权（floor 0.3，不归零）
+// 质量先验：贝叶斯收缩后压成 ±4% 的温和微调（0.96~1.04，中心 1.0）。
+// 关键：同一用户库内，"今天喷哪瓶"该由场景/季节/天气决定，社区评分只作轻微 tiebreak，
+// 不能让某瓶高分香跨场景通吃（否则又回到"永远推荐大地"）。未评分记 1.0，不惩罚。
 export function qualityPrior(p: Perfume): number {
-  if (p.rating == null) return 0.6;
-  const C = 30; // 伪计数
-  const M = 3.6; // 全局先验均值
+  if (p.rating == null) return 1;
+  const C = 30, M = 3.6;
   const shrunk = (p.rating * p.people + M * C) / (p.people + C);
-  return Math.max(0.3, Math.min(1, (shrunk - 2.8) / 1.6));
+  return Math.max(0.96, Math.min(1.04, 1 + (shrunk - 4.0) * 0.08));
 }
 
 export interface ScoreParts {
@@ -133,8 +139,10 @@ export function score(
   const W = weatherMultiplier(p, ctx.feel);
   const Q = qualityPrior(p);
 
-  // 线性组合（权重显式、可单测、可向用户解释）
-  const linear = 0.34 * sSeason + 0.16 * sDay + 0.32 * sOcc + 0.18 * 0.5;
+  // 线性组合（权重显式、归一到 1、可单测、可向用户解释）；occasion 略高于 season——
+  // "今天去哪儿"比"现在什么季"更该决定喷哪瓶（急性温度已由乘性 W 兜底），让场景赢下真正的平局。
+  // 个人偏好不占加性权重，改由下方 biasMul 乘性承担。
+  const linear = 0.38 * sSeason + 0.19 * sDay + 0.43 * sOcc;
   const biasMul = 1 + (bias?.likeScore ?? 0) * 0.25;
   const total = linear * W * Q * biasMul * avoidPenalty(p, ctx.avoid);
   return { total, season: sSeason, daypart: sDay, occasion: sOcc, weather: W, quality: Q };

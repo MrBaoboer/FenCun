@@ -70,7 +70,7 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
         <span className="disp text-[0.72rem] tracking-[0.1em] text-ink-faint">{dateLabel()}</span>
       </div>
 
-      {ctx ? (
+      {ctx && !ctx.approximate ? (
         <>
           <button
             onClick={() => setEditing((v) => !v)}
