@@ -64,7 +64,24 @@ export interface Context {
   daypart: Daypart;
   season: Season;
   occasion: Occasion;
+  formality?: number; // 0..1
+  intimacy?: "close" | "neutral" | "broadcast";
+  avoid?: string[]; // too_sweet | too_strong | too_formal | cloying | too_casual
+  notePreference?: string[];
+  sceneLabel?: string; // 自然语言场景被解析后的人话摘要
+  rawText?: string; // 用户原始输入
   approximate?: boolean;
+}
+
+// 自然语言场景 → 结构化补丁
+export interface ScenePatch {
+  occasion: Occasion;
+  formality?: number;
+  intimacy?: "close" | "neutral" | "broadcast";
+  avoid?: string[];
+  notePreference?: string[];
+  label: string; // 解析出的人话摘要
+  rawText: string;
 }
 
 export interface Usage {

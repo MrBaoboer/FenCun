@@ -32,12 +32,20 @@ export function computeUsage(p: Perfume, ctx: Context): Usage {
   // 冷天清淡香可略增；闷热重香压一档
   if (ctx.feel === "cold" && sil < 2.4) hi = Math.min(hi + 1, 5);
   if (ctx.feel === "hot_humid" && sil >= 3.2) lo = Math.max(1, lo);
+  // 自然语言场景：想贴身则收一档、想被注意到可略增
+  if (ctx.intimacy === "close") hi = Math.max(lo, hi - 1);
+  if (ctx.intimacy === "broadcast") hi = Math.min(hi + 1, 5);
+  if (ctx.avoid?.includes("too_strong")) {
+    lo = Math.max(1, lo - 1);
+    hi = Math.max(lo, hi - 1);
+  }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;
 
   // 喷洒位置
   let placement: string[];
-  if (density === "closed" || density === "dense") placement = ["手腕", "衣物内侧"];
+  if (ctx.intimacy === "close") placement = ["手腕", "颈侧贴身"];
+  else if (density === "closed" || density === "dense") placement = ["手腕", "衣物内侧"];
   else if (ctx.occasion === "date") placement = ["颈侧", "手腕", "发梢少量"];
   else if (ctx.occasion === "social") placement = ["颈侧", "胸口"];
   else placement = ["手腕", "颈侧"];

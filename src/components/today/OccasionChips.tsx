@@ -14,7 +14,9 @@ const OCCASIONS: { key: Occasion; label: string }[] = [
 
 export function OccasionChips() {
   const occasion = useStore((s) => s.occasion);
+  const scene = useStore((s) => s.scene);
   const setOccasion = useStore((s) => s.setOccasion);
+  const active = scene?.occasion ?? occasion;
   return (
     <div className="flex flex-col gap-2.5">
       <span className="eyebrow eyebrow-mute">今天去哪儿</span>
@@ -22,7 +24,7 @@ export function OccasionChips() {
         {OCCASIONS.map((o) => (
           <button
             key={o.key}
-            data-active={occasion === o.key}
+            data-active={active === o.key}
             onClick={() => setOccasion(o.key)}
             className="chip serif shrink-0 px-3.5 py-1.5 text-[0.88rem]"
           >

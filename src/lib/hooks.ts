@@ -3,14 +3,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "./store";
 import { seasonFromDateTemp, feelFromWeather, daypartFromHour } from "./season";
-import { recommend, aggregateBias } from "./recommend";
+import { recommend, buildPick, aggregateBias } from "./recommend";
 import { DISTANCE_LABEL } from "./format";
 import type { Context, Perfume, ScoredPick } from "./types";
+
+// 发现型钩子（S4 天气突变预警 / S5 吃灰提醒）
+export type Nudge =
+  | { kind: "dusty"; perfume: Perfume; days: number; pick: ScoredPick }
+  | { kind: "weather"; habitual: Perfume; better: Perfume | null; reason: string };
+
+type RecResult = ReturnType<typeof recommend>;
 
 // 实时情境（天气 + 季节/体感/时段 + 场景）
 export function useResolvedContext(): Context | null {
   const { weather } = useApp();
   const occasion = useStore((s) => s.occasion);
+  const scene = useStore((s) => s.scene);
   return useMemo(() => {
     if (!weather) return null;
     const now = new Date();
@@ -23,10 +31,17 @@ export function useResolvedContext(): Context | null {
       feel: feelFromWeather(weather.tempC, weather.humidity),
       daypart: daypartFromHour(now.getHours()),
       season: seasonFromDateTemp(now, weather.tempC),
-      occasion,
+      // 自然语言场景优先于 chip
+      occasion: scene?.occasion ?? occasion,
+      formality: scene?.formality,
+      intimacy: scene?.intimacy,
+      avoid: scene?.avoid,
+      notePreference: scene?.notePreference,
+      sceneLabel: scene?.label,
+      rawText: scene?.rawText,
       approximate: weather.approximate,
     };
-  }, [weather, occasion]);
+  }, [weather, occasion, scene]);
 }
 
 // 用户库内的香水对象
@@ -51,6 +66,73 @@ export function useRecommendation(ctx: Context | null) {
   }, [lib, ctx, feedbacks]);
 }
 
+const DAY_MS = 24 * 3600 * 1000;
+const DUSTY_MS = 21 * DAY_MS; // 用过但很久没碰
+const NEVER_MS = 14 * DAY_MS; // 从没用过、入柜超两周
+
+// 发现型钩子：吃灰提醒(S5) + 天气突变预警(S4)——传播主线
+export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
+  const lib = useLibraryPerfumes();
+  const userPerfumes = useStore((s) => s.userPerfumes);
+  const feedbacks = useStore((s) => s.feedbacks);
+
+  return useMemo(() => {
+    if (!ctx || !rec) return [];
+    const now = Date.now();
+    const bias = aggregateBias(feedbacks);
+    const primaryId = rec.primary?.perfume.id;
+    const byId = new Map(lib.map((p) => [p.id, p]));
+    const uById = new Map(userPerfumes.map((u) => [u.perfumeId, u]));
+    const nudges: Nudge[] = [];
+
+    // S5 吃灰提醒：搁置已久、但今天恰好合适(verdict good)、且不是今天的主推
+    const dusty = lib
+      .filter((p) => {
+        const u = uById.get(p.id);
+        if (!u) return false;
+        return u.lastWornAt ? now - u.lastWornAt > DUSTY_MS : now - u.addedAt > NEVER_MS;
+      })
+      .map((p) => {
+        const u = uById.get(p.id)!;
+        return { p, u, pick: buildPick(p, ctx, bias.get(p.id)) };
+      })
+      .filter((x) => x.pick.verdict === "good" && x.p.id !== primaryId)
+      .sort((a, b) => b.pick.score - a.pick.score);
+
+    if (dusty[0]) {
+      const { p, u, pick } = dusty[0];
+      const last = u.lastWornAt ?? u.addedAt;
+      nudges.push({ kind: "dusty", perfume: p, days: Math.round((now - last) / DAY_MS), pick });
+    }
+
+    // S4 天气突变预警：常用香(用过≥2次)今天因天气/季节被判 avoid → 提醒并给更合适的
+    const wornCount = new Map<number, number>();
+    for (const f of feedbacks) wornCount.set(f.perfumeId, (wornCount.get(f.perfumeId) ?? 0) + 1);
+    let habitualId: number | null = null;
+    let maxCount = 1;
+    for (const [id, c] of wornCount) {
+      if (c > maxCount && byId.has(id)) {
+        maxCount = c;
+        habitualId = id;
+      }
+    }
+    if (habitualId != null && habitualId !== primaryId) {
+      const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
+      if (hp.verdict === "avoid") {
+        const better = rec.ranked.find((r) => r.verdict === "good" && r.perfume.id !== habitualId)?.perfume ?? null;
+        nudges.push({
+          kind: "weather",
+          habitual: byId.get(habitualId)!,
+          better,
+          reason: hp.risks[0] || "今天的天气不太适合它",
+        });
+      }
+    }
+
+    return nudges;
+  }, [ctx, rec, lib, userPerfumes, feedbacks]);
+}
+
 // 客户端解释缓存（模块级，跨组件/重渲染持久）——命中即不发请求
 const explainCache = new Map<string, { text: string; source: "deepseek" | "template" }>();
 
@@ -63,7 +145,7 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
 
   const key =
     pick && ctx
-      ? `${pick.perfume.id}-${ctx.occasion}-${Math.round(ctx.tempC)}-${pick.verdict}`
+      ? `${pick.perfume.id}-${ctx.occasion}-${Math.round(ctx.tempC)}-${pick.verdict}-${ctx.sceneLabel ?? ""}`
       : "";
 
   useEffect(() => {
@@ -96,6 +178,7 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
           accords: pick.perfume.accords.slice(0, 4).map((a) => a.zh),
           styleTags: pick.perfume.styleTags,
           verdict: pick.verdict,
+          scene: ctx.sceneLabel ? { label: ctx.sceneLabel, rawText: ctx.rawText } : null,
           context: {
             city: ctx.city,
             tempC: ctx.tempC,
