@@ -16,11 +16,12 @@ type RecResult = ReturnType<typeof recommend>;
 
 // 实时情境（天气 + 季节/体感/时段 + 场景）
 export function useResolvedContext(): Context | null {
-  const { weather, locState } = useApp();
+  const { weather, locState, nowMinute } = useApp();
   const occasion = useStore((s) => s.occasion);
   const scene = useStore((s) => s.scene);
   return useMemo(() => {
-    const now = new Date();
+    // 用 AppProvider 的分钟级节拍作时钟源：长开标签页跨时段/跨午夜时，daypart/季节/问候随之刷新
+    const now = new Date(nowMinute);
     // 场景补丁（自然语言优先于 chip）
     const sceneFields = {
       occasion: scene?.occasion ?? occasion,
@@ -63,7 +64,7 @@ export function useResolvedContext(): Context | null {
       };
     }
     return null;
-  }, [weather, locState, occasion, scene]);
+  }, [weather, locState, occasion, scene, nowMinute]);
 }
 
 // 用户库内的香水对象
@@ -84,7 +85,8 @@ export function useRecommendation(ctx: Context | null) {
   return useMemo(() => {
     if (!ctx || lib.length === 0) return null;
     const bias = aggregateBias(feedbacks);
-    return recommend(lib, ctx, bias);
+    const daySeed = Math.floor(Date.now() / DAY_MS);
+    return recommend(lib, ctx, bias, daySeed);
   }, [lib, ctx, feedbacks]);
 }
 
@@ -130,37 +132,39 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
       nudges.push({ kind: "dusty", perfume: p, days: Math.round((now - last) / DAY_MS), pick });
     }
 
-    // S4 天气突变预警：常用香(用过≥2次)今天因天气/季节被判 avoid → 提醒并给更合适的
-    const wornCount = new Map<number, number>();
-    for (const f of feedbacks) wornCount.set(f.perfumeId, (wornCount.get(f.perfumeId) ?? 0) + 1);
-    let habitualId: number | null = null;
-    let maxCount = 1;
-    for (const [id, c] of wornCount) {
-      if (c > maxCount && byId.has(id)) {
-        maxCount = c;
-        habitualId = id;
+    // S4 天气突变预警：依赖真实天气——近似天气态(定位失败降级)下不弹，避免用人造体感冒充"天气突变预警"
+    if (!ctx.approximate) {
+      // "常喷"用真实穿戴信号 wornCount(采纳/就用它累计≥2次)，而非反馈计数——feedback 稀疏、口径失真
+      let habitualId: number | null = null;
+      let maxWorn = 1;
+      for (const u of userPerfumes) {
+        const c = u.wornCount ?? 0;
+        if (c > maxWorn && byId.has(u.perfumeId)) {
+          maxWorn = c;
+          habitualId = u.perfumeId;
+        }
       }
-    }
-    let basis: "habit" | "cold" = habitualId != null ? "habit" : "cold";
-    // 冷启动兜底：还没形成用香习惯时，退回"库里今天最相关、却被判 avoid 的那瓶"——让旗舰钩子第一周不哑火
-    if (habitualId == null) {
-      const flagged = rec.ranked.find((r) => r.verdict === "avoid" && r.perfume.id !== primaryId);
-      if (flagged) {
-        habitualId = flagged.perfume.id;
-        basis = "cold"; // 不是"常喷"，只是今天库里被判不宜的一瓶 → 文案不能冒称个性化
+      let basis: "habit" | "cold" = habitualId != null ? "habit" : "cold";
+      // 冷启动兜底：还没形成用香习惯时，退回"库里今天最相关、却被判 avoid 的那瓶"——让旗舰钩子第一周不哑火
+      if (habitualId == null) {
+        const flagged = rec.ranked.find((r) => r.verdict === "avoid" && r.perfume.id !== primaryId);
+        if (flagged) {
+          habitualId = flagged.perfume.id;
+          basis = "cold"; // 不是"常喷"，只是今天库里被判不宜的一瓶 → 文案不能冒称个性化
+        }
       }
-    }
-    if (habitualId != null && habitualId !== primaryId) {
-      const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
-      if (hp.verdict === "avoid") {
-        const better = rec.ranked.find((r) => r.verdict === "good" && r.perfume.id !== habitualId)?.perfume ?? null;
-        nudges.push({
-          kind: "weather",
-          habitual: byId.get(habitualId)!,
-          better,
-          reason: hp.risks[0] || "今天的天气不太适合它",
-          basis,
-        });
+      if (habitualId != null && habitualId !== primaryId) {
+        const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
+        if (hp.verdict === "avoid") {
+          const better = rec.ranked.find((r) => r.verdict === "good" && r.perfume.id !== habitualId)?.perfume ?? null;
+          nudges.push({
+            kind: "weather",
+            habitual: byId.get(habitualId)!,
+            better,
+            reason: hp.risks[0] || "今天的天气不太适合它",
+            basis,
+          });
+        }
       }
     }
 
@@ -180,7 +184,7 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
 
   const key =
     pick && ctx
-      ? `${pick.perfume.id}-${ctx.occasion}-${Math.round(ctx.tempC)}-${pick.verdict}-${ctx.sceneLabel ?? ""}`
+      ? `${pick.perfume.id}-${ctx.occasion}-${Math.round(ctx.tempC)}-${pick.verdict}-${ctx.sceneLabel ?? ""}-${pick.usage.spraysLabel}`
       : "";
 
   useEffect(() => {

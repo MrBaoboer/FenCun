@@ -1,8 +1,10 @@
 "use client";
+import Link from "next/link";
 import { Eyebrow, EvidenceBar, AccordBar, Stat } from "@/components/ui";
 import {
   DISTANCE_LABEL,
   DISTANCE_HINT,
+  DISTANCE_SUB,
   durationShort,
   genderLabel,
   nameParts,
@@ -39,6 +41,8 @@ export function RecommendationCard({
   explainSource,
   onChangeBottle,
   onReset,
+  onWear,
+  libCount,
 }: {
   pick: ScoredPick;
   ctx: Context;
@@ -48,6 +52,8 @@ export function RecommendationCard({
   explainSource: string;
   onChangeBottle: () => void;
   onReset: () => void;
+  onWear: () => void;
+  libCount: number;
 }) {
   const p = pick.perfume;
   const np = nameParts(p);
@@ -116,7 +122,7 @@ export function RecommendationCard({
           <Stat label="喷量" value={pick.usage.spraysLabel} sub="先少后补" />
         </div>
         <div className="flex-1 border-l border-line">
-          <Stat label="社交距离" value={DISTANCE_LABEL[tier]} sub="近身可感" />
+          <Stat label="社交距离" value={DISTANCE_LABEL[tier]} sub={DISTANCE_SUB[tier]} />
         </div>
         <div className="flex-1 border-l border-line">
           <Stat label="留香" value={durationShort(p.longevity)} sub="今日预估" />
@@ -178,14 +184,34 @@ export function RecommendationCard({
 
       {/* 操作 */}
       <div className="mt-4 flex gap-2.5">
-        {isSelected && (
-          <button onClick={onReset} className="btn-ghost flex-1 py-3.5 text-[0.85rem]">
-            回到今日推荐
-          </button>
+        {isSelected ? (
+          <>
+            <button onClick={onReset} className="btn-ghost flex-1 py-3.5 text-[0.85rem]">
+              回到今日推荐
+            </button>
+            <button onClick={onWear} className="btn-primary flex-1 py-3.5 text-[0.9rem]">
+              就用它
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={onWear} className="btn-primary flex-1 py-3.5 text-[0.9rem]">
+              就用它
+            </button>
+            {libCount > 1 ? (
+              <button onClick={onChangeBottle} className="btn-ghost flex-1 py-3.5 text-[0.85rem]">
+                换一瓶
+              </button>
+            ) : (
+              <Link
+                href="/library"
+                className="btn-ghost flex-1 py-3.5 text-center text-[0.85rem]"
+              >
+                再加一瓶
+              </Link>
+            )}
+          </>
         )}
-        <button onClick={onChangeBottle} className="btn-primary flex-1 py-3.5 text-[0.9rem]">
-          换一瓶
-        </button>
       </div>
     </article>
   );

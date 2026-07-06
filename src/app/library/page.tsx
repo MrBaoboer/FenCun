@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
+import { useApp } from "@/components/AppProvider";
 import { useLibraryPerfumes, DUSTY_MS } from "@/lib/hooks";
 import { Eyebrow } from "@/components/ui";
 import { SearchAdd } from "@/components/library/SearchAdd";
@@ -12,6 +13,7 @@ export default function LibraryPage() {
   const userPerfumes = useStore((s) => s.userPerfumes);
   const removePerfume = useStore((s) => s.removePerfume);
   const hydrated = useStore((s) => s.hydrated);
+  const { catalogError, retryCatalog } = useApp();
   const [detailId, setDetailId] = useState<number | null>(null);
   const wornMap = useMemo(
     () => new Map(userPerfumes.map((u) => [u.perfumeId, u])),
@@ -37,6 +39,15 @@ export default function LibraryPage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="h-32 animate-pulse bg-sunken/50" />
           <div className="h-32 animate-pulse bg-sunken/50" />
+        </div>
+      ) : catalogError && userPerfumes.length > 0 ? (
+        <div className="card px-6 py-12 text-center">
+          <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
+            香水目录没加载出来（可能是网络波动）。你收藏的 {userPerfumes.length} 瓶都还在，没有丢。
+          </p>
+          <button onClick={retryCatalog} className="btn-primary mt-4 px-6 py-3 text-[0.9rem]">
+            重新加载
+          </button>
         </div>
       ) : lib.length === 0 ? (
         <div className="card px-6 py-12 text-center">

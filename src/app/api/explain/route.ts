@@ -116,6 +116,11 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
     const text: string | undefined = data?.choices?.[0]?.message?.content?.trim();
     if (!text) return NextResponse.json({ text: fallback, source: "template" });
+    // 把铁律 6 从"提示级"升到"代码级"：avoid 裁决的返回若不含否定语义（LLM 软化/漏说"不建议"），
+    // 回退确定性模板（它天然以"说实话，今天不太建议"开头），不让 LLM 把该劝退的场景圆成可用。
+    if (input.verdict === "avoid" && !/不建议|不太建议|不太合适|不合适|不宜|慎|其实不/.test(text)) {
+      return NextResponse.json({ text: fallback, source: "template" });
+    }
     return NextResponse.json({ text, source: "deepseek" });
   } catch {
     return NextResponse.json({ text: fallback, source: "template" });

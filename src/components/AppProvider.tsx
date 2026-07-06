@@ -11,10 +11,12 @@ type LocState = "idle" | "locating" | "ok" | "denied" | "error";
 interface AppCtx {
   catalog: Perfume[] | null;
   catalogError: boolean;
+  retryCatalog: () => void;
   weather: Weather | null;
   locState: LocState;
   resolveByCoords: () => void;
   resolveByCity: (city: string) => Promise<boolean>;
+  nowMinute: number; // 分钟级时钟节拍：跨时段/午夜时驱动情境重算
 }
 
 const Ctx = createContext<AppCtx | null>(null);
@@ -30,12 +32,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [catalogError, setCatalogError] = useState(false);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [locState, setLocState] = useState<LocState>("idle");
+  const [nowMinute, setNowMinute] = useState(() => Date.now());
   const hydrated = useStore((s) => s.hydrated);
   const setStoredCity = useStore((s) => s.setCity);
 
   // 客户端手动 rehydrate 持久化状态（配合 store 的 skipHydration）
   useEffect(() => {
     useStore.persist.rehydrate();
+  }, []);
+
+  // 分钟级时钟节拍 + 回到前台即刷新：让长开标签页跨时段/午夜时，情境/主题不再冻结在打开那一刻
+  useEffect(() => {
+    const bump = () => setNowMinute(Date.now());
+    const id = setInterval(bump, 60_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") bump();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", bump);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", bump);
+    };
   }, []);
 
   // 天气/时间成光：按真实时段切昼夜主题（尊重用户手动选择），按体感微调氛围色温
@@ -52,12 +71,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (feel === "cold" || feel === "hot_humid") root.dataset.weather = feel;
       else root.removeAttribute("data-weather");
     }
-  }, [weather]);
+  }, [weather, nowMinute]);
 
-  // 目录
-  useEffect(() => {
-    loadCatalog().then(setCatalog).catch(() => setCatalogError(true));
+  // 目录加载：失败自动重试一次；仍失败才置 error（供 UI 显示"重试"，绝不把满柜误判为空柜）
+  const loadCatalogSafe = useCallback(() => {
+    const attempt = (isRetry: boolean) => {
+      loadCatalog()
+        .then((c) => {
+          setCatalog(c);
+          setCatalogError(false);
+        })
+        .catch(() => {
+          if (!isRetry) setTimeout(() => attempt(true), 1500);
+          else setCatalogError(true);
+        });
+    };
+    attempt(false);
   }, []);
+  const retryCatalog = useCallback(() => {
+    setCatalogError(false);
+    loadCatalogSafe();
+  }, [loadCatalogSafe]);
+  useEffect(() => {
+    loadCatalogSafe();
+  }, [loadCatalogSafe]);
 
   const fetchByCity = useCallback(
     async (city: string): Promise<boolean> => {
@@ -137,7 +174,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ catalog, catalogError, weather, locState, resolveByCoords, resolveByCity }}
+      value={{ catalog, catalogError, retryCatalog, weather, locState, resolveByCoords, resolveByCity, nowMinute }}
     >
       {children}
     </Ctx.Provider>

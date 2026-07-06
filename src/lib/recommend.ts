@@ -47,26 +47,37 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
 export function recommend(
   perfumes: Perfume[],
   ctx: Context,
-  biasMap?: Map<number, Bias>
+  biasMap?: Map<number, Bias>,
+  daySeed = 0
 ): { primary: ScoredPick | null; alternatives: ScoredPick[]; ranked: ScoredPick[] } {
+  // 近似同分（|Δ| < EPS）时按 hash(perfumeId, 日期) 稳定轮换：同日确定、跨天旋转，
+  // 兑现"今天喷哪瓶每天不一样"，又不引入真随机、可解释、可复现。
+  const EPS = 0.012;
+  const rot = (id: number) => (((id * 2654435761 + daySeed * 40503) >>> 0) % 1000) / 1000;
   const ranked = perfumes
     .map((p) => buildPick(p, ctx, biasMap?.get(p.id)))
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => {
+      const d = b.score - a.score;
+      if (Math.abs(d) > EPS) return d;
+      return rot(a.perfume.id) - rot(b.perfume.id);
+    });
 
   const primary = ranked[0] ?? null;
+  const rest = ranked.slice(1);
   const alternatives: ScoredPick[] = [];
-  const seenBrand = new Set(primary ? [primary.perfume.brand] : []);
-  // 备选优先换品牌，制造"另一种选择"的感觉
-  for (const pk of ranked.slice(1)) {
+  const usedBrand = new Set(primary ? [primary.perfume.brand] : []);
+  // 第一趟：优先换品牌，制造"另一种选择"的感觉
+  for (const pk of rest) {
     if (alternatives.length >= 3) break;
-    if (seenBrand.has(pk.perfume.brand) && alternatives.length < 2) continue;
-    seenBrand.add(pk.perfume.brand);
+    if (usedBrand.has(pk.perfume.brand)) continue;
+    usedBrand.add(pk.perfume.brand);
     alternatives.push(pk);
   }
-  while (alternatives.length < 3 && ranked.length > alternatives.length + 1) {
-    const pk = ranked[alternatives.length + 1];
-    if (pk && !alternatives.includes(pk) && pk !== primary) alternatives.push(pk);
-    else break;
+  // 第二趟：按分补满到 3（含同品牌），确保不丢全库第 2 名、也不凑不满
+  for (const pk of rest) {
+    if (alternatives.length >= 3) break;
+    if (alternatives.includes(pk)) continue;
+    alternatives.push(pk);
   }
   return { primary, alternatives, ranked };
 }

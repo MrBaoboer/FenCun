@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --import tsx --test src/lib/engine.test.ts",
     "build:data": "node scripts/build.mjs",
     "extract:terms": "node scripts/extract-terms.mjs",
     "shot": "node scripts/shot.mjs"

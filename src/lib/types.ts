@@ -115,6 +115,7 @@ export interface UserPerfume {
   perfumeId: number;
   addedAt: number;
   lastWornAt?: number;
+  wornCount?: number; // 累计「采纳 / 就用它」次数——定义"常喷"的真实穿戴信号（非反馈计数）
   // 个人偏置（由 Feedback 聚合；早期全 0）
   bias?: { likeScore: number; perceivedStrength: number };
 }
