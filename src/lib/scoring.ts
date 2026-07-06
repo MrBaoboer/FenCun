@@ -20,17 +20,24 @@ export function seasonFit(p: Perfume, season: Season): number {
   return p.seasonPct[season] / max;
 }
 
-// 时段适配：直接用平滑占比
+// 时段适配：相对该香自身主场归一（与 seasonFit 同构，避免原始占比中心≈0.58、std 偏小
+// 导致 0.19 名义权重被稀释成实际约 0.035 的影响力——偏夜香在夜里得 1）
 export function daypartFit(p: Perfume, ctx: Context): number {
-  return ctx.daypart === "day" ? p.daypartPct.day : p.daypartPct.night;
+  const cur = ctx.daypart === "day" ? p.daypartPct.day : p.daypartPct.night;
+  const max = Math.max(p.daypartPct.day, p.daypartPct.night);
+  if (max <= 0) return 0.5;
+  return cur / max;
 }
 
 // 天气乘性修正系数 W ∈ [0.7, 1.3]
-export function weatherMultiplier(p: Perfume, feel: Feel): number {
+export function weatherMultiplier(p: Perfume, feel: Feel, tempC?: number): number {
   let w = 1;
   const heavy = ["sweet", "vanilla", "amber", "resinous", "animalic", "oud", "tobacco", "honey", "caramel"];
   const fresh = ["citrus", "aquatic", "marine", "green", "aromatic", "fresh", "ozonic"];
-  const warm = ["amber", "warm spicy", "vanilla", "resinous", "leather", "woody"];
+  // 暖木子集：不含裸 woody——「木质」是最宽家族，干冷 vetiver/干雪松并非取暖型香，
+  // 用组合判定（下方 warmish）而非把整个 woody 当暖调。
+  const warm = ["amber", "warm spicy", "vanilla", "resinous", "leather", "sandalwood"];
+  const warmish = anyStrength(p, warm, 45) || (accStrength(p, "woody") >= 45 && maxStrength(p, ["amber", "resinous", "warm spicy"]) >= 40);
   if (feel === "hot_humid") {
     if (anyStrength(p, heavy, 50)) w *= 0.82;
     if (anyStrength(p, fresh, 45)) w *= 1.16;
@@ -38,8 +45,18 @@ export function weatherMultiplier(p: Perfume, feel: Feel): number {
     if (maxStrength(p, ["sweet", "amber", "resinous"]) >= 55) w *= 0.92;
     if (anyStrength(p, ["citrus", "aromatic", "woody"], 45)) w *= 1.1;
   } else if (feel === "cold") {
-    if (anyStrength(p, ["aquatic", "marine", "ozonic"], 50) && !anyStrength(p, warm, 40)) w *= 0.9;
-    if (anyStrength(p, warm, 45)) w *= 1.15;
+    // 清冽家族补入 citrus：纯柑橘/古龙在严寒里最薄、飘、留不住（保留暖调守卫，不误伤东方柑橘）
+    if (anyStrength(p, ["aquatic", "marine", "ozonic", "citrus"], 50) && !warmish) w *= 0.9;
+    if (warmish) w *= 1.15;
+  } else if (tempC != null) {
+    // mild(11~27℃) 不再整段恒 1：按体感温度给温和梯度，让急性温度在温带也有区分度
+    if (tempC >= 23) {
+      if (anyStrength(p, fresh, 45)) w *= 1.05;
+      if (anyStrength(p, heavy, 55)) w *= 0.96;
+    } else if (tempC <= 15) {
+      if (warmish) w *= 1.05;
+      if (anyStrength(p, ["aquatic", "marine", "ozonic"], 55) && !warmish) w *= 0.96;
+    }
   }
   return Math.max(0.7, Math.min(1.3, w));
 }
@@ -88,7 +105,10 @@ export function occasionFit(p: Perfume, ctx: Context): number {
       if (tier >= 4) s -= 0.15;
       break;
   }
-  return Math.max(0.05, Math.min(1, s));
+  // 软下限（保序）：低分区不再硬夹到 0.05 常数，避免同质库多瓶一起撞底板→场合项(0.43 最高权重)
+  // 在该场景退化为同分、区分力≈0。低于 0.05 时单调压缩进 (0, 0.05]，仍保留候选间的相对次序。
+  if (s >= 0.05) return Math.min(1, s);
+  return 0.05 / (1 + (0.05 - s) * 6);
 }
 
 // 质量先验：贝叶斯收缩后压成 ±4% 的温和微调（0.96~1.04，中心 1.0）。
@@ -136,7 +156,7 @@ export function score(
   const sSeason = seasonFit(p, ctx.season);
   const sDay = daypartFit(p, ctx);
   const sOcc = occasionFit(p, ctx);
-  const W = weatherMultiplier(p, ctx.feel);
+  const W = weatherMultiplier(p, ctx.feel, ctx.tempC);
   const Q = qualityPrior(p);
 
   // 线性组合（权重显式、归一到 1、可单测、可向用户解释）；occasion 略高于 season——

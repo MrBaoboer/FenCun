@@ -85,9 +85,16 @@ export async function POST(req: NextRequest) {
     if (!res.ok) return NextResponse.json(fallback);
     const data = await res.json();
     const raw = data?.choices?.[0]?.message?.content;
-    const parsed = PatchSchema.safeParse(JSON.parse(raw));
+    // 容错：模型偶发在 json_object 外带 ```json 围栏或解释文字 → 截取首个 { 到末个 } 再解析，
+    // 避免白白丢掉一次本可用的 LLM 结果、降到粗粒度启发式
+    if (typeof raw !== "string") return NextResponse.json(fallback);
+    const s = raw.indexOf("{");
+    const e = raw.lastIndexOf("}");
+    if (s < 0 || e <= s) return NextResponse.json(fallback);
+    const parsed = PatchSchema.safeParse(JSON.parse(raw.slice(s, e + 1)));
     if (!parsed.success) return NextResponse.json(fallback);
-    return NextResponse.json({ ...parsed.data, source: "deepseek" });
+    // label 与提示口径对齐（≤12 字），与启发式兜底一致，防超长撑版
+    return NextResponse.json({ ...parsed.data, label: parsed.data.label.slice(0, 12), source: "deepseek" });
   } catch {
     return NextResponse.json(fallback);
   }

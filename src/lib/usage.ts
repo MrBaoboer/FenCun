@@ -61,7 +61,31 @@ export function computeUsage(
   else if (ctx.occasion === "date") placement = ["颈侧", "手腕", "发梢少量"];
   else if (ctx.occasion === "social") placement = ["颈侧", "胸口"];
   else placement = ["手腕", "颈侧"];
-  if (ctx.feel === "hot_humid") placement = placement.map((x) => (x === "手腕" ? "衣物（手腕高温会加速挥发）" : x));
+  // 闷热潮湿：不只挪手腕——颈侧/胸口是脉搏+出汗区，高温加速挥发、易发闷酸，一并降到低出汗部位；去发梢
+  if (ctx.feel === "hot_humid") {
+    placement = placement
+      .map((x) =>
+        x === "手腕"
+          ? "衣物内侧（避高温挥发）"
+          : x === "颈侧" || x === "颈侧贴身"
+          ? "耳后 / 衣领内侧"
+          : x === "胸口"
+          ? "衣物内侧"
+          : x
+      )
+      .filter((x) => x !== "发梢少量");
+    placement = Array.from(new Set(placement));
+    if (placement.length === 0) placement = ["衣物内侧"];
+  }
+
+  // 社交距离取「喷后有效档」而非原始扩散：已生效的减档（封闭/贴身/嫌冲/闷热压量）都会降低实际投射，
+  // 封顶降 2 档，避免同屏出现「喷 1 下」却仍标「整间屋都是它」的自相矛盾。
+  let distReduce = 0;
+  if (density === "dense" || density === "closed") distReduce++;
+  if (ctx.intimacy === "close") distReduce++;
+  if (ctx.avoid?.includes("too_strong")) distReduce++;
+  if (ps >= 0.4) distReduce++;
+  const effTier = Math.max(1, p.sillageTier - Math.min(distReduce, 2)) as 1 | 2 | 3 | 4;
 
   const risks = computeRisks(p, ctx);
 
@@ -69,7 +93,7 @@ export function computeUsage(
     sprays: [lo, hi],
     spraysLabel,
     placement,
-    socialDistance: p.sillageTier,
+    socialDistance: effTier,
     durationHint: durationHint(p.longevity),
     suitable: risks.length === 0,
   };

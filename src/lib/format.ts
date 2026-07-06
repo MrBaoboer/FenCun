@@ -14,6 +14,13 @@ export const DISTANCE_HINT: Record<1 | 2 | 3 | 4, string> = {
   3: "同桌或小房间能闻到，注意场合",
   4: "户外、夜场加分，密闭空间慎用",
 };
+// 规格行副标签（按档，替代原写死的"近身可感"）
+export const DISTANCE_SUB: Record<1 | 2 | 3 | 4, string> = {
+  1: "密闭也安全",
+  2: "日常安全",
+  3: "注意场合",
+  4: "密闭慎用",
+};
 
 // 留香：longevity 1..5 → 区间，绝不给小时数
 export function durationHint(longevity: number | null): string {
@@ -55,11 +62,13 @@ export function durationShort(longevity: number | null): string {
   return "可能到夜晚";
 }
 
+// 紧凑档位词——与 DISTANCE_LABEL 同一套四档的速览简写（贴近/一臂/一桌/满室），
+// 保证换瓶弹层、备选列表、香柜卡与推荐卡对同一瓶的"社交距离"叫法一致。
 export const SILLAGE_WORD: Record<1 | 2 | 3 | 4, string> = {
   1: "贴肤",
-  2: "近身",
-  3: "半室",
-  4: "外放",
+  2: "一臂",
+  3: "一桌",
+  4: "满室",
 };
 
 // 名称展示：中文名为主、英文为辅；无中文名则英文作主、不带副名
