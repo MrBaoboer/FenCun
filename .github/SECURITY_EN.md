@@ -13,7 +13,7 @@
 
 ## Reporting a vulnerability
 
-**Please do not report security issues via public issues.** Use a private channel, either:
+**Please do not report security issues via public issues.** Use one of these private channels instead:
 
 1. **GitHub private vulnerability reporting** (preferred): this repo's **Security → Report a vulnerability** (private reporting is enabled).
 2. **Email**: reach the maintainer privately via the email published on [@MasterBao66](https://github.com/MasterBao66)'s GitHub profile; please prefix the subject with "FenCun security".

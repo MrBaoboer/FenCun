@@ -2,7 +2,7 @@
 
 > English version: [SUPPORT_EN.md](SUPPORT_EN.md)
 
-先按下面这张图找对地方，能最快得到回应。
+先对照下面这张表找对地方，能最快得到回应。
 
 ## 我该去哪
 
@@ -24,4 +24,4 @@
 
 ## 关于响应
 
-氛寸由独立开发者单人维护，**不承诺固定响应时间**；优先级大致是：安全 > 可复现的 Bug > 清晰的 PR > 功能建议。联系方式见维护者 [@MasterBao66](https://github.com/MasterBao66) 主页公示的邮箱。
+氛寸由独立开发者单人维护，**不承诺固定响应时间**；优先级大致是：安全 > 可复现的 Bug > 清晰的 PR > 功能建议。联系方式见维护者 [@MasterBao66](https://github.com/MasterBao66) 主页公开的邮箱。

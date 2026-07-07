@@ -16,7 +16,7 @@ Thanks for your interest in improving **氛寸 / FenCun**. This guide helps your
 
 ## Before you start: the Four Commandments (hard constraints)
 
-Every contribution must uphold these, no matter how elegant otherwise:
+Every contribution must uphold these, no matter how elegant it is otherwise:
 
 1. **No false precision** — longevity / sprays / social distance are given only as ranges and tiers, never fake numbers like "6.2 hours."
 2. **No over-engineering** — no vector DB, no heavy backend; the rule engine runs locally in the browser in milliseconds.
@@ -25,7 +25,7 @@ Every contribution must uphold these, no matter how elegant otherwise:
 
 ## Architecture notes
 
-- **The rule engine decides; the LLM only expresses.** Matching, sprays / distance / longevity must be deterministic rules (explainable, reproducible, unit-testable); DeepSeek only parses natural-language scenes and turns computed facts into human phrasing.
+- **The rule engine decides; the LLM only puts it into words.** Matching, sprays / distance / longevity must be deterministic rules (explainable, reproducible, unit-testable); DeepSeek only parses natural-language scenarios and puts the computed facts into human-readable language.
 - **Weather always comes from the QWeather API — never invented by the LLM.**
 - **Graceful degradation first** — LLM timeouts and geolocation failures must have fallbacks; the product never shows a blank screen.
 
@@ -71,7 +71,7 @@ npm run build   # make sure it builds
 
 - **Who decides**: FenCun is maintained by a single person, [@MasterBao66](https://github.com/MasterBao66). The maintainer owns the product scope, deploy cadence, domain, and merge rights, and may close PRs that go out of scope, carry too much risk, or lack verification.
 - **What does not go into `main`** (the "no" list): no shopping / e-commerce, no ingredient encyclopedia, no social features, no account system, and nothing that drifts from the "fragrance-usage decision + distribution" core — even elegant implementations of these won't be merged (see also the Four Commandments and Architecture notes above).
-- **This section itself can be changed via PR**; before adding a long-term collaborator, it will first be updated to spell out responsibilities and handover, then permissions are granted.
+- **This section itself can be changed via PR**; before adding a long-term collaborator, this section will first be updated to spell out responsibilities and handover, and only then are permissions granted.
 
 ## Licensing of contributions
 
