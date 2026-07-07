@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 安全漏洞 / Security vulnerability
+    url: https://github.com/MrBaoboer/FenCun/security/policy
+    about: 请勿在公开 Issue 报告安全问题，走私密渠道。/ Do not report security issues publicly — use private reporting.
+  - name: 📖 上手 / 使用问题 / Getting started
+    url: https://github.com/MrBaoboer/FenCun#readme
+    about: 先看看在线体验、README 与产品方案。/ Check the live demo, README and product doc first.
