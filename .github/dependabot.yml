@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # npm 依赖：每周检查，按用途分组减少零散 PR
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # 框架大版本单独一组：Next / React 的 major 需人工审回归，勿盲合
+      framework:
+        patterns: ["next", "react", "react-dom", "eslint-config-next"]
+      types:
+        patterns: ["@types/*"]
+      dev-tooling:
+        patterns:
+          ["eslint*", "typescript", "tailwindcss", "@tailwindcss/*", "tsx", "puppeteer-core"]
+  # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
