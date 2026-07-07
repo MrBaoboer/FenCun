@@ -1,0 +1,51 @@
+name: 🐛 Bug 报告 / Bug report
+description: 报告一个可复现的问题 / Report a reproducible problem
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量填全，便于快速定位。
+        Thanks for reporting — the more detail, the faster we can help.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 问题描述 / What happened
+      description: 发生了什么？你期望的是什么？ / What went wrong, and what did you expect?
+      placeholder: 例如：切到暗色模式后，天气卡的温度角标错位了……
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: 一步步怎么触发 / How to trigger it, step by step
+      placeholder: |
+        1. 打开「今日」页
+        2. 搜索并加入某瓶香水
+        3. ……
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境 / Environment
+      description: 浏览器 · 设备 · 线上还是本地 / Browser · device · prod or local
+      placeholder: 例如：Chrome 141 · iPhone 15 · fencun.vercel.app
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: 截图或控制台报错（可选）/ Screenshots or console errors (optional)
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认 / Confirm
+      options:
+        - label: 我已搜索过现有 Issue，没有重复 / I searched existing issues and found no duplicate
+          required: true
+        - label: 这不是安全漏洞（安全问题请走安全政策私下报告）/ This is not a security vulnerability
+          required: true

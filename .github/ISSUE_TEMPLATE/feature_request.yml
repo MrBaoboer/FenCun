@@ -1,0 +1,39 @@
+name: ✨ 功能建议 / Feature request
+description: 提一个与产品定位一致的想法 / Suggest an idea aligned with the product
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        氛寸只解决「今天用哪瓶、怎么用」这一个决策——请先确认你的想法与这个定位一致。
+        FenCun solves only "which bottle today & how to wear it." Please keep suggestions aligned with that.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题 / What problem does this solve
+      description: 你在什么场景下遇到、为什么现在不够好 / The scenario, and why today's behavior falls short
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你设想的方案 / Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: commandments
+    attributes:
+      label: 与「四条戒律」是否一致 / Consistent with the Four Commandments?
+      description: 不伪精确 · 不过度设计 · 轻冷启动 · 有反馈闭环（见贡献指南）
+      options:
+        - 一致 / Yes
+        - 不确定，想讨论 / Not sure, want to discuss
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认 / Confirm
+      options:
+        - label: 我已搜索过现有 Issue，没有重复 / I searched existing issues and found no duplicate
+          required: true
