@@ -22,8 +22,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day.png" width="240" alt="今日 · 白天"/><br/><sub><b>今日一喷 · 白天</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night.png" width="240" alt="今夜 · 夜航"/><br/><sub><b>今夜一喷 · 夜航</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v6.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v6.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -57,20 +57,20 @@
 
 ## 核心能力
 
-- 🎯 **今日一喷 + 怎么用** — 情境自动感知（和风天气定位温/湿/风/时段），从你库里打分推一瓶，附完整分寸建议。
-- ⚖️ **不迁就的用香裁决** — `good / caution / avoid` 三档。天气大逆、严重反季、密闭场合遇张扬香 → 明确判 `avoid`，先说「不建议」，再教你若坚持该怎么补救。
+- 🎯 **今日之选 + 怎么用** — 情境自动感知（和风天气定位温/湿/风/时段），从你的香柜打分推一瓶，附完整分寸建议。
+- ⚖️ **不迁就的用香裁决** — `good / caution / avoid` 三档。天气极端、严重反季、密闭场合遇张扬香 → 判 `avoid`，先说「不建议」，再告诉你坚持要用时怎么补救。
 - 💬 **自然语言场景** — 输入「去前任婚礼」「第一次见投资人」「想低调点」，DeepSeek 解析成 `场合 / 正式度 / 亲密度 / 规避项`，喂进打分与用法。
 - 🔔 **发现型钩子** — 主动提醒，而非等你来问：
   - *天气突变预警*：你常喷的那瓶今天因天气/季节不合适 → 提示并给更优选。
   - *吃灰提醒*：搁置已久、但今天恰好合适的那瓶 → 「翻出来」。
 - 🔁 **反馈闭环** — 出门归来答一句「今天，刚好吗？」，个人偏移**按瓶**收敛（嫌冲→下次少喷、嫌淡→多喷），越用越懂你的分寸。
-- 🌗 **昼夜双主题** — 「香誌 / 夜航」设计语言：思源宋体做中文嗓音、Fraunces 配西文数字，白天宣纸暖白、夜晚中性炭黑 + 香槟金。
+- 🌗 **昼夜双主题** — 「明韵 / 暗香」设计语言：思源宋体做中文嗓音、Fraunces 配西文数字，白天宣纸暖白、夜晚中性炭黑 + 香槟金。
 
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library.png" width="240" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile.png" width="240" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v5.png" width="240" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v5.png" width="240" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -88,7 +88,7 @@ flowchart TD
     Scene["💬 自然语言场景<br/>DeepSeek 解析意图"]
     Ctx["📍 此刻情境<br/>季节 · 体感 · 时段 · 场合"]
     Engine["⚙️ 规则引擎<br/>确定性打分 · 可解释"]
-    Pick["🎯 今日一喷<br/>喷量 · 位置 · 距离 · 留香 · 裁决"]
+    Pick["🎯 今日之选<br/>喷量 · 位置 · 距离 · 留香 · 裁决"]
     LLM["✍️ DeepSeek<br/>把事实翻成人话"]
     Out["💡 有温度的解读"]
     Tpl["📄 模板兜底<br/>LLM 挂了也不白屏"]
@@ -191,7 +191,7 @@ src/
                         · season · hooks · store · ratelimit
 scripts/                零依赖数据构建管线 + 截图脚本
 data/zh-map/            英文→中文映射（accords / notes / brands / names）
-docs/                   产品方案 · 审查文档 · 截图
+docs/                   产品方案 · 截图
 ```
 
 ---

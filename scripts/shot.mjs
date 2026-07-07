@@ -1,8 +1,6 @@
-// 氛寸 · 可复用截图（绕过失效的 preview_screenshot MCP，用系统 Chrome 无头）
-// 用法：
-//   node scripts/shot.mjs                       # 默认截 4 屏(今日日/夜、香柜、我的)到 .scratch/
-//   node scripts/shot.mjs / night out.png       # 单屏：路由 主题 输出名
-// 依赖：puppeteer-core + 系统已装的 Chrome/Edge（不下载浏览器）
+// 氛寸 · 可复用截图（系统 Chrome 无头）
+// 能 mock 天气 + 冻结时间：既用来展示最文艺的问候（云淡风轻 / 云影入夜），
+// 也用来压测最长文案是否换行 / 挤温度。产出到 .scratch/shots/。
 import puppeteer from "puppeteer-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -25,16 +23,21 @@ if (!executablePath) {
   process.exit(1);
 }
 
-// 命令行单屏模式 or 默认多屏
-const argv = process.argv.slice(2);
-const targets = argv.length
-  ? [{ name: (argv[2] || "shot").replace(/\.png$/, ""), route: argv[0] || "/", theme: argv[1] || "day" }]
-  : [
-      { name: "today-day", route: "/", theme: "day" },
-      { name: "today-night", route: "/", theme: "night" },
-      { name: "library", route: "/library", theme: "day" },
-      { name: "profile", route: "/profile", theme: "day" },
-    ];
+// 温和多云的北京 → 昼「云淡风轻」/ 夜「云影入夜」（最文艺的展示态）
+const CLOUDY = { tempC: 22, humidity: 52, windSpeed: 12, text: "多云", city: "北京" };
+// 严寒晴天的北京 → 触发最长的问候「凉意渐起，添件外套」，用于压测排版
+const COLD = { tempC: 5, humidity: 40, windSpeed: 20, text: "晴", city: "北京" };
+
+const targets = [
+  { name: "today-day", route: "/", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
+  { name: "today-night-2", route: "/", theme: "night", date: "2026-07-07T22:30:00", weather: CLOUDY },
+  { name: "library", route: "/library", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
+  { name: "profile", route: "/profile", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
+  // 排版压测（非 README）：最长问候 + 看是否换行/被省略号截断/挤温度
+  { name: "stress-long", route: "/", theme: "day", date: "2026-01-07T08:30:00", weather: COLD },
+  // 最坏情况：9 字问候「细雨绵绵，记得带伞」+ 双字天气 + 两位数温度「小雨 · 18°」
+  { name: "stress-rain", route: "/", theme: "day", date: "2026-04-07T14:00:00", weather: { tempC: 18, humidity: 72, windSpeed: 15, text: "小雨", city: "北京" } },
+];
 
 const SEED = `(async () => {
   try {
@@ -47,13 +50,16 @@ const SEED = `(async () => {
       perfumeId: pid,
       addedAt: n === 'Wild Bluebell' ? now - 40*D : now - i*D,  // 蓝风铃入柜40天没碰 → 吃灰
     }));
-    // 烟草香草被喷过3次 → 常用香（夏天不合适，触发天气突变预警）
     const tv = id['Tobacco Vanille'];
     const feedbacks = tv ? [-3,-12,-22].map(d => ({ perfumeId: tv, at: now + d*D, context: { season: 'winter', daypart: 'night', tempC: 6, occasion: 'date' }, rating: 'perfect' })) : [];
-    localStorage.setItem('fencun-store', JSON.stringify({ state: { userPerfumes, feedbacks, city: '上海', occasion: 'commute' }, version: 0 }));
+    localStorage.setItem('fencun-store', JSON.stringify({ state: { userPerfumes, feedbacks, city: '北京', occasion: 'commute' }, version: 0 }));
     return userPerfumes.length;
   } catch(e) { return 'seed-fail:'+e.message; }
 })()`;
+
+// 只截某一屏（保住其它已满意的图）：SHOT_ONLY=today-night-2 node scripts/shot.mjs
+const only = process.env.SHOT_ONLY;
+const runTargets = only ? targets.filter((t) => t.name === only) : targets;
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -65,28 +71,85 @@ const browser = await puppeteer.launch({
 });
 
 try {
-  const page = await browser.newPage();
-  await page.setCacheEnabled(false); // 防止截到浏览器缓存的旧 CSS
-  // 注意：dev server 若在 git 回退/大改后没热更新，可能吐旧编译产物 —— 截图前最好重启 dev（见 README）
-  // 先到同源根页种数据（domcontentloaded 即可，不等完整加载）
-  await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-  const seeded = await page.evaluate(SEED);
-  console.log("种入香柜:", seeded, "瓶");
+  for (const t of runTargets) {
+    const page = await browser.newPage();
+    await page.setCacheEnabled(false);
 
-  for (const t of targets) {
-    await page.goto(BASE + t.route, { waitUntil: "networkidle2", timeout: 30000 });
-    // 强制主题 + 关掉过渡，避免截到中间态
+    // 冻结时间 → 决定 daypart / season（让"白天"截图真的是白天问候，"夜"是夜问候）
+    await page.evaluateOnNewDocument((iso) => {
+      const F = new Date(iso).getTime();
+      const R = Date;
+      class MockDate extends R {
+        constructor(...a) {
+          if (a.length === 0) super(F);
+          else super(...a);
+        }
+      }
+      MockDate.now = () => F;
+      window.Date = MockDate;
+    }, t.date);
+
+    // mock 天气：拦截 /api/context 返回固定天气，精确控制问候
+    if (t.weather) {
+      await page.setRequestInterception(true);
+      page.on("request", (req) => {
+        if (req.url().includes("/api/context")) {
+          req.respond({ status: 200, contentType: "application/json", body: JSON.stringify(t.weather) });
+        } else {
+          req.continue();
+        }
+      });
+    }
+
+    // 先到根页种数据，再进目标路由（第二次导航时 localStorage 已就绪）
+    await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+    await page.evaluate(SEED);
+    // networkidle2 会等天气 fetch 落地（避免截到「没拿到你的位置」中间态）；
+    // 但 DeepSeek /api/explain 偶发挂起会让它超时——用 try/catch 兜住，天气此时早已加载，继续走后续显式等待。
+    try {
+      await page.goto(BASE + t.route, { waitUntil: "networkidle2", timeout: 20000 });
+    } catch {}
+
+    // 今日页：确保天气已渲染。定位/rehydrate 偶发竞态会让页面短暂停在「没拿到你的位置」，
+    // 且此时 networkidle2 可能因暂无网络活动而提前判定空闲。轮询等温度出现；卡住就 reload 重试
+    //（localStorage 已有城市，reload 后 rehydrate 必定读到 → fetchByCity → mock 天气）。
+    if (t.route === "/") {
+      let wok = false;
+      for (let attempt = 0; attempt < 4 && !wok; attempt++) {
+        try {
+          await page.waitForFunction(
+            () => !document.body.innerText.includes("没拿到你的位置") && /\d°/.test(document.body.innerText),
+            { timeout: 7000, polling: 300 }
+          );
+          wok = true;
+        } catch {
+          await page.reload({ waitUntil: "networkidle2", timeout: 15000 }).catch(() => {});
+        }
+      }
+      if (!wok) console.warn(`⚠ ${t.name}: 天气始终未渲染，可能截到无天气态`);
+    }
+
     await page.evaluate((theme) => {
       document.body.style.transition = "none";
       if (theme !== "auto") document.documentElement.dataset.theme = theme;
+      // 隐藏移动端悬浮胶囊底栏(position:fixed)，否则 fullPage 截图里它会压在正文中间
+      document.querySelectorAll("nav.fixed").forEach((el) => {
+        el.style.display = "none";
+      });
     }, t.theme);
-    // 等字体与 DeepSeek 解读落定
+
     try { await page.evaluate(() => document.fonts && document.fonts.ready); } catch {}
-    await new Promise((r) => setTimeout(r, 3500));
+    // 等 DeepSeek 解读落定：今日页 loading 眉标「斟酌措辞…」消失才截；其它页立即通过。最多 12s
+    try {
+      await page.waitForFunction(() => !document.body.innerText.includes("斟酌措辞"), { timeout: 12000, polling: 400 });
+    } catch {}
+    await new Promise((r) => setTimeout(r, 1500));
+
     const out = path.join(OUT_DIR, `${t.name}.png`);
     await page.screenshot({ path: out, fullPage: true });
     const kb = (fs.statSync(out).size / 1024).toFixed(0);
     console.log(`✓ ${t.name.padEnd(12)} → .scratch/shots/${t.name}.png (${kb} KB)`);
+    await page.close();
   }
 } finally {
   await browser.close();

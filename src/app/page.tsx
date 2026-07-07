@@ -121,7 +121,6 @@ export default function TodayPage() {
             explainSource={explain.source}
             onChangeBottle={() => setSheetOpen(true)}
             onReset={() => setSelectedId(null)}
-            onWear={() => markWorn(activePick.perfume.id)}
           />
           <AltList alts={altsToShow} onPick={(id) => adopt(id, "swap")} />
           <FeedbackBar perfumeId={activePick.perfume.id} ctx={ctx} />

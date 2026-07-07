@@ -3,7 +3,7 @@ import type { Season } from "./types";
 
 // 社交距离：直接绑 sillage 四档，不按小数切
 export const DISTANCE_LABEL: Record<1 | 2 | 3 | 4, string> = {
-  1: "贴近才闻得到",
+  1: "贴身可闻",
   2: "一臂之内",
   3: "一桌之间",
   4: "整间屋都是它",

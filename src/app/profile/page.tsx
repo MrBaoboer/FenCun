@@ -10,8 +10,6 @@ export default function ProfilePage() {
   const lib = useLibraryPerfumes();
   const feedbacks = useStore((s) => s.feedbacks);
   const hydrated = useStore((s) => s.hydrated);
-  const swapCount = useStore((s) => s.swapCount);
-  const dustyAdoptCount = useStore((s) => s.dustyAdoptCount);
   const exportData = useStore((s) => s.exportData);
   const importData = useStore((s) => s.importData);
 
@@ -135,28 +133,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* 验证指标（本机自证）：换香率 & 吃灰采纳率的原始计数 */}
-      <div className="card px-5 py-4">
-        <Eyebrow>你的用香习惯 · 本机统计</Eyebrow>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="text-center">
-            <div className="disp text-[1.9rem] font-normal leading-none text-ink">
-              {hydrated ? swapCount : "—"}
-            </div>
-            <div className="mt-1.5 text-[0.72rem] text-ink-faint">采纳「换一瓶」次数</div>
-          </div>
-          <div className="text-center">
-            <div className="disp text-[1.9rem] font-normal leading-none text-ink">
-              {hydrated ? dustyAdoptCount : "—"}
-            </div>
-            <div className="mt-1.5 text-[0.72rem] text-ink-faint">翻出吃灰瓶次数</div>
-          </div>
-        </div>
-        <p className="mt-3 text-[0.72rem] leading-relaxed text-ink-faint">
-          这两个数是氛寸用来验证「换香 / 吃灰再启用」是否真发生的证伪指标——若长期为 0，说明推荐没创造增量决策价值。
-        </p>
-      </div>
-
       {/* 数据 · 本机存储与备份 */}
       <div className="card px-5 py-4">
         <Eyebrow>数据 · 存在你的浏览器里</Eyebrow>
@@ -172,16 +148,6 @@ export default function ProfilePage() {
             <input type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
           </label>
         </div>
-      </div>
-
-      {/* 关于 */}
-      <div className="card px-5 py-4">
-        <Eyebrow>关于氛寸的分寸</Eyebrow>
-        <p className="serif mt-2.5 text-[0.86rem] font-medium leading-relaxed text-ink-soft">
-          推荐与用法精选约 1500 款高频香水（自约 3.6 万款真实社区投票数据中筛选：扩散、留香、四季、日夜、香调）。
-          氛寸刻意不给「留香 6.2 小时」这类伪精确数字——留香、喷量、社交距离一律用区间与档位，
-          因为无法验证的精确，会摧毁信任。
-        </p>
       </div>
     </div>
   );

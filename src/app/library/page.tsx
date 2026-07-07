@@ -52,9 +52,9 @@ export default function LibraryPage() {
       ) : lib.length === 0 ? (
         <div className="card px-6 py-12 text-center">
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
-            香柜还空着。在上面搜一搜你拥有的香水——
-            <br />
-            可以搜品牌（如 香奈儿 / Chanel）、香名，或香调（如 玫瑰、木质）。
+            香柜还空着<br />
+            在上面搜一搜你拥有的香水<br />
+            可以搜品牌（如 香奈儿 / Chanel）、香名，或香调（如 玫瑰、木质）
           </p>
         </div>
       ) : (

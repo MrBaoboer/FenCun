@@ -66,7 +66,7 @@ export function computeUsage(
     placement = placement
       .map((x) =>
         x === "手腕"
-          ? "衣物内侧（避高温挥发）"
+          ? "衣物内侧"
           : x === "颈侧" || x === "颈侧贴身"
           ? "耳后 / 衣领内侧"
           : x === "胸口"
@@ -113,7 +113,7 @@ export function computeRisks(p: Perfume, ctx: Context): string[] {
   }
   const sweetAmber = Math.max(accStrength(p, "sweet"), accStrength(p, "amber"), accStrength(p, "vanilla"));
   if (ctx.feel === "hot_humid" && sweetAmber >= 55) {
-    risks.push("今天又热又潮，它偏甜重，久戴可能发腻，可考虑换清爽些的。");
+    risks.push("今天又热又潮，它偏甜重，上身久了容易发腻，可考虑换清爽些的。");
   }
   // 季节错配：相对差，不用绝对阈值
   const entries = Object.entries(p.seasonPct) as [keyof typeof p.seasonPct, number][];
@@ -131,9 +131,9 @@ export function buildReasons(p: Perfume, ctx: Context, parts: { season: number; 
   const r: string[] = [];
   const topAccords = p.accords.slice(0, 3).map((a) => a.zh).join("·");
   if (parts.season >= 0.85) r.push(`正是它的主场季——社区投票里它更偏${SEASON_NAME[ctx.season]}`);
-  if (parts.weather >= 1.08) r.push(`${topAccords}的调性清爽通透，扛得住今天的体感`);
+  if (parts.weather >= 1.08) r.push(`${topAccords}的调性清爽通透，正合今天的天气`);
   else if (parts.weather <= 0.92) r.push(`它偏厚重，今天的体感里要留意会不会闷`);
-  if (parts.occasion >= 0.8) r.push(`风格(${p.styleTags.join("·")})贴合${ctx.occasion === "date" ? "约会" : "今天的场合"}`);
+  if (parts.occasion >= 0.8) r.push(`风格（${p.styleTags.join("·")}）贴合${ctx.occasion === "date" ? "约会" : "今天的场合"}`);
   if (r.length === 0) r.push(`${topAccords}的整体气质，和今天比较合拍`);
   return r;
 }

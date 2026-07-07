@@ -17,15 +17,15 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-dvh flex-col">
       {/* 报头 —— 顶部留足呼吸感（含刘海安全区） */}
       <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-2xl items-baseline justify-between px-6 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)]">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-6 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)]">
           <Link href="/" className="group flex items-baseline gap-2.5">
             <span className="serif text-[1.4rem] font-bold tracking-[0.12em] text-ink">氛寸</span>
             <span className="disp text-[0.6rem] uppercase tracking-[0.34em] text-accent">Fēn&nbsp;Cùn</span>
           </Link>
           <div className="flex items-center gap-7">
-            <nav className="hidden items-baseline gap-9 md:flex">
+            <nav className="hidden items-center gap-9 md:flex">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="group flex flex-col items-center">
+                <Link key={n.href} href={n.href} className="group relative flex items-center">
                   <span
                     className={`serif text-[0.95rem] transition-colors ${
                       isActive(n.href) ? "text-ink" : "text-ink-faint hover:text-ink-soft"
@@ -34,7 +34,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
                     {n.label}
                   </span>
                   <span
-                    className={`mt-1 h-px w-full origin-center bg-accent transition-transform duration-300 ${
+                    className={`absolute inset-x-0 -bottom-1.5 h-px origin-center bg-accent transition-transform duration-300 ${
                       isActive(n.href) ? "scale-x-100" : "scale-x-0 group-hover:scale-x-50"
                     }`}
                   />
