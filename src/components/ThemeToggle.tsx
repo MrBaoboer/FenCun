@@ -27,8 +27,8 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      aria-label={theme === "night" ? "切到白天" : "切到夜晚"}
-      title={theme === "night" ? "切到白天" : "切到夜晚"}
+      aria-label={theme === "night" ? "切到明韵" : "切到暗香"}
+      title={theme === "night" ? "切到明韵" : "切到暗香"}
       className="text-ink-faint transition-colors hover:text-accent"
     >
       {theme === "night" ? (
@@ -37,8 +37,8 @@ export function ThemeToggle() {
           <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       ) : (
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-          <path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>
       )}
     </button>

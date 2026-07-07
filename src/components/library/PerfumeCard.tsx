@@ -82,7 +82,7 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         </div>
 
         <div className="my-5 grid grid-cols-4 gap-2 border-y border-line py-4">
-          <Stat label="扩散" value={SILLAGE_WORD[p.sillageTier]} />
+          <Stat label="社交距离" value={SILLAGE_WORD[p.sillageTier]} />
           <Stat label="留香" value={durationShort(p.longevity)} />
           <Stat label="适合季节" value={seasonSummary(p)} />
           <Stat label="时段" value={daypartSummary(p)} />

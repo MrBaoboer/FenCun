@@ -41,7 +41,6 @@ export function RecommendationCard({
   explainSource,
   onChangeBottle,
   onReset,
-  onWear,
   libCount,
 }: {
   pick: ScoredPick;
@@ -52,7 +51,6 @@ export function RecommendationCard({
   explainSource: string;
   onChangeBottle: () => void;
   onReset: () => void;
-  onWear: () => void;
   libCount: number;
 }) {
   const p = pick.perfume;
@@ -63,22 +61,45 @@ export function RecommendationCard({
 
   return (
     <article key={p.id} className="card animate-fade-up p-6">
-      {/* 眉标 */}
-      <div className="flex items-center justify-between">
+      {/* 眉标 + 右上角操作图标 */}
+      <div className="flex items-center justify-between gap-3">
         <Eyebrow>
-          {isSelected ? "你选了 · Your Pick" : ctx.daypart === "night" ? "今夜一喷 · Tonight" : "今日一喷 · Today"}
+          {isSelected ? "你选了 · Your Pick" : ctx.daypart === "night" ? "今夜之选 · Tonight" : "今日之选 · Today"}
         </Eyebrow>
-        {pick.verdict === "avoid" ? (
-          <span className="flex items-center gap-1.5 rounded-pill bg-warn-wash px-2.5 py-1 text-[0.68rem] font-semibold text-warn">
-            <span className="h-1.5 w-1.5 rounded-full bg-warn" />
-            今天不建议
-          </span>
-        ) : pick.verdict === "caution" ? (
-          <span className="flex items-center gap-1.5 text-[0.7rem] text-warn">
-            <span className="h-1.5 w-1.5 rounded-full bg-warn" />
-            有一点要留意
-          </span>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-3">
+          {pick.verdict === "avoid" ? (
+            <span className="flex items-center gap-1.5 rounded-pill bg-warn-wash px-2.5 py-1 text-[0.68rem] font-semibold text-warn">
+              <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+              今天不建议
+            </span>
+          ) : pick.verdict === "caution" ? (
+            <span className="flex items-center gap-1.5 text-[0.7rem] text-warn">
+              <span className="h-1.5 w-1.5 rounded-full bg-warn" />
+              有一点要留意
+            </span>
+          ) : null}
+          {isSelected ? (
+            <button onClick={onReset} aria-label="回到今日之选" title="回到今日之选" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M9 7L4 12l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M4 12h11a5 5 0 0 1 0 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : libCount > 1 ? (
+            <button onClick={onChangeBottle} aria-label="换一瓶" title="换一瓶" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M5 8h14M16 5l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M19 16H5M8 13l-3 3 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : (
+            <Link href="/library" aria-label="再加一瓶" title="再加一瓶" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* 香名 */}
@@ -181,38 +202,6 @@ export function RecommendationCard({
           <NotesTiers notes={p.notes} />
         </div>
       </details>
-
-      {/* 操作 */}
-      <div className="mt-4 flex gap-2.5">
-        {isSelected ? (
-          <>
-            <button onClick={onReset} className="btn-ghost flex-1 py-3.5 text-[0.85rem]">
-              回到今日推荐
-            </button>
-            <button onClick={onWear} className="btn-primary flex-1 py-3.5 text-[0.9rem]">
-              就用它
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={onWear} className="btn-primary flex-1 py-3.5 text-[0.9rem]">
-              就用它
-            </button>
-            {libCount > 1 ? (
-              <button onClick={onChangeBottle} className="btn-ghost flex-1 py-3.5 text-[0.85rem]">
-                换一瓶
-              </button>
-            ) : (
-              <Link
-                href="/library"
-                className="btn-ghost flex-1 py-3.5 text-center text-[0.85rem]"
-              >
-                再加一瓶
-              </Link>
-            )}
-          </>
-        )}
-      </div>
     </article>
   );
 }

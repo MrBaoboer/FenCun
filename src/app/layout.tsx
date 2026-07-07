@@ -21,7 +21,7 @@ const notoSerifSC = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  title: "氛寸 · 今天，刚好吗",
+  title: "氛寸 · 帮你用好香水",
   description:
     "氛寸（Fēn Cùn）——基于实时天气、体感与场合，从你已有的香水里告诉你今天该喷哪一瓶、怎么喷得恰到好处。",
   applicationName: "氛寸",
