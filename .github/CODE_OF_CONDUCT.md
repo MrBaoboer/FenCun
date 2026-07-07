@@ -38,7 +38,7 @@
 
 ## 强制执行
 
-如遇辱骂、骚扰或其他不可接受的行为，可向负责执行的维护者举报：请通过维护者 [@MrBaoboer](https://github.com/MrBaoboer) GitHub 主页上公示的邮箱私下联系。
+如遇辱骂、骚扰或其他不可接受的行为，可向负责执行的维护者举报：请通过维护者 [@MrBaoboer](https://github.com/MrBaoboer) GitHub 主页上公开的邮箱私下联系。
 
 所有投诉都会被及时、公正地审查与调查。
 
