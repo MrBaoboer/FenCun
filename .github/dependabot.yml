@@ -15,6 +15,14 @@ updates:
       dev-tooling:
         patterns:
           ["eslint*", "typescript", "tailwindcss", "@tailwindcss/*", "tsx", "puppeteer-core"]
+    ignore:
+      # eslint 10 / typescript 6 的 major 由工具链（eslint-config-next）兼容性决定，
+      # 现阶段 eslint 10 会让 eslint-config-next 内置的 eslint-plugin-react 崩掉 → 忽略其 major，
+      # 待生态跟进后手动升级；minor / patch 仍照常跟进。
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新
   - package-ecosystem: github-actions
     directory: "/"
