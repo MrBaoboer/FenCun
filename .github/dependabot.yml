@@ -23,6 +23,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # @types/node 跟随 Node 运行时大版本（CI 与 Vercel 均为 Node 22），不跳到领先运行时的 26
+      # （否则会拿到 Node 22 上并不存在的 API 类型）→ 忽略其 major，minor / patch 仍在 22.x 内跟进。
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新
   - package-ecosystem: github-actions
     directory: "/"
