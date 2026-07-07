@@ -67,6 +67,12 @@ npm run build   # make sure it builds
 3. Target branch is `main`; CI / build must pass.
 4. A maintainer will review as soon as possible. Small, clear PRs merge fastest.
 
+## Governance
+
+- **Who decides**: FenCun is maintained by a single person, [@MasterBao66](https://github.com/MasterBao66). The maintainer owns the product scope, deploy cadence, domain, and merge rights, and may close PRs that go out of scope, carry too much risk, or lack verification.
+- **What does not go into `main`** (the "no" list): no shopping / e-commerce, no ingredient encyclopedia, no social features, no account system, and nothing that drifts from the "fragrance-usage decision + distribution" core — even elegant implementations of these won't be merged (see also the Four Commandments and Architecture notes above).
+- **This section itself can be changed via PR**; before adding a long-term collaborator, it will first be updated to spell out responsibilities and handover, then permissions are granted.
+
 ## Licensing of contributions
 
 By submitting a contribution, you agree that it is licensed under this project's **AGPL-3.0-only** license.
