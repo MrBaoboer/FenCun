@@ -2,13 +2,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "@/lib/store";
-import { buildSearch, loadExtSearch, fetchExtPerfume, type ExtIndexEntry } from "@/lib/perfumes";
+import {
+  buildSearch,
+  loadExtSearch,
+  fetchExtPerfume,
+  rankSearchHits,
+  type RankCandidate,
+  type ExtIndexEntry,
+} from "@/lib/perfumes";
 import { nameParts } from "@/lib/format";
 import { ManualAdd } from "@/components/library/ManualAdd";
 import type { Perfume } from "@/lib/types";
 
-// 三级搜索兜底：主目录（Top1500 全中文）→ 扩展集（3.6 万款，英文名/品牌/国货中文）→ 手动记一瓶。
-// 柜是推荐引擎的唯一输入——搜不到 = 进不了柜 = 整条产品路径对那瓶香失效，所以这里必须有底。
+// 候选合并成一张榜单：主目录（Top1500 全中文）与扩展集（3.6 万款）统一重排，不分区——
+// 「更多结果」式区隔会让用户以为上面没有匹配（真实用户反馈）。排序见 rankSearchHits。
+// 搜不到的最后防线仍是手动记一瓶。
+type MergedItem = { source: "main"; p: Perfume } | { source: "ext"; e: ExtIndexEntry };
+
 export function SearchAdd() {
   const { catalog } = useApp();
   const addPerfume = useStore((s) => s.addPerfume);
@@ -17,8 +27,7 @@ export function SearchAdd() {
   const inLib = useMemo(() => new Set(userPerfumes.map((u) => u.perfumeId)), [userPerfumes]);
 
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<Perfume[]>([]);
-  const [extHits, setExtHits] = useState<ExtIndexEntry[]>([]);
+  const [items, setItems] = useState<MergedItem[]>([]);
   const [extBusyId, setExtBusyId] = useState<number | null>(null);
   const [extError, setExtError] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -34,28 +43,37 @@ export function SearchAdd() {
     setManualOpen(false);
     setExtError(false);
     if (!ms || !q.trim()) {
-      setResults([]);
-      setExtHits([]);
+      setItems([]);
       return;
     }
-    const hits = ms.search(q.trim()).slice(0, 8);
-    const main = hits.map((h) => byId.get(h.id as number)).filter(Boolean) as Perfume[];
-    setResults(main);
-    // 主目录命中不足 → 懒加载扩展索引兜底（首次约几百 KB，此后走缓存）
-    if (main.length < 3) {
-      const query = q.trim();
-      loadExtSearch().then((ext) => {
-        if (!ext || qRef.current !== query) return; // 过期查询丢弃
-        const mainIds = new Set(main.map((p) => p.id));
-        const found = ext
-          .search(query)
-          .filter((h) => !mainIds.has(h.i as number))
-          .slice(0, 5) as unknown as ExtIndexEntry[];
-        setExtHits(found);
-      });
-    } else {
-      setExtHits([]);
-    }
+    const query = q.trim();
+    const mainHits = ms.search(query).slice(0, 12);
+    const mainCands: RankCandidate<MergedItem>[] = mainHits
+      .map((h) => byId.get(h.id as number))
+      .filter(Boolean)
+      .map((p) => ({
+        item: { source: "main" as const, p: p! },
+        nameHay: `${p!.nameZh ?? ""} ${(p!.aliases ?? []).join(" ")} ${p!.name}`,
+        fullHay: `${p!.nameZh ?? ""} ${(p!.aliases ?? []).join(" ")} ${p!.name} ${p!.brandZh} ${p!.brand}`,
+        people: p!.people,
+      }));
+    // 先用主目录候选即时出结果（扩展索引首次加载有延迟），扩展候选到位后合并重排
+    setItems(rankSearchHits(query, mainCands));
+    loadExtSearch().then((ext) => {
+      if (!ext || qRef.current !== query) return; // 过期查询丢弃
+      const mainIds = new Set(mainCands.map((c) => (c.item as { p: Perfume }).p.id));
+      const extCands: RankCandidate<MergedItem>[] = (
+        ext.search(query).slice(0, 50) as unknown as ExtIndexEntry[]
+      )
+        .filter((e) => !mainIds.has(e.i))
+        .map((e) => ({
+          item: { source: "ext" as const, e },
+          nameHay: e.n,
+          fullHay: `${e.n} ${e.b} ${e.z ?? ""}`,
+          people: e.p,
+        }));
+      setItems(rankSearchHits(query, [...mainCands, ...extCands]));
+    });
   }, [q, ms, byId]);
 
   useEffect(() => {
@@ -102,7 +120,7 @@ export function SearchAdd() {
         <div className="absolute z-20 mt-2 w-full animate-fade-in overflow-hidden rounded-lg border border-line bg-surface shadow-float">
           {manualOpen ? (
             <ManualAdd initialName={q.trim()} onDone={() => { setManualOpen(false); setQ(""); }} />
-          ) : results.length === 0 && extHits.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-4 py-5 text-center">
               <p className="text-sm text-ink-faint">
                 没搜到。试试英文名或品牌名——有些香水的中文昵称和官方名差得很远。
@@ -116,77 +134,69 @@ export function SearchAdd() {
             </div>
           ) : (
             <ul className="max-h-[60vh] overflow-y-auto py-1">
-              {results.map((p) => {
-                const added = inLib.has(p.id);
+              {items.map((it) => {
+                if (it.source === "main") {
+                  const p = it.p;
+                  const added = inLib.has(p.id);
+                  return (
+                    <li key={`m${p.id}`}>
+                      <button
+                        disabled={added}
+                        onClick={() => addPerfume(p.id)}
+                        className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-sunken disabled:cursor-default disabled:hover:bg-transparent"
+                      >
+                        <div className="min-w-0">
+                          {(() => {
+                            const np = nameParts(p);
+                            return (
+                              <>
+                                <div className={`truncate text-[1rem] text-ink ${np.primaryIsZh ? "serif font-semibold" : "disp"}`}>
+                                  {np.primary}
+                                </div>
+                                <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
+                                  {np.secondary ? `${np.secondary} · ` : ""}
+                                  {p.brandZh} · {p.styleTags[0]}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                        <span
+                          className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
+                            added ? "text-ink-faint" : "bg-ink text-paper"
+                          }`}
+                        >
+                          {added ? "已在柜" : "+ 入柜"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                }
+                const e = it.e;
+                const added = inLib.has(e.i);
+                const busy = extBusyId === e.i;
                 return (
-                  <li key={p.id}>
+                  <li key={`e${e.i}`}>
                     <button
-                      disabled={added}
-                      onClick={() => addPerfume(p.id)}
+                      disabled={added || busy}
+                      onClick={() => addFromExt(e)}
                       className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-sunken disabled:cursor-default disabled:hover:bg-transparent"
                     >
                       <div className="min-w-0">
-                        {(() => {
-                          const np = nameParts(p);
-                          return (
-                            <>
-                              <div className={`truncate text-[1rem] text-ink ${np.primaryIsZh ? "serif font-semibold" : "disp"}`}>
-                                {np.primary}
-                              </div>
-                              <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
-                                {np.secondary ? `${np.secondary} · ` : ""}
-                                {p.brandZh} · {p.styleTags[0]}
-                              </div>
-                            </>
-                          );
-                        })()}
+                        <div className="disp truncate text-[1rem] text-ink">{e.n}</div>
+                        <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">{e.z || e.b}</div>
                       </div>
                       <span
                         className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
                           added ? "text-ink-faint" : "bg-ink text-paper"
                         }`}
                       >
-                        {added ? "已在柜" : "+ 入柜"}
+                        {added ? "已在柜" : busy ? "取数据…" : "+ 入柜"}
                       </span>
                     </button>
                   </li>
                 );
               })}
-
-              {extHits.length > 0 && (
-                <>
-                  <li className="px-4 pb-1 pt-2.5 text-[0.68rem] uppercase tracking-wide text-ink-faint">
-                    更多结果 · 来自完整目录
-                  </li>
-                  {extHits.map((e) => {
-                    const added = inLib.has(e.i);
-                    const busy = extBusyId === e.i;
-                    return (
-                      <li key={e.i}>
-                        <button
-                          disabled={added || busy}
-                          onClick={() => addFromExt(e)}
-                          className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-sunken disabled:cursor-default disabled:hover:bg-transparent"
-                        >
-                          <div className="min-w-0">
-                            <div className="disp truncate text-[1rem] text-ink">{e.n}</div>
-                            <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
-                              {e.z || e.b}
-                            </div>
-                          </div>
-                          <span
-                            className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
-                              added ? "text-ink-faint" : "bg-ink text-paper"
-                            }`}
-                          >
-                            {added ? "已在柜" : busy ? "取数据…" : "+ 入柜"}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </>
-              )}
 
               <li className="border-t border-line">
                 <button
