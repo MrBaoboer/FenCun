@@ -148,11 +148,18 @@ export const useStore = create<State>()(
             ? s.userPerfumes
             : [...s.userPerfumes, { perfumeId: p.id, addedAt: Date.now() }],
         })),
+      // 按 id 去重（与 addPerfume/addExtPerfume 口径一致）：双击/并发不产生重复卡片
       addCustomPerfume: (p) =>
-        set((s) => ({
-          customPerfumes: [...s.customPerfumes, p],
-          userPerfumes: [...s.userPerfumes, { perfumeId: p.id, addedAt: Date.now() }],
-        })),
+        set((s) =>
+          s.customPerfumes.some((x) => x.id === p.id)
+            ? s
+            : {
+                customPerfumes: [...s.customPerfumes, p],
+                userPerfumes: s.userPerfumes.some((u) => u.perfumeId === p.id)
+                  ? s.userPerfumes
+                  : [...s.userPerfumes, { perfumeId: p.id, addedAt: Date.now() }],
+              }
+        ),
       removePerfume: (id) =>
         set((s) => ({
           userPerfumes: s.userPerfumes.filter((u) => u.perfumeId !== id),
