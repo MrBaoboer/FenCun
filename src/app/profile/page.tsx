@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useLibraryPerfumes } from "@/lib/hooks";
 import { aggregateBias } from "@/lib/recommend";
@@ -12,6 +12,7 @@ export default function ProfilePage() {
   const hydrated = useStore((s) => s.hydrated);
   const exportData = useStore((s) => s.exportData);
   const importData = useStore((s) => s.importData);
+  const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   function doExport() {
     const blob = new Blob([exportData()], { type: "application/json" });
@@ -29,8 +30,15 @@ export default function ProfilePage() {
     const reader = new FileReader();
     reader.onload = () => {
       const ok = importData(String(reader.result));
-      if (!ok) alert("导入失败：文件格式不对，请选择氛寸导出的 JSON。");
+      // 不用 alert 打断：结果就写在导入按钮旁边，语气与产品一致
+      setImportMsg(
+        ok
+          ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
+          : { kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" }
+      );
     };
+    reader.onerror = () =>
+      setImportMsg({ kind: "error", text: "文件没读出来，可能已损坏——换个文件再试试。" });
     reader.readAsText(file);
   }
 
@@ -63,6 +71,7 @@ export default function ProfilePage() {
     too_weak: "偏淡",
     perfect: "刚好",
     too_strong: "偏冲",
+    scene_mismatch: "不合场合",
   };
 
   return (
@@ -118,13 +127,14 @@ export default function ProfilePage() {
                     <span className="serif text-[0.95rem] font-semibold text-ink">
                       {p ? p.nameZh || p.name : "已移出的香水"}
                     </span>
+                    {/* 防御性访问：损坏/旧版数据缺 context 时也不白屏（store 导入已深校验，这里是双保险） */}
                     <span className="disp ml-2 text-[0.7rem] tracking-wide text-ink-faint">
-                      {OCCASION_LABEL[f.context.occasion] ?? f.context.occasion} ·{" "}
-                      {Math.round(f.context.tempC)}°
+                      {OCCASION_LABEL[f.context?.occasion ?? ""] ?? f.context?.occasion ?? "—"}
+                      {typeof f.context?.tempC === "number" ? ` · ${Math.round(f.context.tempC)}°` : ""}
                     </span>
                   </div>
                   <span className="serif shrink-0 text-[0.82rem] font-semibold text-accent">
-                    {RATING_ZH[f.rating]}
+                    {RATING_ZH[f.rating] ?? "—"}
                   </span>
                 </li>
               );
@@ -148,6 +158,16 @@ export default function ProfilePage() {
             <input type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
           </label>
         </div>
+        {importMsg && (
+          <p
+            role="status"
+            className={`serif mt-2.5 text-[0.8rem] leading-relaxed ${
+              importMsg.kind === "ok" ? "text-ink-soft" : "text-warn"
+            }`}
+          >
+            {importMsg.text}
+          </p>
+        )}
       </div>
     </div>
   );

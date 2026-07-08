@@ -25,7 +25,12 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-7">
             <nav className="hidden items-center gap-9 md:flex">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="group relative flex items-center">
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  aria-current={isActive(n.href) ? "page" : undefined}
+                  className="group relative flex items-center"
+                >
                   <span
                     className={`serif text-[0.95rem] transition-colors ${
                       isActive(n.href) ? "text-ink" : "text-ink-faint hover:text-ink-soft"
@@ -57,6 +62,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
               <Link
                 key={n.href}
                 href={n.href}
+                aria-current={active ? "page" : undefined}
                 className={`serif rounded-pill px-6 py-2 text-[0.92rem] transition-colors ${
                   active ? "bg-sunken font-semibold text-ink" : "text-ink-faint"
                 }`}

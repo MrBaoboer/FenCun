@@ -41,7 +41,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     useStore.persist.rehydrate();
   }, []);
 
-  // 分钟级时钟节拍 + 回到前台即刷新：让长开标签页跨时段/午夜时，情境/主题不再冻结在打开那一刻
+  // 分钟级时钟节拍（回到前台/聚焦时也补一拍）：驱动情境/主题重算与天气保鲜（超 30 分钟静默重取，见下方），
+  // 让长开标签页跨时段/午夜时不再冻结在打开那一刻
   useEffect(() => {
     const bump = () => setNowMinute(Date.now());
     const id = setInterval(bump, 60_000);
@@ -73,6 +74,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [weather, nowMinute]);
 
+  // 浏览器 chrome 的 theme-color 跟随应用主题（data-theme 是唯一事实源）：
+  // 应用主题按时段/localStorage 切，而非 prefers-color-scheme，两套口径不能各走各的
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    const sync = () =>
+      meta!.setAttribute(
+        "content",
+        document.documentElement.dataset.theme === "night" ? "#16130e" : "#f3f0e8"
+      );
+    sync();
+    const mo = new MutationObserver(sync);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => mo.disconnect();
+  }, []);
+
   // 目录加载：失败自动重试一次；仍失败才置 error（供 UI 显示"重试"，绝不把满柜误判为空柜）
   const loadCatalogSafe = useCallback(() => {
     const attempt = (isRetry: boolean) => {
@@ -96,6 +117,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     loadCatalogSafe();
   }, [loadCatalogSafe]);
 
+  // 天气保鲜的记账：最近一次成功获取的时间 + 来源（城市 or 坐标），供 30 分钟后静默重取
+  const weatherFetchedAtRef = useRef<number | null>(null);
+  const lastSourceRef = useRef<
+    { kind: "city"; city: string } | { kind: "coords"; lon: number; lat: number } | null
+  >(null);
+
   const fetchByCity = useCallback(
     async (city: string): Promise<boolean> => {
       try {
@@ -104,6 +131,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (d.error || d.tempC == null) return false;
         setWeather({ ...d, approximate: false });
         setLocState("ok");
+        weatherFetchedAtRef.current = Date.now();
+        lastSourceRef.current = { kind: "city", city };
         return true;
       } catch {
         return false;
@@ -130,6 +159,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           setWeather(d);
           setLocState("ok");
+          weatherFetchedAtRef.current = Date.now();
+          lastSourceRef.current = { kind: "coords", lon: longitude, lat: latitude };
         } catch {
           setLocState("error");
         }
@@ -171,6 +202,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
+
+  // 天气保鲜：拿到过天气后，超过 30 分钟就按上次的城市/坐标静默重取（服务端本有 30 分钟网格缓存，成本极低）。
+  // 失败纯静默：保留旧天气与现有降级链，等下一个 30 分钟窗口再试；绝不弹状态、不动 locState。
+  const refreshInflightRef = useRef(false);
+  useEffect(() => {
+    if (!weather || weatherFetchedAtRef.current == null) return;
+    if (Date.now() - weatherFetchedAtRef.current < 30 * 60 * 1000) return;
+    const src = lastSourceRef.current;
+    if (!src || refreshInflightRef.current) return;
+    refreshInflightRef.current = true;
+    const url =
+      src.kind === "city"
+        ? `/api/context?city=${encodeURIComponent(src.city)}`
+        : `/api/context?lon=${src.lon}&lat=${src.lat}`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error || d.tempC == null) return;
+        // 与首取口径一致：城市来源明确非近似；坐标来源以接口返回为准
+        setWeather(src.kind === "city" ? { ...d, approximate: false } : d);
+      })
+      .catch(() => {})
+      .finally(() => {
+        // 成败都推进时间戳：失败时静默退避到下个窗口，避免每分钟重试打接口
+        weatherFetchedAtRef.current = Date.now();
+        refreshInflightRef.current = false;
+      });
+  }, [nowMinute, weather]);
 
   return (
     <Ctx.Provider

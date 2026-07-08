@@ -4,14 +4,21 @@ import { useEffect, useState } from "react";
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"day" | "night" | null>(null);
 
+  // 单一事实源是 <html data-theme>：AppProvider 的分钟节拍可能自动翻转昼夜，
+  // 这里用 MutationObserver 跟随，图标/aria-label 才不会与实际主题脱节
   useEffect(() => {
-    const t = (document.documentElement.dataset.theme as "day" | "night") || "day";
-    setTheme(t);
+    const read = () =>
+      setTheme((document.documentElement.dataset.theme as "day" | "night") || "day");
+    read();
+    const mo = new MutationObserver(read);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => mo.disconnect();
   }, []);
 
   function toggle() {
-    const next = theme === "night" ? "day" : "night";
     const el = document.documentElement;
+    // 以 DOM 当前值为准取反（而非组件状态），杜绝"首次点击没反应"
+    const next = el.dataset.theme === "night" ? "day" : "night";
     el.classList.add("theme-switching"); // 本次切换禁用过渡，避免城市名等淡入
     el.dataset.theme = next;
     try {

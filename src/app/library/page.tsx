@@ -13,7 +13,7 @@ export default function LibraryPage() {
   const userPerfumes = useStore((s) => s.userPerfumes);
   const removePerfume = useStore((s) => s.removePerfume);
   const hydrated = useStore((s) => s.hydrated);
-  const { catalogError, retryCatalog } = useApp();
+  const { catalog, catalogError, retryCatalog } = useApp();
   const [detailId, setDetailId] = useState<number | null>(null);
   const wornMap = useMemo(
     () => new Map(userPerfumes.map((u) => [u.perfumeId, u])),
@@ -29,7 +29,11 @@ export default function LibraryPage() {
           <h1 className="serif mt-1.5 text-[1.7rem] font-bold text-ink">我的香柜</h1>
         </div>
         <span className="disp text-[0.78rem] tracking-wide text-ink-faint">
-          {lib.length > 0 ? `${lib.length} 瓶在柜` : "空"}
+          {!hydrated || (catalog === null && !catalogError)
+            ? "—"
+            : lib.length > 0
+              ? `${lib.length} 瓶在柜`
+              : "空"}
         </span>
       </header>
 
@@ -48,6 +52,12 @@ export default function LibraryPage() {
           <button onClick={retryCatalog} className="btn-primary mt-4 px-6 py-3 text-[0.9rem]">
             重新加载
           </button>
+        </div>
+      ) : catalog === null && !catalogError ? (
+        // 目录还在加载：继续骨架屏——满柜用户在这个窗口期不该看到「香柜还空着」（那句话对他们是假的）
+        <div className="grid grid-cols-2 gap-3">
+          <div className="h-32 animate-pulse bg-sunken/50" />
+          <div className="h-32 animate-pulse bg-sunken/50" />
         </div>
       ) : lib.length === 0 ? (
         <div className="card px-6 py-12 text-center">
