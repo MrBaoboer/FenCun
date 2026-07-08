@@ -10,6 +10,7 @@ import {
   useNudges,
 } from "@/lib/hooks";
 import { buildPick, aggregateBias } from "@/lib/recommend";
+import { wearEntryFrom } from "@/lib/journal";
 import type { ScoredPick } from "@/lib/types";
 import { ContextBar } from "@/components/today/ContextBar";
 import { NudgeCard } from "@/components/today/NudgeCard";
@@ -26,6 +27,7 @@ export default function TodayPage() {
   const feedbacks = useStore((s) => s.feedbacks);
   const userPerfumes = useStore((s) => s.userPerfumes);
   const markWorn = useStore((s) => s.markWorn);
+  const logWear = useStore((s) => s.logWear);
   const recordSwap = useStore((s) => s.recordSwap);
   const recordDustyAdopt = useStore((s) => s.recordDustyAdopt);
   const hydrated = useStore((s) => s.hydrated);
@@ -67,11 +69,13 @@ export default function TodayPage() {
     return out.slice(0, 3);
   }, [rec, isSelected, activePick]);
 
-  // 采纳一瓶（换香/翻出吃灰瓶）→ 记穿戴 + 打点证伪指标；
+  // 采纳一瓶（换香/翻出吃灰瓶）→ 记穿戴 + 香历落账 + 打点证伪指标；
   // 把主推换掉同时记一笔"隐式差评"（分数说它行、你说它不行——7 天内两次就让它让位）
   const adopt = (id: number, kind: "swap" | "dusty") => {
     setSelectedId(id);
     markWorn(id);
+    const p = lib.find((x) => x.id === id);
+    if (p && ctx) logWear(wearEntryFrom(p, ctx));
     if (kind === "dusty") recordDustyAdopt();
     else if (kind === "swap" && rec?.primary && id !== rec.primary.perfume.id)
       recordSwap(rec.primary.perfume.id);
@@ -127,8 +131,8 @@ export default function TodayPage() {
             onChangeBottle={() => setSheetOpen(true)}
             onReset={() => setSelectedId(null)}
           />
-          <AltList alts={altsToShow} onPick={(id) => adopt(id, "swap")} />
-          <FeedbackBar perfumeId={activePick.perfume.id} ctx={ctx} sprays={activePick.usage.sprays} />
+          <AltList alts={altsToShow} base={activePick.perfume} onPick={(id) => adopt(id, "swap")} />
+          <FeedbackBar perfume={activePick.perfume} ctx={ctx} sprays={activePick.usage.sprays} />
         </>
       ) : null}
 

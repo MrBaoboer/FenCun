@@ -146,6 +146,19 @@ export interface SuccessConfig {
   sprays: number; // 当时建议区间的中值
 }
 
+/** 香历条目：一天一条（后写覆盖，保留手记）。展示数据做快照——瓶子被移除后，香历依然完整 */
+export interface WearEntry {
+  d: string; // 本地日期键 "2026-07-08"
+  perfumeId: number;
+  name: string; // 展示名快照（中文名优先）
+  fam: string; // 主香调 en（决定日历色点）
+  occasion: Occasion;
+  tempC: number | null; // 降级情境记 null——不知道就不记，香历不放编造的数
+  weatherText: string;
+  feel: Feel;
+  note?: string; // 一句话手记（选填）
+}
+
 export interface Feedback {
   perfumeId: number;
   at: number;

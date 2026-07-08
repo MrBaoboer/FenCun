@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { dayFloor } from "@/lib/recommend";
+import { wearEntryFrom } from "@/lib/journal";
 import { Eyebrow } from "@/components/ui";
-import type { Context } from "@/lib/types";
+import type { Context, Perfume } from "@/lib/types";
 
 const OPTIONS: { key: "too_weak" | "perfect" | "too_strong" | "scene_mismatch"; label: string; done: string }[] = [
   { key: "too_weak", label: "淡了点", done: "记下了，下次帮你略微多喷一点。" },
@@ -18,16 +19,18 @@ function envEatsLongevity(ctx: Context): boolean {
 }
 
 export function FeedbackBar({
-  perfumeId,
+  perfume,
   ctx,
   sprays,
 }: {
-  perfumeId: number;
+  perfume: Perfume;
   ctx: Context;
   sprays?: [number, number];
 }) {
+  const perfumeId = perfume.id;
   const addFeedback = useStore((s) => s.addFeedback);
   const markWorn = useStore((s) => s.markWorn);
+  const logWear = useStore((s) => s.logWear);
   // 当日去重：今天已经记过这瓶 → 不再重复问（刷新页面也不会重复计入）
   const fedToday = useStore((s) =>
     s.feedbacks.some((f) => f.perfumeId === perfumeId && dayFloor(f.at) === dayFloor(Date.now()))
@@ -54,6 +57,7 @@ export function FeedbackBar({
       tags: envAttributed ? ["env_attributed"] : undefined,
     });
     markWorn(perfumeId);
+    logWear(wearEntryFrom(perfume, ctx)); // 反馈即穿过——今天这瓶落进香历
     setDone(
       envAttributed
         ? "记下了——不过今天这天气本来就吃留香，这笔算天气的，不扣它的分。"
