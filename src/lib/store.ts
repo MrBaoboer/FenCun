@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { z } from "zod";
-import type { UserPerfume, Feedback, Occasion, ScenePatch, Perfume } from "./types";
+import type { UserPerfume, Feedback, Occasion, ScenePatch, Perfume, WearEntry } from "./types";
 import { dayFloor } from "./recommend";
 
 interface State {
@@ -12,6 +12,7 @@ interface State {
   extPerfumes: Perfume[]; // 扩展集（Top1500 之外）入柜香水的完整记录快照——离线可用，不依赖分片重取
   customPerfumes: Perfume[]; // 手动记录的香水（负数 id）
   swapAways: Record<string, number[]>; // perfumeId → 最近被从主推位换掉的时间戳（隐式差评原料，各留 10 条）
+  wearLog: WearEntry[]; // 香历：一天一条，采纳/反馈时自动落账——记录资产，随时间增值
   city: string | null; // 手动城市覆盖（定位失败时用）
   occasion: Occasion;
   scene: ScenePatch | null; // 自然语言场景（覆盖 occasion）
@@ -30,6 +31,8 @@ interface State {
   setOccasion: (o: Occasion) => void;
   setScene: (s: ScenePatch | null) => void;
   hasPerfume: (id: number) => boolean;
+  logWear: (entry: WearEntry) => void;
+  setWearNote: (d: string, note: string) => void;
   recordSwap: (fromPerfumeId?: number) => void;
   recordDustyAdopt: () => void;
   exportData: () => string;
@@ -83,6 +86,7 @@ const ImportSchema = z
     extPerfumes: z.array(z.unknown()).optional(),
     customPerfumes: z.array(z.unknown()).optional(),
     swapAways: z.record(z.string(), z.array(z.number())).optional(),
+    wearLog: z.array(z.unknown()).optional(),
     city: z.string().nullable().optional(),
     occasion: z.string().optional(),
     swapCount: z.number().optional(),
@@ -90,7 +94,27 @@ const ImportSchema = z
   })
   .loose();
 
+const WearEntrySchema = z.object({
+  d: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  perfumeId: z.number().int(),
+  name: z.string().max(120),
+  fam: z.string().max(20),
+  occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
+  tempC: z.number().nullable(),
+  weatherText: z.string().max(40),
+  feel: z.enum(["hot_humid", "hot_dry", "mild", "cold"]),
+  note: z.string().max(200).optional(),
+});
+
 const OCCASIONS: Occasion[] = ["commute", "work", "date", "social", "formal", "casual", "home", "sport"];
+
+// 香历不变式：按日去重（同日取后写）、按日期升序、封顶 730 天。
+// 截断必须按日期而非插入序——否则补记/覆盖较早日期会把它挪到数组尾部，截掉的就不是最早的那天
+function dedupeSortWear(entries: WearEntry[]): WearEntry[] {
+  const byDay = new Map<string, WearEntry>();
+  for (const e of entries) byDay.set(e.d, e);
+  return [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)).slice(-730);
+}
 
 function keepValid<T>(items: unknown[] | undefined, schema: z.ZodType<T>): T[] {
   if (!Array.isArray(items)) return [];
@@ -110,6 +134,7 @@ export const useStore = create<State>()(
       extPerfumes: [],
       customPerfumes: [],
       swapAways: {},
+      wearLog: [],
       city: null,
       occasion: "commute",
       scene: null,
@@ -179,6 +204,17 @@ export const useStore = create<State>()(
       setOccasion: (o) => set({ occasion: o, scene: null }), // 手动选场合即清除自然语言场景
       setScene: (s) => set({ scene: s }),
       hasPerfume: (id) => get().userPerfumes.some((u) => u.perfumeId === id),
+      // 香历落账：一天一条、后写覆盖（同日改主意以最后一瓶为准），手记保留；按日期序封顶两年
+      logWear: (entry) =>
+        set((s) => {
+          const prev = s.wearLog.find((e) => e.d === entry.d);
+          const merged = { ...entry, note: entry.note ?? prev?.note };
+          return { wearLog: dedupeSortWear([...s.wearLog, merged]) };
+        }),
+      setWearNote: (d, note) =>
+        set((s) => ({
+          wearLog: s.wearLog.map((e) => (e.d === d ? { ...e, note: note.trim() || undefined } : e)),
+        })),
       // 换瓶 = 隐式差评：记下"哪瓶在什么时候被从主推位换掉"（每瓶留最近 10 条）
       recordSwap: (fromPerfumeId) =>
         set((s) => {
@@ -201,6 +237,7 @@ export const useStore = create<State>()(
             extPerfumes: s.extPerfumes,
             customPerfumes: s.customPerfumes,
             swapAways: s.swapAways,
+            wearLog: s.wearLog,
             city: s.city,
             occasion: s.occasion,
             swapCount: s.swapCount,
@@ -223,6 +260,7 @@ export const useStore = create<State>()(
             extPerfumes: keepValid(d.extPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
             customPerfumes: keepValid(d.customPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
             swapAways: d.swapAways ?? {},
+            wearLog: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]),
             city: typeof d.city === "string" ? d.city : s.city,
             occasion: OCCASIONS.includes(d.occasion as Occasion) ? (d.occasion as Occasion) : s.occasion,
             swapCount: typeof d.swapCount === "number" ? d.swapCount : s.swapCount,
@@ -249,6 +287,7 @@ export const useStore = create<State>()(
         extPerfumes: s.extPerfumes,
         customPerfumes: s.customPerfumes,
         swapAways: s.swapAways,
+        wearLog: s.wearLog,
         city: s.city,
         occasion: s.occasion,
         swapCount: s.swapCount,
