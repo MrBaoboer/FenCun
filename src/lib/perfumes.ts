@@ -103,25 +103,37 @@ export function loadExtSearch(): Promise<MiniSearch<ExtIndexEntry> | null> {
   return extIndexPromise;
 }
 
-// 扩展集命中的取舍（纯函数，可单测）。教训（「观夏」搜不到）：主目录的 OR+fuzzy 会用无关的
-// 单字命中凑数——搜「观夏」时「夏」字垃圾命中 7 条，若按"主目录不足 3 条才兜底"，扩展集永远轮不到。
-// 因此扩展搜索无条件跑，取舍放在这里：
-// 1. 强命中优先：查询的每个词段都是条目串（名+品牌+中文）的连续子串 → 这是用户要找的，直接给；
-// 2. 没有强命中时，只在主目录确实贫瘠（<3 条）才放出模糊命中——避免好查询下面挂一排噪音。
-export function selectExtHits<T extends ExtIndexEntry>(
-  hits: T[],
-  query: string,
-  mainCount: number,
-  limit = 5
-): T[] {
+// ===== 统一排序：主目录与扩展集合并成一张榜单（纯函数，可单测）=====
+// 两次教训沉淀于此：
+// ① 「观夏」搜不到——主目录 OR+fuzzy 用无关单字命中凑数，"主目录不足才兜底"的触发条件永远不成立；
+// ② 「闻献」被折叠——把扩展集放进「更多结果」区隔，用户会以为上面没有匹配、根本注意不到底部。
+// 因此：两个索引的候选**合并重排、不分区**。排序原则（产品定案）：
+// - 文本匹配档位优先：查询整体命中名称(3) > 命中名称+品牌(2) > 仅模糊命中(1)——
+//   高度匹配的结果必须靠前，不许被别的信号淹没；
+// - 同档位内按投票人数（主流度）：同名多版本时，更常用、更主流的版本在前。
+export interface RankCandidate<T> {
+  item: T;
+  nameHay: string; // 名称类字段拼串（中文名/别名/英文名）
+  fullHay: string; // 名称 + 品牌全串
+  people: number; // 社区投票人数（跨索引可比的主流度信号）
+}
+
+export function rankSearchHits<T>(query: string, cands: RankCandidate<T>[], limit = 9): T[] {
   const segs = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (segs.length === 0) return [];
-  const strong = hits.filter((e) => {
-    const hay = `${e.n} ${e.b} ${e.z ?? ""}`.toLowerCase();
-    return segs.every((s) => hay.includes(s));
-  });
-  if (strong.length > 0) return strong.slice(0, limit);
-  return mainCount < 3 ? hits.slice(0, limit) : [];
+  const joined = segs.join("");
+  const tierOf = (c: RankCandidate<T>): number => {
+    const nameHay = c.nameHay.toLowerCase();
+    if (segs.every((s) => nameHay.includes(s)) || nameHay.includes(joined)) return 3;
+    const fullHay = c.fullHay.toLowerCase();
+    if (segs.every((s) => fullHay.includes(s)) || fullHay.includes(joined)) return 2;
+    return 1;
+  };
+  return cands
+    .map((c) => ({ c, tier: tierOf(c) }))
+    .sort((a, b) => b.tier - a.tier || b.c.people - a.c.people)
+    .slice(0, limit)
+    .map((x) => x.c.item);
 }
 
 export async function fetchExtPerfume(id: number): Promise<Perfume | null> {
