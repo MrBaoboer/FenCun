@@ -31,7 +31,7 @@ Please include, if possible: affected page / endpoint, reproduction steps, impac
 
 氛寸 deliberately keeps a thin backend, so the attack surface is small:
 
-- **No backend database** — the shelf and feedback live only in the user's browser `localStorage`; no user data is stored server-side.
+- **No backend database** — the shelf, journal, and feedback live only in the user's browser `localStorage`; no user data is stored server-side.
 - **Server-side secrets** — QWeather / DeepSeek keys are used only in server Route Handlers and never sent to the client.
 - **API proxies** — `/api/context`, `/api/explain`, `/api/parse-intent` have built-in rate limiting and graceful degradation, with input length caps.
 
