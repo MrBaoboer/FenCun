@@ -151,9 +151,10 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 香水数据来自 **ledecanteur**（Fragrantica 社区数据），含真实社区投票：扩散 sillage(1–4)、留香 longevity(1–5)、四季 / 日夜投票、带强度香调、前中后调。
 
 - 原始 13.2 万款 → 按投票数 ≥ 50 筛得约 **3.67 万款**。
-- **数据分层**：主目录取热度 **Top 1500 款**全中文精选（构建期预计算季节平滑占比、日夜占比、扩散四档、风格标签）；其余 **3.6 万款进扩展集**——搜索索引懒加载（gzip ≈ 745 KB，只在主目录搜不到时才取）+ 64 个详情分片按需取（单片 gzip ≤ 95 KB），含 **785 款国货白名单**（观夏/闻献/RE调香室 等，低票记录标 `lowVotes`、社区统计仅供参考）；仍搜不到还有**手动记一瓶**兜底。柜是推荐引擎的唯一输入——每一瓶都进得来。
+- **数据分层**：主目录取热度 **Top 1500 款**全中文精选（构建期预计算季节平滑占比、日夜占比、扩散四档、风格标签）；其余 **3.6 万款进扩展集**——搜索索引首次搜索时懒加载（gzip ≈ 748 KB）+ 64 个详情分片按需取（单片 gzip ≤ 95 KB），含 **785 款国货白名单**（观夏/闻献/RE调香室 等，低票记录标 `lowVotes`、社区统计仅供参考）。
+- **统一榜单**：主目录与扩展集的候选**合并重排、不分区**——文本匹配档位优先（命中名称 > 命中名称＋品牌 > 仅模糊），同档位按社区投票的主流度；不做「更多结果」式折叠，那会让用户以为上面没有匹配。仍搜不到还有**手动记一瓶**兜底。香柜是推荐引擎的唯一输入——每一瓶都进得来。
 - **中文化**：香调 / 气味词近全覆盖，香名 **89%**（保守映射官方名/香圈绰号/忠实直译，无可靠中文名者诚实回退英文）；品牌**映射 100%**——有通行中文名的已补齐（约 120/241），Byredo、Le Labo 等百余小众品牌按香圈惯例保留英文，**错的中文名比英文更糟**。
-- 原始数据不入仓库，仅提交构建产物（主目录 `public/data/perfumes.min.json` 1.6 MB / gzip ≈ 261 KB；扩展集 `ext-index.json` + `ext/` 分片）。重跑管线需自备 ledecanteur 数据集，置于 `./ledecanteur/perfumes.jsonl`。
+- 原始数据不入仓库，仅提交构建产物（主目录 `public/data/perfumes.min.json` 1.6 MB / gzip ≈ 262 KB；扩展集 `ext-index.json` + `ext/` 分片）。重跑管线需自备 ledecanteur 数据集，置于 `./ledecanteur/perfumes.jsonl`。
 
 ---
 
@@ -188,17 +189,28 @@ npm run build:ext      # 全量扩展集：搜索索引 + 64 详情分片 → pu
 
 ```text
 src/
-  app/                  今日 / 香柜(library) / 我的(profile) 三页 + API 路由
+  app/                  今日 / 香柜(library) / 香历(journal) / 我的(profile) 四页 + API 路由
     api/context/        和风天气代理（保护 key + 网格缓存 + 降级）
     api/explain/        DeepSeek 解读（只翻译规则事实，失败降级模板）
     api/parse-intent/   DeepSeek 场景解析（zod 校验，降级关键词启发式）
-  components/            AppProvider / 推荐卡 / 天气卡 / 发现型钩子 / 搜索添加 …
+  components/           AppProvider / 推荐卡 / 情境栏 / 发现型钩子 / 搜索添加(SearchAdd)
+                        / 手动记一瓶(ManualAdd) …
   lib/                  types · scoring(打分) · usage(用法) · recommend(编排)
-                        · season · hooks · store · ratelimit
+                        · journal(香历) · perfumes(统一搜索 + 扩展目录)
+                        · numguard(数字白名单) · season · hooks · store · ratelimit
 scripts/                零依赖数据构建管线 + 截图脚本
 data/zh-map/            英文→中文映射（accords / notes / brands / names）
-docs/                   产品方案 · 截图
+docs/                   产品方案 · 领域规则手册 · 数据工程 · 声音与文案 · 截图
 ```
+
+---
+
+## 文档地图
+
+- [产品方案](docs/氛寸-产品方案.md) — 完整答辩：定位、架构、评分逻辑、关键决策、路线图。
+- [领域规则手册](docs/领域规则手册.md) — 打分与用法规则背后的香水领域依据。
+- [数据工程](docs/数据工程.md) — 13.2 万 → 3.67 万 → 中文映射的完整管线。
+- [声音与文案](docs/声音与文案.md) — 产品怎么说话：术语、语气与边界。
 
 ---
 
