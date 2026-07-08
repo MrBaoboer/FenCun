@@ -360,25 +360,32 @@ test("「用力过猛」组合：甜重/浓白花 × 强扩散 × 通勤，压�
   assert.ok(computeRisks(loudSweet, ctx).some((r) => r.includes("用力过猛")));
 });
 
-test("selectExtHits：强命中无视主目录垃圾计数（「观夏」回归）；无强命中时才看主目录贫瘠度", async () => {
-  const { selectExtHits } = await import("./perfumes");
-  const guanxia = [
-    { i: 1, n: "Triple Tea 三重茶", b: "To Summer | 观夏", p: 261 },
-    { i: 2, n: "Cedarwood 昆仑煮雪", b: "To Summer | 观夏", p: 80 },
-  ];
-  const junk = [
-    { i: 9, n: "Random Summer", b: "Nobody", p: 10 },
-    { i: 10, n: "Another", b: "Nobody", p: 9 },
-  ];
-  // 回归核心：主目录被「夏」字垃圾命中凑到 7 条时，观夏的强命中仍必须给出
-  const picked = selectExtHits([...junk, ...guanxia], "观夏", 7);
-  assert.deepEqual(picked.map((e) => e.i), [1, 2]);
-  // 多词段：每段都得是连续子串
-  assert.deepEqual(selectExtHits([...junk, ...guanxia], "观夏 三重茶", 7).map((e) => e.i), [1]);
-  // 无强命中 + 主目录已有像样结果 → 不放噪音
-  assert.deepEqual(selectExtHits(junk, "蓝风铃", 5), []);
-  // 无强命中 + 主目录贫瘠 → 放出模糊命中兜底（拼写误差/英文场景）
-  assert.equal(selectExtHits(junk, "sumer", 0).length, 2);
+test("rankSearchHits：统一榜单——文本档位优先，同档位内按主流度；不分区不折叠", async () => {
+  const { rankSearchHits } = await import("./perfumes");
+  const C = (item: string, nameHay: string, fullHay: string, people: number) => ({ item, nameHay, fullHay, people });
+  // 「观夏」回归：品牌命中（档位2）必须排在主目录的单字垃圾命中（档位1）之前，
+  // 哪怕垃圾命中的投票人数高得多——高度匹配不许被热门度淹没
+  const merged = rankSearchHits("观夏", [
+    C("junk-popular", "诺亚", "诺亚 Nobody", 99999),
+    C("gx-tea", "Triple Tea 三重茶", "Triple Tea 三重茶 To Summer | 观夏", 261),
+    C("gx-snow", "Cedarwood 昆仑煮雪", "Cedarwood 昆仑煮雪 To Summer | 观夏", 80),
+  ]);
+  assert.deepEqual(merged, ["gx-tea", "gx-snow", "junk-popular"]);
+  // 名称直接命中（档位3）压过品牌命中（档位2）
+  const t3 = rankSearchHits("昆仑煮雪", [
+    C("brand-only", "别的", "别的 昆仑煮雪牌", 5000),
+    C("name-hit", "Cedarwood 昆仑煮雪", "Cedarwood 昆仑煮雪 To Summer | 观夏", 80),
+  ]);
+  assert.equal(t3[0], "name-hit");
+  // 同名多版本：同档位内更主流（投票更多）的版本在前
+  const versions = rankSearchHits("大地", [
+    C("flanker", "大地 限量版", "大地 限量版 Hermès", 800),
+    C("mainline", "大地", "大地 Hermès 爱马仕", 26000),
+  ]);
+  assert.deepEqual(versions, ["mainline", "flanker"]);
+  // 全无子串命中（拼写误差）→ 档位1 内按主流度，仍然给结果、不留空
+  const fuzzy = rankSearchHits("sumer", [C("a", "Summer Hit", "Summer Hit X", 10), C("b", "Another", "Another Y", 500)]);
+  assert.deepEqual(fuzzy, ["b", "a"]);
 });
 
 test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {
