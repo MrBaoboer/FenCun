@@ -360,6 +360,27 @@ test("「用力过猛」组合：甜重/浓白花 × 强扩散 × 通勤，压�
   assert.ok(computeRisks(loudSweet, ctx).some((r) => r.includes("用力过猛")));
 });
 
+test("selectExtHits：强命中无视主目录垃圾计数（「观夏」回归）；无强命中时才看主目录贫瘠度", async () => {
+  const { selectExtHits } = await import("./perfumes");
+  const guanxia = [
+    { i: 1, n: "Triple Tea 三重茶", b: "To Summer | 观夏", p: 261 },
+    { i: 2, n: "Cedarwood 昆仑煮雪", b: "To Summer | 观夏", p: 80 },
+  ];
+  const junk = [
+    { i: 9, n: "Random Summer", b: "Nobody", p: 10 },
+    { i: 10, n: "Another", b: "Nobody", p: 9 },
+  ];
+  // 回归核心：主目录被「夏」字垃圾命中凑到 7 条时，观夏的强命中仍必须给出
+  const picked = selectExtHits([...junk, ...guanxia], "观夏", 7);
+  assert.deepEqual(picked.map((e) => e.i), [1, 2]);
+  // 多词段：每段都得是连续子串
+  assert.deepEqual(selectExtHits([...junk, ...guanxia], "观夏 三重茶", 7).map((e) => e.i), [1]);
+  // 无强命中 + 主目录已有像样结果 → 不放噪音
+  assert.deepEqual(selectExtHits(junk, "蓝风铃", 5), []);
+  // 无强命中 + 主目录贫瘠 → 放出模糊命中兜底（拼写误差/英文场景）
+  assert.equal(selectExtHits(junk, "sumer", 0).length, 2);
+});
+
 test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {
   const p = mk({ accords: acc([["citrus", 60]]) });
   const risks = computeRisks(p, C({ occasion: "formal", feel: "mild", tempC: 20, riskNote: "婚礼焦点是新人，不宜喧宾夺主" }));

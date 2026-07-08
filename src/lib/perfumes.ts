@@ -103,6 +103,27 @@ export function loadExtSearch(): Promise<MiniSearch<ExtIndexEntry> | null> {
   return extIndexPromise;
 }
 
+// 扩展集命中的取舍（纯函数，可单测）。教训（「观夏」搜不到）：主目录的 OR+fuzzy 会用无关的
+// 单字命中凑数——搜「观夏」时「夏」字垃圾命中 7 条，若按"主目录不足 3 条才兜底"，扩展集永远轮不到。
+// 因此扩展搜索无条件跑，取舍放在这里：
+// 1. 强命中优先：查询的每个词段都是条目串（名+品牌+中文）的连续子串 → 这是用户要找的，直接给；
+// 2. 没有强命中时，只在主目录确实贫瘠（<3 条）才放出模糊命中——避免好查询下面挂一排噪音。
+export function selectExtHits<T extends ExtIndexEntry>(
+  hits: T[],
+  query: string,
+  mainCount: number,
+  limit = 5
+): T[] {
+  const segs = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (segs.length === 0) return [];
+  const strong = hits.filter((e) => {
+    const hay = `${e.n} ${e.b} ${e.z ?? ""}`.toLowerCase();
+    return segs.every((s) => hay.includes(s));
+  });
+  if (strong.length > 0) return strong.slice(0, limit);
+  return mainCount < 3 ? hits.slice(0, limit) : [];
+}
+
 export async function fetchExtPerfume(id: number): Promise<Perfume | null> {
   const shardNo = ((id % 64) + 64) % 64;
   let shard = extShardCache.get(shardNo) ?? null;

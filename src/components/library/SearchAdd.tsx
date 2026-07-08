@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "@/lib/store";
-import { buildSearch, loadExtSearch, fetchExtPerfume, type ExtIndexEntry } from "@/lib/perfumes";
+import { buildSearch, loadExtSearch, fetchExtPerfume, selectExtHits, type ExtIndexEntry } from "@/lib/perfumes";
 import { nameParts } from "@/lib/format";
 import { ManualAdd } from "@/components/library/ManualAdd";
 import type { Perfume } from "@/lib/types";
@@ -41,21 +41,15 @@ export function SearchAdd() {
     const hits = ms.search(q.trim()).slice(0, 8);
     const main = hits.map((h) => byId.get(h.id as number)).filter(Boolean) as Perfume[];
     setResults(main);
-    // 主目录命中不足 → 懒加载扩展索引兜底（首次约几百 KB，此后走缓存）
-    if (main.length < 3) {
-      const query = q.trim();
-      loadExtSearch().then((ext) => {
-        if (!ext || qRef.current !== query) return; // 过期查询丢弃
-        const mainIds = new Set(main.map((p) => p.id));
-        const found = ext
-          .search(query)
-          .filter((h) => !mainIds.has(h.i as number))
-          .slice(0, 5) as unknown as ExtIndexEntry[];
-        setExtHits(found);
-      });
-    } else {
-      setExtHits([]);
-    }
+    // 扩展集搜索无条件跑（索引懒加载一次，此后走缓存）——不能按"主目录命中不足"触发：
+    // 主目录 OR+fuzzy 的单字垃圾命中会凑数，「观夏」曾因此彻底搜不到。取舍见 selectExtHits。
+    const query = q.trim();
+    loadExtSearch().then((ext) => {
+      if (!ext || qRef.current !== query) return; // 过期查询丢弃
+      const mainIds = new Set(main.map((p) => p.id));
+      const all = ext.search(query).filter((h) => !mainIds.has(h.i as number)) as unknown as ExtIndexEntry[];
+      setExtHits(selectExtHits(all, query, main.length));
+    });
   }, [q, ms, byId]);
 
   useEffect(() => {
