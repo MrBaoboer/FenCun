@@ -15,19 +15,21 @@ export function ShelfCard({
 }) {
   const np = nameParts(p);
   return (
-    <div
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
-      className="card relative flex cursor-pointer flex-col p-4 transition-shadow hover:border-line-strong"
-    >
+    // 容器不再扮演 button（role="button" 内嵌真 <button> 是 a11y 反模式）：
+    // 香名是真按钮，借 ::after 铺满整卡做点击区；删除钮以 z-10 浮在其上，两者互不嵌套
+    <div className="card relative flex flex-col p-4 transition-shadow hover:border-line-strong">
       {dusty && (
-        <span className="eyebrow absolute right-3 top-3.5 !text-[0.55rem] !text-warn">很久没用</span>
+        <span className="eyebrow absolute right-3 top-3.5 !text-[0.68rem] !text-warn">很久没用</span>
       )}
-      <div className={`truncate pr-14 text-[1.08rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
-        {np.primary}
-      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full cursor-pointer pr-14 text-left after:absolute after:inset-0 after:content-['']"
+      >
+        <span className={`block truncate text-[1.08rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
+          {np.primary}
+        </span>
+      </button>
       <div className="mt-1 truncate text-[0.72rem] text-ink-faint">
         {np.secondary ? <span className="en-italic">{np.secondary}</span> : null}
         {np.secondary ? " · " : ""}
@@ -40,11 +42,9 @@ export function ShelfCard({
           {SILLAGE_WORD[p.sillageTier]} · {durationShort(p.longevity)}
         </span>
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="-mr-1 shrink-0 p-1 text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
+          type="button"
+          onClick={onRemove}
+          className="relative z-10 -m-2 -mr-3 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
           aria-label="移出香柜"
           title="移出香柜"
         >

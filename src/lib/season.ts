@@ -18,8 +18,19 @@ export function seasonFromDateTemp(date: Date, tempC: number | null): Season {
 
 export function feelFromWeather(tempC: number, humidity: number): Feel {
   if (tempC >= 28) return humidity >= 65 ? "hot_humid" : "hot_dry";
+  // 回南天/梅雨（20~27℃ 但湿度极高）：气味在湿空气里散不掉、甜香白花被放大，
+  // 按闷湿处理——对中国市场，这比"28℃ 以下一律温和"更接近体感真相
+  if (tempC >= 20 && humidity >= 85) return "hot_humid";
   if (tempC <= 10) return "cold";
   return "mild";
+}
+
+// 温度档（供成功配置复用与反馈归因：同温度档 × 同场合 → 直接用上次「刚好」的量）
+export function tempBand(tempC: number): "cold" | "cool" | "mild" | "hot" {
+  if (tempC <= 10) return "cold";
+  if (tempC <= 19) return "cool";
+  if (tempC <= 27) return "mild";
+  return "hot";
 }
 
 export function daypartFromHour(hour: number): Daypart {

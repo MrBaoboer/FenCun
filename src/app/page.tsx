@@ -29,7 +29,7 @@ export default function TodayPage() {
   const recordSwap = useStore((s) => s.recordSwap);
   const recordDustyAdopt = useStore((s) => s.recordDustyAdopt);
   const hydrated = useStore((s) => s.hydrated);
-  const { catalogError, retryCatalog } = useApp();
+  const { catalog, catalogError, retryCatalog } = useApp();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -67,12 +67,14 @@ export default function TodayPage() {
     return out.slice(0, 3);
   }, [rec, isSelected, activePick]);
 
-  // 采纳一瓶（就用它/换香/翻出吃灰瓶）→ 记穿戴 + 打点证伪指标
-  const adopt = (id: number, kind: "primary" | "swap" | "dusty") => {
+  // 采纳一瓶（换香/翻出吃灰瓶）→ 记穿戴 + 打点证伪指标；
+  // 把主推换掉同时记一笔"隐式差评"（分数说它行、你说它不行——7 天内两次就让它让位）
+  const adopt = (id: number, kind: "swap" | "dusty") => {
     setSelectedId(id);
     markWorn(id);
     if (kind === "dusty") recordDustyAdopt();
-    else if (kind === "swap" && rec?.primary && id !== rec.primary.perfume.id) recordSwap();
+    else if (kind === "swap" && rec?.primary && id !== rec.primary.perfume.id)
+      recordSwap(rec.primary.perfume.id);
   };
 
   const explain = useExplain(activePick, ctx);
@@ -98,6 +100,9 @@ export default function TodayPage() {
         <div className="h-56 animate-pulse bg-sunken/50" />
       ) : catalogError && userPerfumes.length > 0 ? (
         <CatalogError count={userPerfumes.length} onRetry={retryCatalog} />
+      ) : catalog === null && !catalogError ? (
+        // 目录还在加载：继续骨架屏——满柜用户在这个窗口期不该看到"空柜"（那句话对他们是假的）
+        <div className="h-56 animate-pulse bg-sunken/50" />
       ) : lib.length === 0 ? (
         <EmptyShelf />
       ) : !ctx ? (
@@ -123,7 +128,7 @@ export default function TodayPage() {
             onReset={() => setSelectedId(null)}
           />
           <AltList alts={altsToShow} onPick={(id) => adopt(id, "swap")} />
-          <FeedbackBar perfumeId={activePick.perfume.id} ctx={ctx} />
+          <FeedbackBar perfumeId={activePick.perfume.id} ctx={ctx} sprays={activePick.usage.sprays} />
         </>
       ) : null}
 

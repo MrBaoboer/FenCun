@@ -15,12 +15,14 @@ export function SceneInput() {
   const setScene = useStore((s) => s.setScene);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const t = text.trim();
     if (!t) return;
     setBusy(true);
+    setErr(null);
     try {
       const r = await fetch("/api/parse-intent", {
         method: "POST",
@@ -34,12 +36,21 @@ export function SceneInput() {
           formality: d.formality,
           intimacy: d.intimacy,
           avoid: d.avoid,
+          tension: d.tension,
+          duration: d.duration,
+          meal: d.meal,
+          riskNote: d.riskNote,
           label: d.label,
           rawText: t,
         });
         setText("");
+      } else {
+        // 解析没成不能悄悄咽下去——用户点了箭头、等完 loading，得知道发生了什么
+        setErr("这句没读懂。换个说法试试，或直接点上面的场合。");
       }
-    } catch {}
+    } catch {
+      setErr("网络没跟上。稍等片刻，再试一次。");
+    }
     setBusy(false);
   }
 
@@ -65,8 +76,10 @@ export function SceneInput() {
   }
 
   return (
+    <div className="flex flex-col gap-1.5">
     <form
       onSubmit={submit}
+      aria-describedby={err ? "scene-input-err" : undefined}
       className="flex items-center gap-2 rounded-md border border-line-strong px-3 py-2 focus-within:border-accent"
     >
       <Sparkle />
@@ -91,5 +104,11 @@ export function SceneInput() {
         )}
       </button>
     </form>
+      {err && (
+        <p id="scene-input-err" role="status" className="serif px-1 text-[0.78rem] text-warn">
+          {err}
+        </p>
+      )}
+    </div>
   );
 }

@@ -25,6 +25,7 @@ export function OccasionChips() {
           <button
             key={o.key}
             data-active={active === o.key}
+            aria-pressed={active === o.key}
             onClick={() => setOccasion(o.key)}
             className="chip serif shrink-0 px-3.5 py-1.5 text-[0.88rem]"
           >

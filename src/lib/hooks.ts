@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "./store";
 import { seasonFromDateTemp, feelFromWeather, daypartFromHour } from "./season";
-import { recommend, buildPick, aggregateBias } from "./recommend";
+import { recommend, buildPick, aggregateBias, dayFloor } from "./recommend";
 import { DISTANCE_LABEL } from "./format";
 import type { Context, Perfume, ScoredPick } from "./types";
 
@@ -29,6 +29,10 @@ export function useResolvedContext(): Context | null {
       intimacy: scene?.intimacy,
       avoid: scene?.avoid,
       notePreference: scene?.notePreference,
+      tension: scene?.tension,
+      duration: scene?.duration,
+      meal: scene?.meal,
+      riskNote: scene?.riskNote,
       sceneLabel: scene?.label,
       rawText: scene?.rawText,
     };
@@ -51,12 +55,15 @@ export function useResolvedContext(): Context | null {
       const season = seasonFromDateTemp(now, null);
       const seasonalTemp = season === "summer" ? 27 : season === "winter" ? 6 : season === "spring" ? 18 : 16;
       return {
+        // 季节代表温度：feel 保持 mild（不触发闷热/寒凉的强规则），但盛夏/隆冬的代表温度会让
+        // 天气乘子按 mild 段梯度产生 ±5% 的季节性倾斜（夏奖清爽、冬奖暖香）——这是刻意保留的行为：
+        // 降级时我们确实知道季节；不冒充的是"实时天气"（approximate 态不弹天气预警、不调 LLM）
         tempC: seasonalTemp,
         humidity: 50,
         windSpeed: 0,
         weatherText: "",
         city: "",
-        feel: "mild", // 中性，天气乘子 W=1，不臆造体感
+        feel: "mild",
         daypart: daypartFromHour(now.getHours()),
         season,
         ...sceneFields,
@@ -67,27 +74,38 @@ export function useResolvedContext(): Context | null {
   }, [weather, locState, occasion, scene, nowMinute]);
 }
 
-// 用户库内的香水对象
+// 用户库内的香水对象：主目录 ∪ 扩展集快照 ∪ 手动记录（三层数据分层，柜里的每一瓶都能被找到）
 export function useLibraryPerfumes(): Perfume[] {
   const { catalog } = useApp();
   const userPerfumes = useStore((s) => s.userPerfumes);
+  const extPerfumes = useStore((s) => s.extPerfumes);
+  const customPerfumes = useStore((s) => s.customPerfumes);
   return useMemo(() => {
-    if (!catalog) return [];
-    const byId = new Map(catalog.map((p) => [p.id, p]));
+    const byId = new Map((catalog ?? []).map((p) => [p.id, p]));
+    for (const p of extPerfumes) if (!byId.has(p.id)) byId.set(p.id, p);
+    for (const p of customPerfumes) if (!byId.has(p.id)) byId.set(p.id, p);
     return userPerfumes.map((u) => byId.get(u.perfumeId)).filter(Boolean) as Perfume[];
-  }, [catalog, userPerfumes]);
+  }, [catalog, userPerfumes, extPerfumes, customPerfumes]);
 }
 
 // 推荐
 export function useRecommendation(ctx: Context | null) {
   const lib = useLibraryPerfumes();
   const feedbacks = useStore((s) => s.feedbacks);
+  const userPerfumes = useStore((s) => s.userPerfumes);
+  const swapAways = useStore((s) => s.swapAways);
   return useMemo(() => {
     if (!ctx || lib.length === 0) return null;
     const bias = aggregateBias(feedbacks);
-    const daySeed = Math.floor(Date.now() / DAY_MS);
-    return recommend(lib, ctx, bias, daySeed);
-  }, [lib, ctx, feedbacks]);
+    // 本地日历日做轮换种子：跨天在本地零点切换，而不是 UTC 零点（北京早上 8 点）——
+    // "今日推荐"不能在"今天"进行到 1/3 时换答案
+    const daySeed = Math.floor(dayFloor(Date.now()) / DAY_MS);
+    const lastWornAt = new Map(
+      userPerfumes.filter((u) => u.lastWornAt != null).map((u) => [u.perfumeId, u.lastWornAt!])
+    );
+    const swapMap = new Map(Object.entries(swapAways).map(([k, v]) => [Number(k), v]));
+    return recommend(lib, ctx, bias, { daySeed, lastWornAt, swapAways: swapMap });
+  }, [lib, ctx, feedbacks, userPerfumes, swapAways]);
 }
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -134,7 +152,7 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
 
     // S4 天气突变预警：依赖真实天气——近似天气态(定位失败降级)下不弹，避免用人造体感冒充"天气突变预警"
     if (!ctx.approximate) {
-      // "常喷"用真实穿戴信号 wornCount(采纳/就用它累计≥2次)，而非反馈计数——feedback 稀疏、口径失真
+      // "常喷"用真实穿戴信号 wornCount(换香/吃灰采纳/反馈提交累计≥2次，同日去重)，而非反馈计数——feedback 稀疏、口径失真
       let habitualId: number | null = null;
       let maxWorn = 1;
       for (const u of userPerfumes) {
