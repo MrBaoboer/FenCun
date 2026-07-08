@@ -1,8 +1,39 @@
 "use client";
-import { ReactNode } from "react";
+import { ReactNode, RefObject, useEffect, useRef } from "react";
 
 export function Eyebrow({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`eyebrow ${className}`}>{children}</div>;
+}
+
+// 弹层可访问性（手工补齐语义版——现有弹层动画/定位重构成原生 <dialog> 风险大）：
+// 打开时焦点移入面板、Esc 关闭、锁定 body 滚动、关闭后焦点还给触发元素。
+// 用法：面板根节点挂 ref + tabIndex={-1} + role="dialog" + aria-modal="true"。
+export function useDialogA11y(open: boolean, onClose: () => void): RefObject<HTMLDivElement | null> {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    if (!open) return;
+    const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      prevFocus?.focus();
+    };
+  }, [open]);
+  return panelRef;
 }
 
 // 证据条：0..1 匹配度 → 一次性生长的细横条

@@ -28,10 +28,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3f0e8" },
-    { media: "(prefers-color-scheme: dark)", color: "#16130e" },
-  ],
+  // 应用主题按时段/localStorage 切（见 body 内联脚本与 AppProvider），不跟 prefers-color-scheme——
+  // 这里只给一个静态默认值，避免两套口径相撞；真实值由内联脚本/AppProvider 按 data-theme 同步
+  themeColor: "#f3f0e8",
   width: "device-width",
   initialScale: 1,
 };
@@ -48,7 +47,7 @@ export default function RootLayout({
       <body className="min-h-full">
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem('fencun-theme');var h=new Date().getHours();document.documentElement.dataset.theme=s||((h>=6&&h<18)?'day':'night');}catch(e){}})();`,
+            __html: `(function(){try{var s=localStorage.getItem('fencun-theme');var h=new Date().getHours();var t=s||((h>=6&&h<18)?'day':'night');document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='night'?'#16130e':'#f3f0e8');}catch(e){}})();`,
           }}
         />
         <AppProvider>

@@ -1,5 +1,5 @@
 "use client";
-import { Eyebrow, AccordBar } from "@/components/ui";
+import { Eyebrow, AccordBar, useDialogA11y } from "@/components/ui";
 import { nameParts, genderLabel, SILLAGE_WORD, durationShort, DISTANCE_LABEL } from "@/lib/format";
 import type { Perfume } from "@/lib/types";
 
@@ -52,15 +52,28 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => void }) {
+  const panelRef = useDialogA11y(!!p, onClose);
   if (!p) return null;
   const np = nameParts(p);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-      <div className="absolute inset-0 animate-fade-in bg-ink/40 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="card relative z-10 max-h-[86vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none p-6 shadow-float md:rounded-card">
+      {/* 遮罩点击关闭；键盘出口由 Esc（useDialogA11y）承担 */}
+      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-ink/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`香气档案：${np.primary}`}
+        tabIndex={-1}
+        className="card relative z-10 max-h-[86vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none p-6 shadow-float outline-none md:rounded-card"
+      >
         <div className="flex items-start justify-between">
           <Eyebrow>香气档案 · Profile</Eyebrow>
-          <button onClick={onClose} className="chip serif px-3 py-1 text-xs" aria-label="关闭">
+          <button
+            onClick={onClose}
+            className="chip serif relative px-3 py-1 text-xs after:absolute after:-inset-2 after:content-['']"
+            aria-label="关闭"
+          >
             关闭
           </button>
         </div>

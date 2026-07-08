@@ -1,4 +1,5 @@
 "use client";
+import { useDialogA11y } from "@/components/ui";
 import { SILLAGE_WORD, nameParts } from "@/lib/format";
 import type { Perfume } from "@/lib/types";
 
@@ -15,17 +16,29 @@ export function ChangeBottleSheet({
   currentId: number | null;
   onSelect: (id: number) => void;
 }) {
+  const panelRef = useDialogA11y(open, onClose);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-      <div className="absolute inset-0 animate-fade-in bg-ink/25 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[72vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-card border border-line bg-surface shadow-float md:rounded-card">
+      {/* 遮罩点击关闭；键盘出口由 Esc（useDialogA11y）承担 */}
+      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-ink/25 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="换一瓶：从你的香柜里选"
+        tabIndex={-1}
+        className="relative z-10 flex max-h-[72vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-card border border-line bg-surface shadow-float outline-none md:rounded-card"
+      >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <div className="eyebrow">换一瓶 · Your Shelf</div>
             <p className="mt-0.5 text-sm text-ink-soft">从你的香柜里选，用法会跟着重算</p>
           </div>
-          <button onClick={onClose} className="chip px-3 py-1 text-xs">
+          <button
+            onClick={onClose}
+            className="chip relative px-3 py-1 text-xs after:absolute after:-inset-2 after:content-['']"
+          >
             关闭
           </button>
         </div>
