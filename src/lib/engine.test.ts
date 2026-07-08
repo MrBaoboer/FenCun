@@ -11,9 +11,11 @@ import {
   qualityPrior,
   avoidPenalty,
 } from "./scoring";
-import { computeUsage } from "./usage";
-import { buildPick, recommend } from "./recommend";
-import type { Perfume, Context } from "./types";
+import { computeUsage, computeRisks } from "./usage";
+import { buildPick, recommend, freshness, swapPenalty, dayFloor, aggregateBias } from "./recommend";
+import { feelFromWeather } from "./season";
+import { extractDigits, findInventedNumbers } from "./numguard";
+import type { Perfume, Context, Feedback } from "./types";
 
 function mk(o: Partial<Perfume> = {}): Perfume {
   return {
@@ -160,4 +162,206 @@ test("computeUsage：tier4 在封闭场合，社交距离档随喷量下调(doma
   const loud = mk({ sillageTier: 4, sillage: 3.5 });
   assert.ok(computeUsage(loud, C({ occasion: "work", feel: "mild", tempC: 20 })).socialDistance < 4);
   assert.equal(computeUsage(loud, C({ occasion: "home", feel: "mild", tempC: 20 })).socialDistance, 4);
+});
+
+// ============ 审查修复回归测试：每条对应一个曾被实锤的缺陷 ============
+
+test("排序不变式：任何后位候选的排名分不得高出前位超过 EPS（修 epsilon 比较器违反严格弱序）", () => {
+  // 同质香柜：相邻分差 < EPS、首尾跨度 > EPS——旧比较器在此结构下会让分高者排后
+  const lib = Array.from({ length: 8 }, (_, i) =>
+    mk({ id: i + 1, brand: "B", rating: null, accords: acc([["sweet", 80 - i * 2]]) })
+  );
+  const c = C({ season: "spring", feel: "mild", tempC: 20, occasion: "date" });
+  for (let seed = 0; seed < 40; seed++) {
+    const { ranked } = recommend(lib, c, undefined, { daySeed: seed });
+    for (let i = 0; i < ranked.length; i++) {
+      for (let j = i + 1; j < ranked.length; j++) {
+        assert.ok(
+          ranked[j].score <= ranked[i].score + 0.012 + 1e-9,
+          `seed=${seed}: 位次 ${j}(${ranked[j].score.toFixed(4)}) 比位次 ${i}(${ranked[i].score.toFixed(4)}) 高出超过 EPS`
+        );
+      }
+    }
+  }
+});
+
+test("喷量不变式：任何修正组合下 lo ≤ hi（修「2–1 下」反向区间）", () => {
+  // 复现原 bug：贴身意图把 hi 压到 lo，再叠一次「太冲」反馈
+  const p = mk({ sillage: 2.0, sillageTier: 2 });
+  const u = computeUsage(p, C({ occasion: "date", intimacy: "close", feel: "mild", tempC: 20 }), {
+    likeScore: 0,
+    perceivedStrength: 0.5,
+  });
+  assert.ok(u.sprays[0] <= u.sprays[1], `反向区间: ${u.spraysLabel}`);
+  // 粗暴遍历：全场合 × 全体感 × 反馈强度，不变式必须恒成立
+  for (const occasion of ["commute", "work", "date", "social", "formal", "casual", "home", "sport"] as const) {
+    for (const feel of ["hot_humid", "hot_dry", "mild", "cold"] as const) {
+      for (const ps of [-1, -0.5, 0, 0.5, 1]) {
+        for (const intimacy of ["close", "neutral", "broadcast"] as const) {
+          const x = computeUsage(
+            mk({ sillage: 3.5, sillageTier: 4, accords: acc([["sweet", 70], ["white floral", 60]]) }),
+            C({ occasion, feel, intimacy, tempC: 25, avoid: ["too_strong"], meal: true }),
+            { likeScore: 0, perceivedStrength: ps }
+          );
+          assert.ok(x.sprays[0] <= x.sprays[1] && x.sprays[0] >= 1);
+        }
+      }
+    }
+  }
+});
+
+test("闷热压重香不再是死代码：强扩散香在 hot_humid 下喷量上限低于 mild（修 usage.ts:38）", () => {
+  const loud = mk({ sillage: 3.5, sillageTier: 4 });
+  const mild = computeUsage(loud, C({ occasion: "casual", feel: "mild", tempC: 20 }));
+  const humid = computeUsage(loud, C({ occasion: "casual", feel: "hot_humid", tempC: 32 }));
+  assert.ok(humid.sprays[1] < mild.sprays[1], `hot_humid=${humid.spraysLabel} vs mild=${mild.spraysLabel}`);
+});
+
+test("dayFloor：同一本地日内种子稳定，跨本地午夜才变（修 UTC 早八点突变）", () => {
+  const morning = new Date(2026, 6, 8, 7, 50).getTime();
+  const later = new Date(2026, 6, 8, 8, 10).getTime();
+  const nextDay = new Date(2026, 6, 9, 0, 10).getTime();
+  assert.equal(dayFloor(morning), dayFloor(later)); // 7:50 与 8:10 是同一天（旧实现在 UTC 零点=北京 8 点翻转）
+  assert.notEqual(dayFloor(morning), dayFloor(nextDay));
+});
+
+test("qualityPrior：收缩靶心与中性锚点统一——中评少票不再比无评分更差", () => {
+  const midFewVotes = qualityPrior(mk({ rating: 4.0, people: 50 }));
+  const unrated = qualityPrior(mk({ rating: null }));
+  assert.ok(Math.abs(midFewVotes - 1) < 1e-9, `rating=4.0 应精确中性，得 ${midFewVotes}`);
+  assert.equal(unrated, 1);
+});
+
+test("occasionFit：琥珀木质加分在 60 附近连续，无悬崖跳变", () => {
+  const at60 = occasionFit(mk({ accords: acc([["amber", 60]]) }), C({ occasion: "date" }));
+  const at61 = occasionFit(mk({ accords: acc([["amber", 61]]) }), C({ occasion: "date" }));
+  assert.ok(Math.abs(at60 - at61) < 0.005, `60→61 跳变 ${Math.abs(at60 - at61)}`);
+});
+
+test("feelFromWeather：回南天/梅雨（22℃/90%）按闷湿处理，不再判温和", () => {
+  assert.equal(feelFromWeather(22, 90), "hot_humid");
+  assert.equal(feelFromWeather(22, 60), "mild");
+  assert.equal(feelFromWeather(30, 70), "hot_humid");
+});
+
+test("freshness：当天=1（今天的答案不摇摆），隔天让位，一周后归位；没喷过=1", () => {
+  const now = new Date(2026, 6, 8, 9, 0).getTime();
+  const DAY = 24 * 3600 * 1000;
+  assert.equal(freshness(undefined, now), 1);
+  assert.equal(freshness(now - 3600e3, now), 1); // 今早刚采纳
+  const d1 = freshness(now - 1 * DAY, now);
+  const d2 = freshness(now - 2 * DAY, now);
+  const d7 = freshness(now - 7 * DAY, now);
+  assert.ok(d1 < d2 && d2 < d7, "隔的天数越多越接近 1");
+  assert.ok(d1 < 0.65 && d7 > 0.9);
+});
+
+test("recommend：昨天刚喷的那瓶让位给同分兄弟（轮换因子进排序）", () => {
+  const a = mk({ id: 1, rating: null, accords: acc([["citrus", 60]]) });
+  const b = mk({ id: 2, rating: null, accords: acc([["citrus", 60]]) });
+  const now = new Date(2026, 6, 8, 9, 0).getTime();
+  const worn = new Map([[1, now - 24 * 3600 * 1000]]);
+  const { primary } = recommend([a, b], C({ occasion: "casual", feel: "mild", tempC: 20 }), undefined, {
+    lastWornAt: worn,
+    now,
+    daySeed: 3,
+  });
+  assert.equal(primary!.perfume.id, 2, "昨天喷过的 1 号应让位");
+});
+
+test("swapPenalty：7 天内两个不同天被换掉 → 0.8；单次或过期不罚", () => {
+  const now = new Date(2026, 6, 8, 9, 0).getTime();
+  const DAY = 24 * 3600 * 1000;
+  assert.equal(swapPenalty(undefined, now), 1);
+  assert.equal(swapPenalty([now - DAY], now), 1);
+  assert.equal(swapPenalty([now - DAY, now - DAY + 3600e3], now), 1); // 同一天两次只算一天
+  assert.equal(swapPenalty([now - DAY, now - 2 * DAY], now), 0.8);
+  assert.equal(swapPenalty([now - 8 * DAY, now - 9 * DAY], now), 1); // 过期失效
+});
+
+function fb(o: Partial<Feedback> & { rating: Feedback["rating"] }): Feedback {
+  return {
+    perfumeId: 1,
+    at: Date.now(),
+    context: { season: "spring", daypart: "day", tempC: 20, occasion: "work", feel: "mild" },
+    ...o,
+  } as Feedback;
+}
+
+test("aggregateBias：环境归因的「淡了」不进喷量校准（那笔算天气的）", () => {
+  const now = Date.now();
+  const plain = aggregateBias([fb({ rating: "too_weak", at: now })], now).get(1)!;
+  const attributed = aggregateBias([fb({ rating: "too_weak", at: now, tags: ["env_attributed"] })], now).get(1)!;
+  assert.ok(plain.perceivedStrength < 0, "正常「淡了」应记为偏淡");
+  assert.equal(attributed.perceivedStrength, 0, "环境归因后不动喷量校准");
+});
+
+test("aggregateBias：负向信号存在 + 按月衰减（偏好不再只增不减、锁死不动）", () => {
+  const now = Date.now();
+  const MONTH = 30 * 24 * 3600 * 1000;
+  const neg = aggregateBias([fb({ rating: "too_strong", at: now })], now).get(1)!;
+  assert.ok(neg.likeScore < 0, "「太冲」应带轻微负向偏好");
+  const freshLike = aggregateBias([fb({ rating: "perfect", at: now })], now).get(1)!.likeScore;
+  const staleLike = aggregateBias([fb({ rating: "perfect", at: now - 6 * MONTH })], now).get(1)!.likeScore;
+  assert.ok(staleLike < freshLike, "半年前的「刚好」话语权应低于昨天的");
+});
+
+test("aggregateBias + computeUsage：「刚好」沉淀成功配置，同温度档×同场合直接复用并给出说明", () => {
+  const now = Date.now();
+  const bias = aggregateBias(
+    [fb({ rating: "perfect", at: now, sprays: [2, 3] })],
+    now
+  ).get(1)!;
+  assert.ok(bias.successConfigs && bias.successConfigs.length === 1);
+  const u = computeUsage(mk({ sillage: 1.8, sillageTier: 2 }), C({ occasion: "work", feel: "mild", tempC: 20 }), bias);
+  assert.deepEqual(u.sprays, [3, 3], "复用上次「刚好」的中值（round(2.5)=3）");
+  assert.ok(u.note, "校准必须被感知");
+  // 不同场合不复用
+  const u2 = computeUsage(mk({ sillage: 1.8, sillageTier: 2 }), C({ occasion: "date", feel: "mild", tempC: 20 }), bias);
+  assert.equal(u2.note, undefined);
+});
+
+test("aggregateBias + score：「不合场合」按场合降权，别的场合不受牵连", () => {
+  const now = Date.now();
+  const bias = aggregateBias([fb({ rating: "scene_mismatch", at: now })], now).get(1)!;
+  const p = mk({ rating: null, accords: acc([["citrus", 60]]) });
+  const atWork = score(p, C({ occasion: "work", feel: "mild", tempC: 20 }), bias).total;
+  const plain = score(p, C({ occasion: "work", feel: "mild", tempC: 20 })).total;
+  assert.ok(atWork < plain, "被点名不搭的场合应降权");
+  const atHome = score(p, C({ occasion: "home", feel: "mild", tempC: 20 }), bias).total;
+  const plainHome = score(p, C({ occasion: "home", feel: "mild", tempC: 20 }), { likeScore: bias.likeScore, perceivedStrength: 0 }).total;
+  assert.ok(Math.abs(atHome - plainHome) < 1e-9, "其他场合只受 like 影响，不受场合惩罚");
+});
+
+test("数字白名单：事实里没给过的数字（如编造的 6.2）必须被拦下", () => {
+  const facts = `今天上海 33℃ 湿度 78%，建议喷 2 下`;
+  const allowed = extractDigits(facts);
+  assert.deepEqual(findInventedNumbers("今天 33℃，喷 2 下，留香约 6.2 小时", allowed), ["6.2"]);
+  assert.deepEqual(findInventedNumbers("湿度 78%，2 下就好", allowed), []);
+  assert.deepEqual(findInventedNumbers("大概 3 小时后补一次", allowed), ["3"]);
+});
+
+test("餐桌场合：浓香/甜香收敛并给出风险提示（meal 开关）", () => {
+  const sweetLoud = mk({ sillage: 3.5, sillageTier: 4, accords: acc([["sweet", 70]]) });
+  const ctx = C({ occasion: "date", feel: "mild", tempC: 20, meal: true });
+  const risks = computeRisks(sweetLoud, ctx);
+  assert.ok(risks.some((r) => r.includes("食物")), "应有餐桌风险提示");
+  const withMeal = computeUsage(sweetLoud, ctx);
+  const noMeal = computeUsage(sweetLoud, C({ occasion: "date", feel: "mild", tempC: 20 }));
+  assert.ok(withMeal.sprays[1] <= noMeal.sprays[1]);
+});
+
+test("「用力过猛」组合：甜重/浓白花 × 强扩散 × 通勤，压喷量、放低位置、给提示", () => {
+  const loudSweet = mk({ sillage: 2.8, sillageTier: 3, accords: acc([["sweet", 60], ["white floral", 55]]) });
+  const ctx = C({ occasion: "commute", feel: "mild", tempC: 20 });
+  const u = computeUsage(loudSweet, ctx);
+  assert.ok(u.sprays[1] <= 2, `喷量应压到最低档，得 ${u.spraysLabel}`);
+  assert.ok(u.placement.some((x) => x.includes("腰") || x.includes("下摆")), "位置应放低");
+  assert.ok(computeRisks(loudSweet, ctx).some((r) => r.includes("用力过猛")));
+});
+
+test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {
+  const p = mk({ accords: acc([["citrus", 60]]) });
+  const risks = computeRisks(p, C({ occasion: "formal", feel: "mild", tempC: 20, riskNote: "婚礼焦点是新人，不宜喧宾夺主" }));
+  assert.ok(risks.some((r) => r.includes("喧宾夺主")));
 });

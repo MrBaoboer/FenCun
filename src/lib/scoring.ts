@@ -1,5 +1,5 @@
 // 规则打分引擎（确定性，可解释）—— 决策权在这里，LLM 不参与
-import type { Perfume, Context, Feel, Season } from "./types";
+import type { Perfume, Context, Feel, Season, Bias } from "./types";
 
 function accStrength(p: Perfume, en: string): number {
   const a = p.accords.find((x) => x.en === en);
@@ -77,7 +77,8 @@ export function occasionFit(p: Perfume, ctx: Context): number {
     case "social":
       // 浪漫/social：甜、花最讨喜；泥土/木质/辛辣不浪漫；纯清冽也不够暧昧
       s += 0.4 * n(Math.max(sweet, floral));
-      s += 0.12 * n(amberWoody > 60 ? 0 : amberWoody);
+      // 温和木质加暖意，过 60 后斜坡淡出（连续函数，不设悬崖——60/61 之间不许出现 0.03 级的总分跳变）
+      s += 0.12 * n(amberWoody <= 60 ? amberWoody : Math.max(0, 60 - (amberWoody - 60) * 1.5));
       s -= 0.3 * n(Math.max(earthyDark, spicy * 0.5));
       if (fresh > 70 && sweet < 30 && floral < 30) s -= 0.15;
       if (ctx.occasion === "date" && tier >= 4) s -= 0.15;
@@ -114,11 +115,12 @@ export function occasionFit(p: Perfume, ctx: Context): number {
 // 质量先验：贝叶斯收缩后压成 ±4% 的温和微调（0.96~1.04，中心 1.0）。
 // 关键：同一用户库内，"今天喷哪瓶"该由场景/季节/天气决定，社区评分只作轻微 tiebreak，
 // 不能让某瓶高分香跨场景通吃（否则又回到"永远推荐大地"）。未评分记 1.0，不惩罚。
+// 收缩靶心 M 与中性锚点必须是同一个值——否则"中评+少票"会比"没评分"更差，"不惩罚"名不符实。
 export function qualityPrior(p: Perfume): number {
   if (p.rating == null) return 1;
-  const C = 30, M = 3.6;
+  const C = 30, M = 4.0;
   const shrunk = (p.rating * p.people + M * C) / (p.people + C);
-  return Math.max(0.96, Math.min(1.04, 1 + (shrunk - 4.0) * 0.08));
+  return Math.max(0.96, Math.min(1.04, 1 + (shrunk - M) * 0.08));
 }
 
 export interface ScoreParts {
@@ -147,12 +149,8 @@ export function avoidPenalty(p: Perfume, avoid?: string[]): number {
   return m;
 }
 
-// 个人偏置：likeScore ∈ [-1,1] → 居中 0.5..1.5 的乘子；perceivedStrength 影响后续用法（此处不用）
-export function score(
-  p: Perfume,
-  ctx: Context,
-  bias?: { likeScore: number; perceivedStrength: number }
-): ScoreParts {
+// 个人偏置：likeScore ∈ [-1,1] → 乘子 0.75..1.25；perceivedStrength 影响后续用法（此处不用）
+export function score(p: Perfume, ctx: Context, bias?: Bias): ScoreParts {
   const sSeason = seasonFit(p, ctx.season);
   const sDay = daypartFit(p, ctx);
   const sOcc = occasionFit(p, ctx);
@@ -164,6 +162,9 @@ export function score(
   // 个人偏好不占加性权重，改由下方 biasMul 乘性承担。
   const linear = 0.38 * sSeason + 0.19 * sDay + 0.43 * sOcc;
   const biasMul = 1 + (bias?.likeScore ?? 0) * 0.25;
-  const total = linear * W * Q * biasMul * avoidPenalty(p, ctx.avoid);
+  // 「不合场合」反馈：该瓶在该场合被点名不搭 → 按次数降权（每次 -10%，封顶 -30%，反向反馈可抵消）
+  const mismatch = Math.min(3, bias?.sceneMismatch?.[ctx.occasion] ?? 0);
+  const mismatchMul = 1 - 0.1 * mismatch;
+  const total = linear * W * Q * biasMul * mismatchMul * avoidPenalty(p, ctx.avoid);
   return { total, season: sSeason, daypart: sDay, occasion: sOcc, weather: W, quality: Q };
 }
