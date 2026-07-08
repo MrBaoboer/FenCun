@@ -2,31 +2,60 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "@/lib/store";
-import { buildSearch } from "@/lib/perfumes";
+import { buildSearch, loadExtSearch, fetchExtPerfume, type ExtIndexEntry } from "@/lib/perfumes";
 import { nameParts } from "@/lib/format";
+import { ManualAdd } from "@/components/library/ManualAdd";
 import type { Perfume } from "@/lib/types";
 
+// 三级搜索兜底：主目录（Top1500 全中文）→ 扩展集（3.6 万款，英文名/品牌/国货中文）→ 手动记一瓶。
+// 柜是推荐引擎的唯一输入——搜不到 = 进不了柜 = 整条产品路径对那瓶香失效，所以这里必须有底。
 export function SearchAdd() {
   const { catalog } = useApp();
   const addPerfume = useStore((s) => s.addPerfume);
+  const addExtPerfume = useStore((s) => s.addExtPerfume);
   const userPerfumes = useStore((s) => s.userPerfumes);
   const inLib = useMemo(() => new Set(userPerfumes.map((u) => u.perfumeId)), [userPerfumes]);
 
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Perfume[]>([]);
+  const [extHits, setExtHits] = useState<ExtIndexEntry[]>([]);
+  const [extBusyId, setExtBusyId] = useState<number | null>(null);
+  const [extError, setExtError] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const qRef = useRef("");
 
   const ms = useMemo(() => (catalog ? buildSearch(catalog) : null), [catalog]);
   const byId = useMemo(() => new Map((catalog ?? []).map((p) => [p.id, p])), [catalog]);
 
   useEffect(() => {
+    qRef.current = q;
+    setManualOpen(false);
+    setExtError(false);
     if (!ms || !q.trim()) {
       setResults([]);
+      setExtHits([]);
       return;
     }
     const hits = ms.search(q.trim()).slice(0, 8);
-    setResults(hits.map((h) => byId.get(h.id as number)).filter(Boolean) as Perfume[]);
+    const main = hits.map((h) => byId.get(h.id as number)).filter(Boolean) as Perfume[];
+    setResults(main);
+    // 主目录命中不足 → 懒加载扩展索引兜底（首次约几百 KB，此后走缓存）
+    if (main.length < 3) {
+      const query = q.trim();
+      loadExtSearch().then((ext) => {
+        if (!ext || qRef.current !== query) return; // 过期查询丢弃
+        const mainIds = new Set(main.map((p) => p.id));
+        const found = ext
+          .search(query)
+          .filter((h) => !mainIds.has(h.i as number))
+          .slice(0, 5) as unknown as ExtIndexEntry[];
+        setExtHits(found);
+      });
+    } else {
+      setExtHits([]);
+    }
   }, [q, ms, byId]);
 
   useEffect(() => {
@@ -36,6 +65,15 @@ export function SearchAdd() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+
+  async function addFromExt(entry: ExtIndexEntry) {
+    setExtBusyId(entry.i);
+    setExtError(false);
+    const rec = await fetchExtPerfume(entry.i);
+    if (rec) addExtPerfume(rec);
+    else setExtError(true);
+    setExtBusyId(null);
+  }
 
   const open = focused && q.trim().length > 0;
 
@@ -62,9 +100,19 @@ export function SearchAdd() {
 
       {open && (
         <div className="absolute z-20 mt-2 w-full animate-fade-in overflow-hidden rounded-lg border border-line bg-surface shadow-float">
-          {results.length === 0 ? (
-            <div className="px-4 py-5 text-center text-sm text-ink-faint">
-              没搜到。换个写法，或先记下名字晚点补充。
+          {manualOpen ? (
+            <ManualAdd initialName={q.trim()} onDone={() => { setManualOpen(false); setQ(""); }} />
+          ) : results.length === 0 && extHits.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 px-4 py-5 text-center">
+              <p className="text-sm text-ink-faint">
+                没搜到。试试英文名或品牌名——有些香水的中文昵称和官方名差得很远。
+              </p>
+              <button
+                onClick={() => setManualOpen(true)}
+                className="chip serif px-4 py-2 text-[0.85rem] hover:text-ink"
+              >
+                手动记一瓶 →
+              </button>
             </div>
           ) : (
             <ul className="max-h-[60vh] overflow-y-auto py-1">
@@ -104,6 +152,55 @@ export function SearchAdd() {
                   </li>
                 );
               })}
+
+              {extHits.length > 0 && (
+                <>
+                  <li className="px-4 pb-1 pt-2.5 text-[0.68rem] uppercase tracking-wide text-ink-faint">
+                    更多结果 · 来自完整目录
+                  </li>
+                  {extHits.map((e) => {
+                    const added = inLib.has(e.i);
+                    const busy = extBusyId === e.i;
+                    return (
+                      <li key={e.i}>
+                        <button
+                          disabled={added || busy}
+                          onClick={() => addFromExt(e)}
+                          className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-sunken disabled:cursor-default disabled:hover:bg-transparent"
+                        >
+                          <div className="min-w-0">
+                            <div className="disp truncate text-[1rem] text-ink">{e.n}</div>
+                            <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">
+                              {e.z || e.b}
+                            </div>
+                          </div>
+                          <span
+                            className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
+                              added ? "text-ink-faint" : "bg-ink text-paper"
+                            }`}
+                          >
+                            {added ? "已在柜" : busy ? "取数据…" : "+ 入柜"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </>
+              )}
+
+              <li className="border-t border-line">
+                <button
+                  onClick={() => setManualOpen(true)}
+                  className="w-full px-4 py-2.5 text-left text-[0.8rem] text-ink-faint transition-colors hover:bg-sunken hover:text-ink"
+                >
+                  都不是它？手动记一瓶 →
+                </button>
+              </li>
+              {extError && (
+                <li className="px-4 py-2 text-[0.76rem] text-warn">
+                  数据没取到，稍后再试，或先手动记一瓶。
+                </li>
+              )}
             </ul>
           )}
         </div>

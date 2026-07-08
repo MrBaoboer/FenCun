@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test": "node --import tsx --test src/lib/engine.test.ts",
     "build:data": "node scripts/build.mjs",
+    "build:ext": "node scripts/build-ext.mjs",
     "extract:terms": "node scripts/extract-terms.mjs",
     "shot": "node scripts/shot.mjs"
   },
