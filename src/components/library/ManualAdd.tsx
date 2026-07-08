@@ -35,8 +35,9 @@ export function ManualAdd({ initialName, onDone }: { initialName?: string; onDon
   const [brand, setBrand] = useState("");
   const [fams, setFams] = useState<string[]>([]);
   const [tier, setTier] = useState<1 | 2 | 3 | 4>(2);
+  const [saving, setSaving] = useState(false); // 防双击重复入柜（id 取自时间戳，两次点击会生成两瓶）
 
-  const canSave = name.trim().length > 0 && fams.length > 0;
+  const canSave = name.trim().length > 0 && fams.length > 0 && !saving;
 
   function toggleFam(key: string) {
     setFams((cur) =>
@@ -46,6 +47,7 @@ export function ManualAdd({ initialName, onDone }: { initialName?: string; onDon
 
   function save() {
     if (!canSave) return;
+    setSaving(true);
     const nm = name.trim();
     const br = brand.trim();
     const accords: Accord[] = [];

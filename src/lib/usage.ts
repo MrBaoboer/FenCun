@@ -48,10 +48,10 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   if (ctx.feel === "hot_humid" && sil >= 3.2) hi = Math.max(lo, hi - 1);
   // 餐桌场合：气味干扰味觉，收一档
   if (ctx.meal) hi = Math.max(lo, hi - 1);
-  // 甜重/浓白花 × 强扩散 × 通勤会议：容易显得用力过猛，压到最低档
+  // 甜重/浓白花 × 强扩散 × 通勤会议：容易显得用力过猛，压到 1 下（与风险文案一致）
   if (overdressedCombo(p, ctx)) {
     lo = 1;
-    hi = Math.max(1, Math.min(hi, 2) - 1) || 1;
+    hi = 1;
   }
   // 自然语言场景：想贴身则收一档、想被注意到可略增
   if (ctx.intimacy === "close") hi = Math.max(lo, hi - 1);
