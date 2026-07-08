@@ -108,6 +108,14 @@ const WearEntrySchema = z.object({
 
 const OCCASIONS: Occasion[] = ["commute", "work", "date", "social", "formal", "casual", "home", "sport"];
 
+// 香历不变式：按日去重（同日取后写）、按日期升序、封顶 730 天。
+// 截断必须按日期而非插入序——否则补记/覆盖较早日期会把它挪到数组尾部，截掉的就不是最早的那天
+function dedupeSortWear(entries: WearEntry[]): WearEntry[] {
+  const byDay = new Map<string, WearEntry>();
+  for (const e of entries) byDay.set(e.d, e);
+  return [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)).slice(-730);
+}
+
 function keepValid<T>(items: unknown[] | undefined, schema: z.ZodType<T>): T[] {
   if (!Array.isArray(items)) return [];
   const out: T[] = [];
@@ -196,12 +204,12 @@ export const useStore = create<State>()(
       setOccasion: (o) => set({ occasion: o, scene: null }), // 手动选场合即清除自然语言场景
       setScene: (s) => set({ scene: s }),
       hasPerfume: (id) => get().userPerfumes.some((u) => u.perfumeId === id),
-      // 香历落账：一天一条、后写覆盖（同日改主意以最后一瓶为准），手记保留；封顶两年
+      // 香历落账：一天一条、后写覆盖（同日改主意以最后一瓶为准），手记保留；按日期序封顶两年
       logWear: (entry) =>
         set((s) => {
           const prev = s.wearLog.find((e) => e.d === entry.d);
           const merged = { ...entry, note: entry.note ?? prev?.note };
-          return { wearLog: [...s.wearLog.filter((e) => e.d !== entry.d), merged].slice(-730) };
+          return { wearLog: dedupeSortWear([...s.wearLog, merged]) };
         }),
       setWearNote: (d, note) =>
         set((s) => ({
@@ -252,7 +260,7 @@ export const useStore = create<State>()(
             extPerfumes: keepValid(d.extPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
             customPerfumes: keepValid(d.customPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
             swapAways: d.swapAways ?? {},
-            wearLog: (keepValid(d.wearLog, WearEntrySchema) as WearEntry[]).slice(-730),
+            wearLog: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]),
             city: typeof d.city === "string" ? d.city : s.city,
             occasion: OCCASIONS.includes(d.occasion as Occasion) ? (d.occasion as Occasion) : s.occasion,
             swapCount: typeof d.swapCount === "number" ? d.swapCount : s.swapCount,

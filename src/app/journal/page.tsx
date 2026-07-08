@@ -127,9 +127,10 @@ export default function JournalPage() {
         )}
       </div>
 
-      {/* 当日快照 */}
+      {/* 当日快照：key=日期 → 切换日期时整组件重挂，note 状态自然重置（不在渲染期 setState） */}
       {entry ? (
         <DaySnapshot
+          key={entry.d}
           entry={entry}
           feedback={
             feedbacks.find((f) => f.perfumeId === entry.perfumeId && dateKey(f.at) === entry.d)?.rating ?? null
@@ -168,12 +169,6 @@ function DaySnapshot({
   onSaveNote: (note: string) => void;
 }) {
   const [note, setNote] = useState(entry.note ?? "");
-  // 切换日期时同步手记内容
-  const [lastD, setLastD] = useState(entry.d);
-  if (lastD !== entry.d) {
-    setLastD(entry.d);
-    setNote(entry.note ?? "");
-  }
 
   const weather =
     entry.tempC != null
