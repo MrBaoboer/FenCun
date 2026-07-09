@@ -11,6 +11,8 @@
 
 [![Live Demo](https://img.shields.io/badge/在线体验-fencun.vercel.app-1a1a1a?style=for-the-badge)](https://fencun.vercel.app)
 
+[![CI](https://github.com/MasterBao66/FenCun/actions/workflows/ci.yml/badge.svg)](https://github.com/MasterBao66/FenCun/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/MasterBao66/FenCun/actions/workflows/codeql.yml/badge.svg)](https://github.com/MasterBao66/FenCun/actions/workflows/codeql.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
@@ -23,8 +25,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v6.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v6.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v7.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v7.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -64,7 +66,7 @@
 - 🔔 **发现型钩子** — 主动提醒，而非等你来问：
   - *天气突变预警*：你常喷的那瓶今天因天气/季节不合适 → 提示并给更优选。
   - *吃灰提醒*：搁置已久、但今天恰好合适的那瓶 → 「翻出来」。
-- 🔁 **反馈闭环** — 答一句「今天，刚好吗？」（淡了点 / 刚好 / 太冲了 / 不合场合，每瓶每天一次），个人偏移**按瓶**收敛：嫌冲→下次少喷；「刚好」→ 记住这套配置，同样天气场合直接复用并明说；高温天的「淡了」→ 归因天气、不冤枉香水；把主推换掉也是一票——7 天内两次，它就先让位。
+- 🔁 **反馈闭环** — 答一句「今天，刚好吗」（淡了点 / 刚好 / 太冲了 / 不合场合，每瓶每天一次），个人偏移**按瓶**收敛：嫌冲→下次少喷；「刚好」→ 记住这套配置，同样天气场合直接复用并明说；高温天的「淡了」→ 归因天气、不冤枉香水；把主推换掉也是一票——7 天内有两天把它换掉，它就先让位。
 - 🔂 **轮换有度** — 昨天刚喷的今天自然让位、久置的自然浮起（轮换只动排序、不动裁决）；近似同分按本地日稳定轮换，兑现「今天喷哪瓶每天不一样」。
 - 📖 **香历** — 被气味标记的生活流水：你采纳或反馈的每一瓶自动落进月历（色点 = 当日主香调），点开任一天是当日快照（天气 · 场合 · 那瓶 · 你的反馈），可补一句话手记。留白不谴责——无香的日子也是分寸，绝无「断签」概念。
 - 🌗 **昼夜双主题** — 「明韵 / 暗香」设计语言：思源宋体做中文嗓音、Fraunces 配西文数字，白天宣纸暖白、夜晚中性炭黑 + 香槟金。
@@ -72,8 +74,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v5.png" width="240" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v5.png" width="240" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v7.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v7.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v7.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -162,18 +165,11 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 
 ```bash
 npm install
-
-# 环境变量：复制以下内容到 .env.local（已被 git 忽略）
-cat > .env.local <<'ENV'
-QWEATHER_HOST=你的和风天气-API-HOST
-QWEATHER_KEY=你的和风天气-KEY
-DEEPSEEK_API_KEY=你的-DeepSeek-key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash        # 可选，默认即 deepseek-v4-flash
-ENV
-
-npm run dev            # http://localhost:3000
+cp .env.example .env.local   # 各项 key 的用途与申请入口见文件内注释（.env.local 已被 git 忽略）
+npm run dev                  # http://localhost:3000
 ```
+
+没有 key 也能跑：天气走「季节 + 时段」降级，解读走规则模板——全链路降级是这个产品的设计原则，不是妥协。
 
 数据管线（可选，仓库已含构建产物）：
 
