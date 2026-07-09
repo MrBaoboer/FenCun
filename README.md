@@ -11,8 +11,6 @@
 
 [![Live Demo](https://img.shields.io/badge/在线体验-fencun.vercel.app-1a1a1a?style=for-the-badge)](https://fencun.vercel.app)
 
-[![CI](https://github.com/MasterBao66/FenCun/actions/workflows/ci.yml/badge.svg)](https://github.com/MasterBao66/FenCun/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/MasterBao66/FenCun/actions/workflows/codeql.yml/badge.svg)](https://github.com/MasterBao66/FenCun/actions/workflows/codeql.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
