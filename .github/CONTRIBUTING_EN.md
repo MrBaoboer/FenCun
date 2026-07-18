@@ -45,7 +45,7 @@ See the project layout in the README's "目录结构" (directory structure) sect
 
 ```bash
 npm run lint    # code style
-npm test        # engine unit tests (must pass if you touched scoring / usage / recommend — add cases too)
+npm test        # engine / journal / search unit tests (must pass if you touched the corresponding modules — add cases too)
 npm run build   # make sure it builds
 ```
 

@@ -19,7 +19,7 @@ Find the right place below to get the fastest response.
 
 - Browser + version and device (e.g. Chrome 141 · iPhone 15)
 - Steps to reproduce, or a link that reproduces it
-- Which page (Today / Library / Profile)
+- Which page (Today / Library / Journal / Profile)
 - Expected vs actual result
 
 ## About responses
