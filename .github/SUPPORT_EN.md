@@ -2,8 +2,6 @@
 
 > 中文版：[SUPPORT.md](SUPPORT.md)
 
-Find the right place below to get the fastest response.
-
 ## Where to go
 
 | Your situation | Go to |
