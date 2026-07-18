@@ -2,8 +2,6 @@
 
 > English version: [SUPPORT_EN.md](SUPPORT_EN.md)
 
-先对照下面这张表找对地方，能最快得到回应。
-
 ## 我该去哪
 
 | 你的情况 | 去哪 |

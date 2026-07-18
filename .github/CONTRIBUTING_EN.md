@@ -2,7 +2,7 @@
 
 > 中文版：[CONTRIBUTING.md](CONTRIBUTING.md)
 
-Thanks for your interest in improving **氛寸 / FenCun**. This guide helps your contribution get merged faster.
+Thanks for your interest in improving **氛寸 / FenCun**.
 
 ## What this project welcomes
 
@@ -12,11 +12,11 @@ Thanks for your interest in improving **氛寸 / FenCun**. This guide helps your
 - 📝 Docs, copy, accessibility, and i18n improvements
 - ✨ New capabilities aligned with the product's positioning (open an issue first)
 
-**Not a good fit**: turning it into a shopping / e-commerce app, or pulling in heavyweight dependencies (see "The Four Commandments").
+**Not a good fit**: see the Four Commandments below and the "no" list under Governance.
 
 ## Before you start: the Four Commandments (hard constraints)
 
-Every contribution must uphold these, no matter how elegant it is otherwise:
+Every contribution must uphold these:
 
 1. **No false precision** — longevity / sprays / social distance are given only as ranges and tiers, never fake numbers like "6.2 hours."
 2. **No over-engineering** — no vector DB, no heavy backend; the rule engine runs locally in the browser in milliseconds.
@@ -65,7 +65,7 @@ npm run build   # make sure it builds
 1. Branch off `main`; keep commits focused and traceable.
 2. Describe the **motivation** and **how you verified** it (engine changes: attach before/after or tests).
 3. Target branch is `main`; CI / build must pass.
-4. A maintainer will review as soon as possible. Small, clear PRs merge fastest.
+4. A maintainer will review as soon as possible.
 
 ## Governance
 
