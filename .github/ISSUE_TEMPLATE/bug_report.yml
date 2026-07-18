@@ -2,11 +2,6 @@ name: 🐛 Bug 报告 / Bug report
 description: 报告一个可复现的问题 / Report a reproducible problem
 labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        感谢反馈！请尽量填全，便于快速定位。
-        Thanks for reporting — the more detail, the faster we can help.
   - type: textarea
     id: what-happened
     attributes:
