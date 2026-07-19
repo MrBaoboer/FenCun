@@ -14,4 +14,7 @@ test("gitleaks scans full history without event-derived commit ranges", async ()
   );
   assert.match(workflow, /args:\s+git --redact --verbose \./);
   assert.doesNotMatch(workflow, /--log-opts/);
+  assert.match(workflow, /GIT_CONFIG_COUNT:\s+"1"/);
+  assert.match(workflow, /GIT_CONFIG_KEY_0:\s+safe\.directory/);
+  assert.match(workflow, /GIT_CONFIG_VALUE_0:\s+\/github\/workspace/);
 });
