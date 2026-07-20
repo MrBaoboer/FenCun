@@ -22,6 +22,28 @@ export function allow(key: string, limit: number, windowMs: number): boolean {
   return true;
 }
 
+// 全局日闸门：上面的 allow() 是「每客户端」的，挡得住单机狂刷，挡不住换 IP 的分布式刷量——
+// 而 LLM 路由的每一次调用都是真金白银。这道闸门按「每实例每天」封顶总调用数，触顶后全部走模板：
+// 宁可解释降级成规则模板，也不让账单在一夜之间失控。
+//
+// 诚实说明它的局限（与 allow() 同源）：Vercel 多实例时这是「每实例」上限，不是全局上限，
+// 实例越多总量越高。它是纵深防御的一层，不是硬保险。**真正的硬保险是在 DeepSeek 控制台
+// 给账户设消费上限**——那一层在我们的代码之外，任何实例数都绕不过去。
+const DAILY_CAP = Number(process.env.LLM_DAILY_CAP ?? 3000);
+let dayKey = "";
+let dayCount = 0;
+
+export function withinDailyBudget(): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== dayKey) {
+    dayKey = today;
+    dayCount = 0;
+  }
+  if (dayCount >= DAILY_CAP) return false;
+  dayCount++;
+  return true;
+}
+
 // 客户端标识（IP）的信任模型：
 // - Vercel 部署（默认场景）：平台会覆写 x-forwarded-for / x-real-ip / x-vercel-forwarded-for，
 //   客户端伪造的同名请求头会被丢弃，直接读是安全的。

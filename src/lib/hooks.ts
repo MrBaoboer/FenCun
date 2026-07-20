@@ -32,6 +32,7 @@ export function useResolvedContext(): Context | null {
       tension: scene?.tension,
       duration: scene?.duration,
       meal: scene?.meal,
+      fragranceFree: scene?.fragranceFree,
       riskNote: scene?.riskNote,
       sceneLabel: scene?.label,
       rawText: scene?.rawText,
@@ -174,7 +175,12 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
       if (habitualId != null && habitualId !== primaryId) {
         const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
         if (hp.verdict === "avoid") {
-          const better = rec.ranked.find((r) => r.verdict === "good" && r.perfume.id !== habitualId)?.perfume ?? null;
+          // 必须排除主推：预警卡就浮在推荐卡上方，"换成 X 更合适"里的 X 若正是下面那瓶主推，
+          // 等于让用户去换成他已经拿到的答案。没有第三瓶可换时宁可不给按钮——预警本身已经成立。
+          const better =
+            rec.ranked.find(
+              (r) => r.verdict === "good" && r.perfume.id !== habitualId && r.perfume.id !== primaryId
+            )?.perfume ?? null;
           nudges.push({
             kind: "weather",
             habitual: byId.get(habitualId)!,
@@ -208,6 +214,15 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
   useEffect(() => {
     if (!pick || !ctx) {
       setText("");
+      setLoading(false);
+      return;
+    }
+    // 无香场合：绝不交给 LLM。SYSTEM 里对 avoid 的铁律要求它话锋一转给出
+    // "但你今天要是就想用它，可以这样把影响降到最低…"——那套措辞对约会、通勤是对的，
+    // 对病房是错的。这里没有"降到最低"的版本，只有"别用"。规则文案直接输出，不留软化的余地。
+    if (pick.usage.sprays[1] === 0) {
+      setText(pick.risks[0] ?? "这种场合建议今天不用香。");
+      setSource("template");
       setLoading(false);
       return;
     }

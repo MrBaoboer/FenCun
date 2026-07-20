@@ -1,19 +1,28 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { Eyebrow } from "@/components/ui";
 import { OccasionChips } from "@/components/today/OccasionChips";
 import { SceneInput } from "@/components/today/SceneInput";
-import { FEEL_ZH } from "@/lib/season";
+import { FEEL_ZH, mustyAir } from "@/lib/season";
 import { weatherGreeting } from "@/lib/greeting";
 import type { Context } from "@/lib/types";
 
-function dateLabel() {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
-  } catch {
-    return "今天";
-  }
+// 这一页是静态预渲染的：在渲染期直接读 new Date()，服务端拿到的是**构建时**那一天，
+// 会被烘进 HTML，直到 hydration 才被客户端的真实日期替换——用户每次打开都先闪一下过期日期。
+// 改为挂载后再求值：首帧留空，永远不显示一个错误的日期。
+function useDateLabel(tick: number): string {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    try {
+      setLabel(
+        new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date())
+      );
+    } catch {
+      setLabel("今天");
+    }
+  }, [tick]); // 跟随 AppProvider 的分钟节拍：长开标签页跨午夜时日期会自己翻页
+  return label;
 }
 
 function CityForm({ onDone }: { onDone: () => void }) {
@@ -59,15 +68,16 @@ function LocationPin() {
 }
 
 export function ContextBar({ ctx }: { ctx: Context | null }) {
-  const { locState, resolveByCoords } = useApp();
+  const { locState, resolveByCoords, nowMinute } = useApp();
   const [editing, setEditing] = useState(false);
+  const dateText = useDateLabel(nowMinute);
 
   return (
     <div className="card animate-fade-in px-5 py-5">
       {/* 顶行：此刻 + 日期 */}
       <div className="flex items-center justify-between">
         <Eyebrow>此刻 · Now</Eyebrow>
-        <span className="disp text-[0.72rem] tracking-[0.1em] text-ink-faint">{dateLabel()}</span>
+        <span className="disp text-[0.72rem] tracking-[0.1em] text-ink-faint">{dateText}</span>
       </div>
 
       {ctx && !ctx.approximate ? (
@@ -94,6 +104,12 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
               <p className="mt-2 text-[0.78rem] text-ink-faint">
                 湿度 {Math.round(ctx.humidity)}% · 体感{FEEL_ZH[ctx.feel]}
               </p>
+              {/* 回南天：不改打分，只说一句真正有用的。香水盖不住衣物本身的霉潮底味 */}
+              {mustyAir(ctx.tempC, ctx.humidity) && (
+                <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
+                  这种回潮天，先闻一下要穿的那件衣服——香水盖不住霉潮的底味。
+                </p>
+              )}
             </div>
             {/* 阴 · 30°：内部居中；整块与左栏两行垂直居中，填平右下空白 */}
             <div className="serif inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-ink">

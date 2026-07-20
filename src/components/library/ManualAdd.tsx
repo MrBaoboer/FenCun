@@ -95,12 +95,14 @@ export function ManualAdd({ initialName, onDone }: { initialName?: string; onDon
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="香水名（必填）"
+        maxLength={60}
         className="w-full rounded-md border border-line-strong bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <input
         value={brand}
         onChange={(e) => setBrand(e.target.value)}
         placeholder="品牌（选填）"
+        maxLength={40}
         className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <div>

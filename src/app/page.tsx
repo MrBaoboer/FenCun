@@ -131,8 +131,14 @@ export default function TodayPage() {
             onChangeBottle={() => setSheetOpen(true)}
             onReset={() => setSelectedId(null)}
           />
-          <AltList alts={altsToShow} base={activePick.perfume} onPick={(id) => adopt(id, "swap")} />
-          <FeedbackBar perfume={activePick.perfume} ctx={ctx} sprays={activePick.usage.sprays} />
+          {/* 无香场合建议的是"今天不用"——既不该给备选（换哪瓶都一样不该用），
+              也不该问「今天，刚好吗」（今天根本没喷，这个问题不成立） */}
+          {activePick.usage.sprays[1] > 0 && (
+            <>
+              <AltList alts={altsToShow} base={activePick.perfume} onPick={(id) => adopt(id, "swap")} />
+              <FeedbackBar perfume={activePick.perfume} ctx={ctx} sprays={activePick.usage.sprays} />
+            </>
+          )}
         </>
       ) : null}
 
