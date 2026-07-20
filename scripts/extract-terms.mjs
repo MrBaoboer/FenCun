@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { voteAvg } from './derive.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -85,10 +86,11 @@ for await (const line of readLines(SRC)) {
       base: (tiered?.base || []).map((n) => n.name),
       flat: (flat || []).map((n) => n.name),
     },
-    rating: d?.rating?.average ?? null,
-    longevity: d?.longevity?.average ?? null,
-    sillage: d?.sillage?.average ?? null,
-    priceValue: d?.price_value?.average ?? null,
+    // voteAvg：0 是"没有票"的哨兵值，不是评分（量表下界是 1）。见 derive.mjs:voteAvg
+    rating: voteAvg(d?.rating),
+    longevity: voteAvg(d?.longevity),
+    sillage: voteAvg(d?.sillage),
+    priceValue: voteAvg(d?.price_value),
     seasons: d.seasons || { winter: 0, spring: 0, summer: 0, autumn: 0 },
     daypart: d.daypart || { day: 0, night: 0 },
     people: d.people ?? 0,

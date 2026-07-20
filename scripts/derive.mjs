@@ -7,6 +7,30 @@ export const ALPHA = 5; // 季节拉普拉斯平滑系数
 
 export function dedupe(arr) { return [...new Set(arr.filter(Boolean))]; }
 
+/**
+ * 投票聚合值的读取守卫：**0 不是评分，是"这一项没有票"的哨兵值。**
+ *
+ * 依据 `ledecanteur/SCHEMA.md`：rating / longevity / price_value 是 **1..5**，sillage 是 **1..4**。
+ * 也就是说 **0 在任何一个量表上都超出下界**，不可能是真实的投票均值。
+ *
+ * 而原来的写法 `d?.longevity?.average ?? null` 只兜 null/undefined —— `0` 会原样通过，
+ * 于是零票记录被当成"留香 0 分"这个**真实档位值**继续往下走。实测代价（扩展集 35,990 条）：
+ *   longevity===0 → 458 条 · sillage===0 → 444 条 · rating===0 → 252 条
+ * 且高度集中在**国货**（七寸九、RE调香室、馥刻、闻献、银杉…），多为 1–2 票。
+ *
+ * 下游后果是纯编造：
+ *   · `durationHint(0)` → 「散得偏快，出门前喷…」——我们对它的留香一无所知；
+ *   · `sillageTier(0)` → 1 档「贴身可闻 · 密闭也安全」——**这还是一句安全相关的断言**。
+ * 讽刺的是，仓库特意做了国货白名单以求包容，却基于零数据替这些国货编造了留香与扩散。
+ *
+ * 这与 seasonFit 的「平坦分布 = 满分」是同一个认知错误的不同形态：**"没数据"被当成了一个值。**
+ * 修法是把它还原成 null，让下游既有的"不知道"话术（因人而异 / 中庸档）接手。
+ */
+export function voteAvg(v) {
+  const n = v?.average;
+  return typeof n === 'number' && Number.isFinite(n) && n >= 1 ? n : null;
+}
+
 // 季节占比（拉普拉斯平滑，防低票噪声）
 export function seasonPct(s) {
   const w = s.winter || 0, sp = s.spring || 0, su = s.summer || 0, au = s.autumn || 0;
