@@ -683,6 +683,22 @@ test("季节错配文案同样要过票数门槛：三票的噪声不得说「�
   assert.ok(computeRisks(solid, summer).some((r) => r.includes("大家更多在冬季")));
 });
 
+test("说了「收着些」就得真的收：高温风险文案与喷量必须一致", () => {
+  // 蔚蓝浓香精真实数据 sil=2.17 amber=86。此前高温减量只认 sillage≥3.2，
+  // 于是 33℃ 下一边弹「高温里存在感会比你以为的更强，喷得收着些更稳」，
+  // 一边给出 3–4 下的最高档——文案承诺了引擎没做的事。
+  const blue = mk({ people: 20000, sillage: 2.17, sillageTier: 2, accords: acc([["citrus", 100], ["amber", 86]]) });
+  const mild = computeUsage(blue, C({ occasion: "casual", feel: "mild", tempC: 20 }));
+  const hot = computeUsage(blue, C({ occasion: "casual", feel: "hot_humid", tempC: 33, humidity: 78 }));
+  assert.ok(computeRisks(blue, C({ occasion: "casual", feel: "hot_humid", tempC: 33 })).some((r) => r.includes("收着些")));
+  assert.ok(hot.sprays[1] < mild.sprays[1], `说了收着就得收：mild=${mild.spraysLabel} hot=${hot.spraysLabel}`);
+  // 天气驱动的减量封顶 1 下：又强扩散又厚重也只减一次
+  const both = mk({ people: 20000, sillage: 3.5, sillageTier: 4, accords: acc([["amber", 80]]) });
+  const bm = computeUsage(both, C({ occasion: "casual", feel: "mild", tempC: 20 }));
+  const bh = computeUsage(both, C({ occasion: "casual", feel: "hot_humid", tempC: 33, humidity: 78 }));
+  assert.equal(bm.sprays[1] - bh.sprays[1], 1, "两条同时命中也只减 1 下");
+});
+
 test("织物提示是提示不是风险：它不得把裁决从 good 降级成 caution", () => {
   // 封闭场合（通勤/上班/正式）的部位建议里必然出现"衣物内侧"，从而触发织物留印提示。
   // 若这条提示参与裁决（computeVerdict 的规则是 risks.length > 0 → caution），
