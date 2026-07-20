@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useStore, type ImportPreview } from "@/lib/store";
 import { useLibraryPerfumes } from "@/lib/hooks";
 import { aggregateBias } from "@/lib/recommend";
 import { Eyebrow } from "@/components/ui";
@@ -12,7 +12,12 @@ export default function ProfilePage() {
   const hydrated = useStore((s) => s.hydrated);
   const exportData = useStore((s) => s.exportData);
   const importData = useStore((s) => s.importData);
+  const previewImport = useStore((s) => s.previewImport);
+  const userPerfumes = useStore((s) => s.userPerfumes);
+  const wearLog = useStore((s) => s.wearLog);
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // 待确认的导入：文件已读、已校验，但还没落盘——覆盖必须由用户在看到差额后亲手点下
+  const [pending, setPending] = useState<{ raw: string; preview: ImportPreview } | null>(null);
 
   function doExport() {
     const blob = new Blob([exportData()], { type: "application/json" });
@@ -29,13 +34,25 @@ export default function ProfilePage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const ok = importData(String(reader.result));
-      // 不用 alert 打断：结果就写在导入按钮旁边，语气与产品一致
-      setImportMsg(
-        ok
-          ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
-          : { kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" }
-      );
+      const raw = String(reader.result);
+      const preview = previewImport(raw);
+      if (!preview) {
+        setPending(null);
+        setImportMsg({ kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" });
+        return;
+      }
+      setImportMsg(null);
+      // 空柜直接导入（没有任何东西会被覆盖）；柜里有东西则必须先看清差额再确认
+      if (userPerfumes.length === 0 && wearLog.length === 0) {
+        const ok = importData(raw);
+        setImportMsg(
+          ok
+            ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
+            : { kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" }
+        );
+        return;
+      }
+      setPending({ raw, preview });
     };
     reader.onerror = () =>
       setImportMsg({ kind: "error", text: "文件没读出来，可能已损坏——换个文件再试试。" });
@@ -158,6 +175,41 @@ export default function ProfilePage() {
             <input type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
           </label>
         </div>
+        {pending && (
+          <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">
+            <p className="serif text-[0.84rem] font-semibold leading-relaxed text-ink">
+              导入会<span className="text-warn">整包替换</span>现在的数据，不是合并。
+            </p>
+            <p className="serif mt-1.5 text-[0.82rem] leading-relaxed text-ink-soft">
+              现在：{userPerfumes.length} 瓶在柜 · {feedbacks.length} 条反馈 · {wearLog.length} 天香历
+              <br />
+              导入后：{pending.preview.perfumes} 瓶在柜 · {pending.preview.feedbacks} 条反馈 ·{" "}
+              {pending.preview.wearDays} 天香历
+            </p>
+            <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
+              这一步不可撤销。要保住现在这份，先「导出香柜」再回来导入。
+            </p>
+            <div className="mt-2.5 flex gap-2">
+              <button
+                onClick={() => {
+                  const ok = importData(pending.raw);
+                  setPending(null);
+                  setImportMsg(
+                    ok
+                      ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
+                      : { kind: "error", text: "导入没能完成，现在的数据没有被改动。" }
+                  );
+                }}
+                className="btn-primary flex-1 py-2 text-[0.8rem]"
+              >
+                确认替换
+              </button>
+              <button onClick={() => setPending(null)} className="btn-ghost flex-1 py-2 text-[0.8rem]">
+                取消
+              </button>
+            </div>
+          </div>
+        )}
         {importMsg && (
           <p
             role="status"

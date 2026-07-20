@@ -18,11 +18,23 @@ export function seasonFromDateTemp(date: Date, tempC: number | null): Season {
 
 export function feelFromWeather(tempC: number, humidity: number): Feel {
   if (tempC >= 28) return humidity >= 65 ? "hot_humid" : "hot_dry";
-  // 回南天/梅雨（20~27℃ 但湿度极高）：气味在湿空气里散不掉、甜香白花被放大，
-  // 按闷湿处理——对中国市场，这比"28℃ 以下一律温和"更接近体感真相
-  if (tempC >= 20 && humidity >= 85) return "hot_humid";
   if (tempC <= 10) return "cold";
   return "mild";
+}
+
+// ⚠️ 已删除的规则：`tempC >= 20 && humidity >= 85 → hot_humid`（原"回南天/梅雨"规则）
+//
+// 它当初的理由是「气味在湿空气里散不掉、甜香白花被放大」。循证复核的结论是：
+// **这个机制在物理上是错的**——"水分子把香气分子裹住悬在空中"不成立；而受控气候舱研究显示，
+// 20–35℃ / 30–75%RH 区间内温湿度对健康人的嗅觉阈值、辨别与识别均无显著影响。
+// 更直接的问题是分档本身：22℃/90% 与 30℃/70% 被判成同一个体感，可它们干球温差 8℃，
+// 不是同一件事。删除它不需要任何复杂论证，8℃ 就够了。
+//
+// 回南天真正的感知问题也不是"热"，是**衣物与柜子里的霉潮本底气味**——
+// 这是华南用户真实会遇到、且与香水直接相关的一件事，但它属于文案层，不该进打分。
+/** 回南天/梅雨的霉潮本底：只驱动文案提示，不参与任何打分或喷量计算 */
+export function mustyAir(tempC: number, humidity: number): boolean {
+  return tempC >= 15 && tempC <= 25 && humidity >= 90;
 }
 
 // 温度档（供成功配置复用与反馈归因：同温度档 × 同场合 → 直接用上次「刚好」的量）

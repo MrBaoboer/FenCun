@@ -2,10 +2,13 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 
+// 星形在 viewBox 里必须自身居中：原路径纵向占 y∈[3,17]（视觉中心 y=10），
+// 而画布中心是 y=12——即使父容器 items-center，图标也会恒偏上 2/24 高度。
+// 下移 2 个单位后 x、y 皆为 [5,19]，中心与画布中心重合，才真正与输入框文字垂直居中对齐。
 function Sparkle() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0 text-accent">
-      <path d="M12 3l1.5 5.2L19 10l-5.5 1.8L12 17l-1.5-5.2L5 10l5.5-1.8L12 3Z" fill="currentColor" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="block shrink-0 self-center text-accent">
+      <path d="M12 5l1.5 5.2L19 12l-5.5 1.8L12 19l-1.5-5.2L5 12l5.5-1.8L12 5Z" fill="currentColor" />
     </svg>
   );
 }
@@ -39,6 +42,7 @@ export function SceneInput() {
           tension: d.tension,
           duration: d.duration,
           meal: d.meal,
+          fragranceFree: d.fragranceFree,
           riskNote: d.riskNote,
           label: d.label,
           rawText: t,

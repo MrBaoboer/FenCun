@@ -50,6 +50,21 @@ export type Occasion =
 export interface Weather {
   tempC: number;
   humidity: number;
+  /**
+   * ⚠️ **刻意不消费的字段。** 取到了、也存着，但引擎的任何一处都不读它。这不是遗漏，是决定：
+   *
+   * · 风既**稀释**烟羽也**输运**烟羽——下风向 1.5m 的人可能闻到更多而不是更少，
+   *   而天气接口给不出相对方位。方向不可建模，规则就不可证伪；
+   * · 唯一对题的文献（Kasting & Saiyasombati 2001）建模的是**皮肤吸收剂量学**，
+   *   风速项从未做过变风速验证，更没测过"他人感知强度"；被当作支持证据的另一篇（Fingas 2004）
+   *   实为反方——它明确主张蒸发不受边界层调控、风速可忽略；
+   * · 信号本身无效度：接口给的是 10m 高度城市网格风，而机制里的是**皮肤表面**气流。
+   *   用户多在室内、衣物遮挡手腕颈侧，站点风与体表风基本解耦；
+   * · 最危险的一步是把「密闭场合减 1 下」改写成 airflow 驱动——那会把一条本来诚实的
+   *   **礼仪**规则伪装成有论文背书的**物理**规则，还会在空无一人的密闭房间里给出错误建议。
+   *
+   * 保留字段是为了让这个决定可被看见。要动它，先读 docs/领域规则手册.md §1.1b。
+   */
   windSpeed: number;
   text: string;
   city: string;
@@ -73,6 +88,13 @@ export interface Context {
   tension?: "none" | "low" | "high"; // 关系张力（前任婚礼/谈判…）——存在时用户一定愿意说
   duration?: 2 | 4 | 6 | 9; // 在场时长档位（只允许档位值，禁止精确小时——伪精确红线）
   meal?: boolean; // 餐桌场合：压制浓香/甜香的关键开关（气味干扰味觉）
+  /**
+   * 无香场合（就医 / 探病 / 体检 / 陪诊 / 化疗病房等）。
+   * 这是全引擎依据最好的一条规则：约三分之一人群报告对香味制品有不良反应，
+   * CDC、加州公共卫生部、CCOHS 等机构均有正式无香政策，多国医疗机构对访客有明确无香要求。
+   * 命中时唯一正确的建议是「今天不用香」——这也是产品第一次说出"别用"。
+   */
+  fragranceFree?: boolean;
   riskNote?: string; // 场景解析给出的一句话社交风险，受控进入风险提示
   sceneLabel?: string; // 自然语言场景被解析后的人话摘要
   rawText?: string; // 用户原始输入
@@ -89,6 +111,7 @@ export interface ScenePatch {
   tension?: "none" | "low" | "high";
   duration?: 2 | 4 | 6 | 9;
   meal?: boolean;
+  fragranceFree?: boolean; // 就医/探病等无香场合
   riskNote?: string;
   label: string; // 解析出的人话摘要
   rawText: string;

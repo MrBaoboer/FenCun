@@ -6,6 +6,13 @@ import { z } from "zod";
 import type { UserPerfume, Feedback, Occasion, ScenePatch, Perfume, WearEntry } from "./types";
 import { dayFloor } from "./recommend";
 
+/** 一次移除所涉及的全部本地记录——撤销时原样放回 */
+export interface RemovedBundle {
+  userPerfume?: UserPerfume;
+  extPerfume?: Perfume;
+  customPerfume?: Perfume;
+}
+
 interface State {
   userPerfumes: UserPerfume[];
   feedbacks: Feedback[];
@@ -24,7 +31,8 @@ interface State {
   addPerfume: (id: number) => void;
   addExtPerfume: (p: Perfume) => void;
   addCustomPerfume: (p: Perfume) => void;
-  removePerfume: (id: number) => void;
+  removePerfume: (id: number) => RemovedBundle;
+  restorePerfume: (b: RemovedBundle) => void;
   markWorn: (id: number) => void;
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
@@ -36,7 +44,15 @@ interface State {
   recordSwap: (fromPerfumeId?: number) => void;
   recordDustyAdopt: () => void;
   exportData: () => string;
+  previewImport: (raw: string) => ImportPreview | null;
   importData: (raw: string) => boolean;
+}
+
+/** 导入前的体检报告：让用户在覆盖发生**之前**看到自己要付出什么代价 */
+export interface ImportPreview {
+  perfumes: number;
+  feedbacks: number;
+  wearDays: number;
 }
 
 // 导入校验：数据在本机，导入导出就是官方备份路径——它的健壮性等于数据安全。
@@ -168,11 +184,36 @@ export const useStore = create<State>()(
                   : [...s.userPerfumes, { perfumeId: p.id, addedAt: Date.now() }],
               }
         ),
-      removePerfume: (id) =>
-        set((s) => ({
+      // 移除返回被删的整包快照，供「撤销」原样放回。
+      // 手动记录的香水一旦删掉就再也搜不回来（数据只在这台机器上），不给后悔的机会是不可接受的。
+      removePerfume: (id) => {
+        const s = get();
+        const removed: RemovedBundle = {
+          userPerfume: s.userPerfumes.find((u) => u.perfumeId === id),
+          extPerfume: s.extPerfumes.find((p) => p.id === id),
+          customPerfume: s.customPerfumes.find((p) => p.id === id),
+        };
+        set({
           userPerfumes: s.userPerfumes.filter((u) => u.perfumeId !== id),
           extPerfumes: s.extPerfumes.filter((p) => p.id !== id),
           customPerfumes: s.customPerfumes.filter((p) => p.id !== id),
+        });
+        return removed;
+      },
+      restorePerfume: (b) =>
+        set((s) => ({
+          userPerfumes:
+            b.userPerfume && !s.userPerfumes.some((u) => u.perfumeId === b.userPerfume!.perfumeId)
+              ? [...s.userPerfumes, b.userPerfume]
+              : s.userPerfumes,
+          extPerfumes:
+            b.extPerfume && !s.extPerfumes.some((p) => p.id === b.extPerfume!.id)
+              ? [...s.extPerfumes, b.extPerfume]
+              : s.extPerfumes,
+          customPerfumes:
+            b.customPerfume && !s.customPerfumes.some((p) => p.id === b.customPerfume!.id)
+              ? [...s.customPerfumes, b.customPerfume]
+              : s.customPerfumes,
         })),
       // 采纳（换香/吃灰/反馈提交）→ 记一笔穿戴：刷新 lastWornAt（吃灰口径）。
       // wornCount（常喷口径）同一天只累计一次——反馈+采纳双路径不再虚增
@@ -247,6 +288,24 @@ export const useStore = create<State>()(
           2
         );
       },
+      // 导入是整包替换而非合并（合并要解决 id 冲突、时间线交错、反馈重复计数，语义上更危险）。
+      // 既然是替换，就必须先让用户看清替换后是什么样——静默覆盖等于无声的数据丢失。
+      previewImport: (raw) => {
+        try {
+          const parsed = ImportSchema.safeParse(JSON.parse(raw));
+          if (!parsed.success) return null;
+          const d = parsed.data;
+          const userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
+          if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return null;
+          return {
+            perfumes: userPerfumes.length,
+            feedbacks: keepValid(d.feedbacks, FeedbackSchema).length,
+            wearDays: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]).length,
+          };
+        } catch {
+          return null;
+        }
+      },
       importData: (raw) => {
         try {
           const parsed = ImportSchema.safeParse(JSON.parse(raw));
@@ -293,8 +352,10 @@ export const useStore = create<State>()(
         swapCount: s.swapCount,
         dustyAdoptCount: s.dustyAdoptCount,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state) state.hydrated = true;
+      // 必须走 setState：直接写 state.hydrated 只是就地改对象，不触发 zustand 的订阅通知。
+      // 只订阅 hydrated、没有别的状态源顺带触发重渲染的页面（/香历）会永远停在骨架屏。
+      onRehydrateStorage: () => () => {
+        useStore.setState({ hydrated: true });
       },
     }
   )
