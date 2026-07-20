@@ -306,13 +306,26 @@ export const useStore = create<State>()(
           return null;
         }
       },
+      // 返回 false 只能有一个含义：**文件被拒，状态一个字节都没动**。
+      // 调用方据此告诉用户「导入没能完成，现在的数据没有被改动」——这句话必须永远为真。
+      //
+      // 原实现把整段（含 set）包在一个 try 里，于是写盘失败会走进 catch 返回 false，
+      // 而此时内存状态**早已被替换**——UI 就会说出那句谎话。
+      // 触发场景不是假想：localStorage 配额写满、Safari 隐私模式、存储被策略禁用，
+      // `setItem` 都会抛。所以校验全部前置到 set 之前，set 之后一律视为已生效。
       importData: (raw) => {
+        let d: z.infer<typeof ImportSchema>;
+        let userPerfumes: UserPerfume[];
         try {
           const parsed = ImportSchema.safeParse(JSON.parse(raw));
           if (!parsed.success) return false;
-          const d = parsed.data;
-          const userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
+          d = parsed.data;
+          userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
           if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return false; // 全坏 = 不是我们的备份
+        } catch {
+          return false;
+        }
+        try {
           set((s) => ({
             userPerfumes,
             feedbacks: keepValid(d.feedbacks, FeedbackSchema).slice(-400) as Feedback[],
@@ -326,10 +339,14 @@ export const useStore = create<State>()(
             dustyAdoptCount:
               typeof d.dustyAdoptCount === "number" ? d.dustyAdoptCount : s.dustyAdoptCount,
           }));
-          return true;
         } catch {
-          return false;
+          // zustand 的 persist 是先改内存、再写盘，所以抛到这里时状态**已经换掉了**。
+          // 写盘失败（配额满 / 隐私模式 / 存储被禁）不该反过来报告成"没有改动"——
+          // 那是这次修复要消灭的那句谎话。这里吞掉异常但仍返回 true。
+          // 已知局限：写盘失败本身没有对用户暴露。但这个暴露面是全局的
+          //（addPerfume / addFeedback 等每一次写入都一样），不该只在导入这一处单独处理。
         }
+        return true;
       },
     }),
     {

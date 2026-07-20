@@ -70,7 +70,14 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 事实上干热下蒸发散热有效，皮温往往还低于同气温的湿热。所以两者都保护，不再厚此薄彼。
   const hotFeel = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
   if (ctx.feel === "cold" && sil < 2.4) hi = Math.min(hi + 1, 5);
-  if (hotFeel && sil >= 3.2) hi = Math.max(lo, hi - 1);
+  // 高温减量有两条触发：扩散本身强，或这瓶偏甜/偏树脂（computeRisks 会为后者写出
+  // 「高温里存在感会比你以为的更强，喷得收着些更稳」）。第二条是为了让**已经说出口的那句话兑现**——
+  // 此前只认 sillage≥3.2，于是蔚蓝浓香精(sil=2.17, amber=86) 在 33℃ 会一边被提醒"收着些"、
+  // 一边拿到 3–4 下的最高档，文案与数字互相打脸。
+  // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
+  if (hotFeel && (sil >= 3.2 || Math.max(sweetness(p), balsamicWeight(p)) >= 55)) {
+    hi = Math.max(lo, hi - 1);
+  }
   // 餐桌场合：气味干扰味觉，收一档
   if (ctx.meal) hi = Math.max(lo, hi - 1);
   // 甜重/浓白花 × 强扩散 × 通勤会议：容易显得用力过猛，压到 1 下（与风险文案一致）
@@ -283,6 +290,10 @@ export function buildReasons(
   ctx: Context,
   parts: { season: number; weather: number; weatherTone: WeatherTone; occasion: number; confidence: number }
 ): string[] {
+  // 无香场合：结论是"今天别用"，就不该再罗列它今天多合适。
+  // 「正是它的主场季」「正合今天的天气」与「今天把它留在家里」同屏出现，
+  // 和「今天不建议用它」下面挂着「喷 2 下」是同一种自相矛盾。
+  if (ctx.fragranceFree) return [];
   const r: string[] = [];
   const topAccords = p.accords.slice(0, 3).map((a) => a.zh).join("·");
   // 「社区投票里…」是一句关于数据的断言：没有足够的票就没有资格说。
