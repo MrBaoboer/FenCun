@@ -1,9 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore, type RemovedBundle } from "@/lib/store";
 import { useApp } from "@/components/AppProvider";
 import { useLibraryPerfumes, DUSTY_MS } from "@/lib/hooks";
 import { Eyebrow } from "@/components/ui";
+import { nameParts } from "@/lib/format";
 import { SearchAdd } from "@/components/library/SearchAdd";
 import { ShelfCard } from "@/components/library/ShelfCard";
 import { PerfumeCard } from "@/components/library/PerfumeCard";
@@ -12,9 +13,24 @@ export default function LibraryPage() {
   const lib = useLibraryPerfumes();
   const userPerfumes = useStore((s) => s.userPerfumes);
   const removePerfume = useStore((s) => s.removePerfume);
+  const restorePerfume = useStore((s) => s.restorePerfume);
   const hydrated = useStore((s) => s.hydrated);
   const { catalog, catalogError, retryCatalog } = useApp();
   const [detailId, setDetailId] = useState<number | null>(null);
+
+  // 撤销而非二次确认：删除是本机不可逆操作（手动记录的香水删掉就永远找不回来），
+  // 但弹窗拦在每一次删除前太吵。给一条 8 秒的后悔路，既不打断也不至于失手清空。
+  const [undoItem, setUndoItem] = useState<{ name: string; bundle: RemovedBundle } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+
+  const handleRemove = (id: number, name: string) => {
+    const bundle = removePerfume(id);
+    if (detailId === id) setDetailId(null);
+    setUndoItem({ name, bundle });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoItem(null), 8000);
+  };
   const wornMap = useMemo(
     () => new Map(userPerfumes.map((u) => [u.perfumeId, u])),
     [userPerfumes]
@@ -81,7 +97,7 @@ export default function LibraryPage() {
                 key={p.id}
                 p={p}
                 dusty={dusty}
-                onRemove={() => removePerfume(p.id)}
+                onRemove={() => handleRemove(p.id, nameParts(p).primary)}
                 onOpen={() => setDetailId(p.id)}
               />
             );
@@ -90,6 +106,27 @@ export default function LibraryPage() {
       )}
 
       <PerfumeCard p={lib.find((x) => x.id === detailId) ?? null} onClose={() => setDetailId(null)} />
+
+      {undoItem && (
+        <div
+          role="status"
+          className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
+        >
+          <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
+            已把『{undoItem.name}』移出香柜
+          </span>
+          <button
+            onClick={() => {
+              restorePerfume(undoItem.bundle);
+              if (undoTimer.current) clearTimeout(undoTimer.current);
+              setUndoItem(null);
+            }}
+            className="shrink-0 text-[0.86rem] font-semibold text-accent underline-offset-4 hover:underline"
+          >
+            撤销
+          </button>
+        </div>
+      )}
     </div>
   );
 }

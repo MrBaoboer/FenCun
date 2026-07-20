@@ -4,7 +4,7 @@
 // LLM 输出里出现任何"我们没给过它"的数字（如编造的"留香6.2小时"）→ 整段丢弃，退模板。
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { allow, clientKey } from "@/lib/ratelimit";
+import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
 import { extractDigits, findInventedNumbers } from "@/lib/numguard";
 
 export const runtime = "nodejs";
@@ -15,9 +15,14 @@ const MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
 // 入参校验：字段限长、数组限条、枚举白名单——这是三条路由里入参结构最复杂的一条，
 // 没有校验就是"半自由 LLM 代理 + 无上限输入 token 账单"
+// 超长字段一律"截断"而非"拒收"：限长的目的是封住输入 token 成本，截断已经做到了。
+// 直接 400 反而更糟——降级模板在校验之后才构造，一旦 400 连兜底解释都拿不到，
+// 那瓶香就永久失去"为什么合适"（数据集里确有 90 字符的长名，用户手记也可能写长）。
+const clipped = (max: number) => z.string().max(max * 5).transform((s) => s.slice(0, max));
+
 const ExplainSchema = z.object({
-  name: z.string().min(1).max(80),
-  brandZh: z.string().max(60),
+  name: z.string().min(1).max(400).transform((s) => s.slice(0, 80)),
+  brandZh: clipped(60),
   accords: z.array(z.string().max(24)).max(8),
   styleTags: z.array(z.string().max(24)).max(8),
   verdict: z.enum(["good", "caution", "avoid"]).optional(),
@@ -64,6 +69,11 @@ function template(input: ExplainInput): string {
   const c = input.context;
   if (input.verdict === "avoid") {
     const why = input.risks[0] || "它和此刻的天气或场合不太合拍";
+    // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）没有"减到最低"的版本，
+    // 不能拼出"就今天不用、只喷"这种残句，更不能劝用户"你要是就想用它"。
+    if (input.usage.placement.length === 0) {
+      return `${why}今天把它留在家里，是更稳妥的选择。`;
+    }
     return `说实话，今天不太建议用${input.name}——${why}。你要是今天就想用它，就${input.usage.spraysLabel}、只喷${input.usage.placement.join("、")}，把存在感压到最低。`;
   }
   const parts: string[] = [`今天${c.city}${c.weatherText}、${Math.round(c.tempC)}℃。`];
@@ -86,7 +96,7 @@ export async function POST(req: NextRequest) {
   const fallback = template(input);
   // 无 key 或被限流 → 直接返回免费的规则模板（不打 DeepSeek），UX 不断、成本可控。
   // 限流 8 次/10 秒：客户端有 550ms 防抖 + 结果缓存，正常人远用不到；剩下的是脚本。
-  if (!KEY || !allow(`explain:${clientKey(req)}`, 8, 10_000)) {
+  if (!KEY || !allow(`explain:${clientKey(req)}`, 8, 10_000) || !withinDailyBudget()) {
     return NextResponse.json({ text: fallback, source: "template" });
   }
 
@@ -105,8 +115,17 @@ export async function POST(req: NextRequest) {
     null,
     2
   )}`;
-  // 白名单以"实际递给模型的字符串"为准——凡我们说过的数字都合法，其余都算编造
-  const allowedNumbers = extractDigits(userMsg);
+  // 白名单只取"我们自己算出来的事实"里的数字，刻意排除用户自由文本（场景原话）。
+  // 否则用户在场景里写一句「留香6.2小时」就把 6.2 加进了白名单，
+  // 反伪精确这道防线会被用户自己的输入从内部打开。宁可多退几次模板，也不放行。
+  const factsOnly = JSON.stringify({
+    香水: `${input.brandZh} ${input.name}`,
+    此刻: input.context,
+    用法: input.usage,
+    为什么合适: input.reasons,
+    风险提示: input.risks,
+  });
+  const allowedNumbers = extractDigits(factsOnly);
 
   try {
     const res = await fetch(`${BASE}/chat/completions`, {

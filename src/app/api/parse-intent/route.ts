@@ -2,7 +2,7 @@
 // 这是氛寸的差异化：真正理解"去前任婚礼""第一次见投资人"的语义，而非硬套标签
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { allow, clientKey } from "@/lib/ratelimit";
+import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -20,6 +20,7 @@ const PatchSchema = z.object({
   // 在场时长只许档位值：LLM 能输出任意数字，就会输出"7.5"这种没有信息量的伪精确
   duration: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(9)]).optional(),
   meal: z.boolean().optional(), // 餐桌场合：压制浓香的关键开关（气味干扰味觉）
+  fragranceFree: z.boolean().optional(), // 就医/探病等无香场合：命中即建议今天不用香
   riskNote: z.string().max(40).optional(), // 一句话社交风险，以受控字段进入风险提示，不许自由发挥进正文
   label: z.string().min(1).max(24),
 });
@@ -34,6 +35,7 @@ const SYSTEM = `你是"氛寸"的场景理解引擎。用户会用一句话描�
 - tension：none/low/high，关系张力——前任、谈判对手、竞争者同席、想赢的场合是 high；普通紧张是 low；没有就 none 或省略。
 - duration：2/4/6/9 之一（预计在场小时的档位，选最接近的：快事≈2、饭局婚礼看展≈4、长活动≈6、上班全天≈9），judge 不出就省略。
 - meal：true/false，这个场合是否围着饭桌（婚宴/日料/火锅/酒局都算）——气味会干扰味觉。
+- fragranceFree：true/false，这是不是**无香场合**。就医、看病、陪诊、探病、体检、化疗/病房、月子中心、备孕产检都算 true。这类场合里有人对气味格外敏感且无法回避，命中时氛寸会建议今天不用香。拿不准就省略（默认 false），但只要出现医院相关线索就大胆给 true。
 - riskNote：≤20 字的一句话社交风险（如"婚礼焦点是新人，不宜喧宾夺主"），没有就省略。
 - label：≤12字的中文人话摘要，点出场景气质（例："前任婚礼·得体克制""初见投资人·稳重不抢戏""看展约会·近距离"）。
 
@@ -41,7 +43,8 @@ const SYSTEM = `你是"氛寸"的场景理解引擎。用户会用一句话描�
 - "去前任婚礼" → formal、formality 0.75、intimacy neutral、avoid [too_strong, too_sweet]、tension high、duration 4、meal true、riskNote "婚礼焦点是新人，不宜喧宾夺主"、label "前任婚礼·得体克制"。
 - "第一次见投资人" → work/formal、formality 0.8、avoid [too_strong, too_sweet]、tension low、duration 2、meal false、riskNote "会议室密闭，浓香会被放大"、label "初见投资人·稳重不抢戏"。
 - "晚上和喜欢的人第一次约会，吃日料" → date、intimacy close、formality 0.4、tension low、duration 4、meal true、riskNote "日料店重食物香气，浓香失礼"、label "日料初见·近距离克制"。
-- "朋友生日局但不想太张扬" → social、avoid [too_strong]、intimacy neutral、meal true、label "生日局·低调不抢镜"。`;
+- "朋友生日局但不想太张扬" → social、avoid [too_strong]、intimacy neutral、meal true、label "生日局·低调不抢镜"。
+- "下午去医院看我妈" → formal/casual、fragranceFree true、riskNote "病房里有人对气味敏感且无法回避"、label "探病·今天不用香"。`;
 
 function heuristic(text: string) {
   const t = text.toLowerCase();
@@ -57,10 +60,16 @@ function heuristic(text: string) {
   else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; label = "运动·清爽"; }
   else if (has("居家", "在家", "睡前", "休息")) { occasion = "home"; formality = 0.1; label = "居家·放松"; }
   else if (has("通勤", "上班", "地铁", "工作")) { occasion = "commute"; formality = 0.5; label = "通勤·清爽得体"; }
-  // 横切信号（与场合正交）：关系张力与饭桌
+  // 横切信号（与场合正交）：关系张力、饭桌、无香场合
   const tension = has("前任", "前女友", "前男友", "谈判", "对手") ? ("high" as const) : undefined;
   if (meal === undefined && has("吃", "饭", "餐厅", "火锅", "日料", "酒局", "宴")) meal = true;
-  return { occasion, formality, intimacy, avoid, tension, meal, label };
+  // 无香场合必须在启发式里也兜住：这条规则的价值恰恰在 LLM 不可用时也不能失效
+  const fragranceFree = has("医院", "看病", "就医", "门诊", "诊所", "探病", "住院", "病房", "体检", "陪诊", "化疗", "产检", "月子");
+  if (fragranceFree) {
+    occasion = "casual";
+    label = "就医探病·今天不用香";
+  }
+  return { occasion, formality, intimacy, avoid, tension, meal, fragranceFree, label };
 }
 
 export async function POST(req: NextRequest) {
@@ -75,7 +84,7 @@ export async function POST(req: NextRequest) {
 
   const fallback = { ...heuristic(text), source: "heuristic" as const };
   // 无 key 或被限流 → 关键词启发式（不打 DeepSeek），仍能给出可用结构
-  if (!KEY || !allow(`parse:${clientKey(req)}`, 8, 10_000)) {
+  if (!KEY || !allow(`parse:${clientKey(req)}`, 8, 10_000) || !withinDailyBudget()) {
     return NextResponse.json(fallback);
   }
 

@@ -7,13 +7,14 @@ import {
   seasonFit,
   daypartFit,
   weatherMultiplier,
+  weatherFit,
   occasionFit,
   qualityPrior,
   avoidPenalty,
 } from "./scoring";
 import { computeUsage, computeRisks } from "./usage";
 import { buildPick, recommend, freshness, swapPenalty, dayFloor, aggregateBias } from "./recommend";
-import { feelFromWeather } from "./season";
+import { feelFromWeather, mustyAir } from "./season";
 import { extractDigits, findInventedNumbers } from "./numguard";
 import type { Perfume, Context, Feedback } from "./types";
 
@@ -76,16 +77,40 @@ test("加性权重归一：W=Q=1、无偏移时 total 恰为 0.38·季 + 0.19·�
   assert.equal(parts.quality, 1); // rating null → 不惩罚
 });
 
-test("seasonFit：主场季得 1，反季按相对占比", () => {
-  const p = mk({ seasonPct: { winter: 0.1, spring: 0.1, summer: 0.6, autumn: 0.2 } });
-  assert.equal(seasonFit(p, "summer"), 1);
-  assert.ok(Math.abs(seasonFit(p, "winter") - 0.1 / 0.6) < 1e-9);
+test("seasonFit：票数充足时主场季≈1、反季按相对占比，且主场恒高于反季", () => {
+  const p = mk({ people: 20000, seasonPct: { winter: 0.1, spring: 0.1, summer: 0.6, autumn: 0.2 } });
+  assert.ok(seasonFit(p, "summer") > 0.99, `主场季应≈1，得 ${seasonFit(p, "summer")}`);
+  assert.ok(seasonFit(p, "winter") < 0.2, `反季应显著低，得 ${seasonFit(p, "winter")}`);
+  assert.ok(seasonFit(p, "summer") > seasonFit(p, "autumn"));
+  assert.ok(seasonFit(p, "autumn") > seasonFit(p, "winter"));
 });
 
-test("daypartFit：相对自身主场归一（偏夜香在夜里得 1）", () => {
-  const p = mk({ daypartPct: { day: 0.2, night: 0.8 } });
-  assert.equal(daypartFit(p, C({ daypart: "night" })), 1);
-  assert.ok(Math.abs(daypartFit(p, C({ daypart: "day" })) - 0.25) < 1e-9);
+test("daypartFit：票数充足时主场≈1，另一端按相对占比", () => {
+  const p = mk({ people: 20000, daypartPct: { day: 0.2, night: 0.8 } });
+  assert.ok(daypartFit(p, C({ daypart: "night" })) > 0.99);
+  assert.ok(daypartFit(p, C({ daypart: "day" })) < 0.3);
+});
+
+test("「没数据」不等于「满分」：平坦分布/手动记录落在全库均值，不再打平完美对季的香(P0-4)", () => {
+  // 手动记录：seasonPct 是我们诚实填的 0.25×4。旧公式 当前季÷最高季 恒得 1.0——
+  // 一瓶我们一无所知的香，季节项上打平一瓶两万票认证的完美对季香。
+  const custom = mk({ id: -1, custom: true, people: 0, rating: null });
+  const perfect = mk({ id: 2, people: 20000, seasonPct: { winter: 0.05, spring: 0.05, summer: 0.8, autumn: 0.1 } });
+  const sc = seasonFit(custom, "summer");
+  const sp = seasonFit(perfect, "summer");
+  assert.ok(sc < 0.8, `手动记录不该拿高分，得 ${sc}`);
+  assert.ok(sp > sc + 0.25, `完美对季(${sp}) 必须明显高于无数据(${sc})`);
+  // 但也不该被打成反季那么低——"不知道"落在平均，不是落在最差
+  assert.ok(sc > seasonFit(perfect, "winter"), "无数据应优于确知的反季");
+  // 时段同理
+  assert.ok(daypartFit(custom, C({ daypart: "night" })) < 0.95);
+});
+
+test("低票扩展集同样被收缩：三五票的尖峰不算强信号(P0-4)", () => {
+  const peak = { winter: 0.05, spring: 0.05, summer: 0.8, autumn: 0.1 };
+  const fewVotes = seasonFit(mk({ people: 3, seasonPct: peak }), "summer");
+  const manyVotes = seasonFit(mk({ people: 20000, seasonPct: peak }), "summer");
+  assert.ok(fewVotes < manyVotes - 0.2, `3 票(${fewVotes}) 的话语权必须远低于 2 万票(${manyVotes})`);
 });
 
 test("weatherMultiplier：闷热压厚重、奖清新", () => {
@@ -113,6 +138,34 @@ test("weatherMultiplier：mild 中段恒 1、两端有温和梯度，且始终�
   assert.ok(weatherMultiplier(heavy, "mild", 25) < 1);
   const w = weatherMultiplier(mk({ accords: acc([["amber", 90], ["oud", 90]]) }), "hot_humid");
   assert.ok(w >= 0.7 && w <= 1.3);
+});
+
+test("天气乘子连续化：温度/湿度阈值处不得出现断崖，高温段不得塌缩", () => {
+  // 旧的离散分档在三处制造了真实可感的跳变，而且方向恰好是错的：
+  //   27.9℃(mild ×0.96) → 28.0℃(hot_dry ×0.88)：0.1℃ 换 8 个百分点；
+  //   28℃/64%(×0.88) → 28℃/66%(×0.84)：湿度在这一带根本没有被验证过的效应量；
+  //   34℃ 与 28℃ 拿到完全相同的乘子——温度是唯一方向可靠的变量，却在最需要区分处被抹平。
+  // 本文件自己的 occasionFit 注释就写着「连续函数，不设悬崖」，同一份代码不该两套标准。
+  const heavy = mk({ people: 20000, accords: acc([["amber", 70]]) });
+  const W = (t: number, h: number) => weatherMultiplier(heavy, feelFromWeather(t, h), t, h);
+
+  // ① 温度阈值两侧：0.2℃ 的跨度不得带来 1 个百分点以上的变化
+  assert.ok(Math.abs(W(27.9, 70) - W(28.1, 70)) < 0.01, `28℃ 断崖仍在：${W(27.9, 70)} vs ${W(28.1, 70)}`);
+  // ② 湿度阈值两侧同理
+  assert.ok(Math.abs(W(28, 64) - W(28, 66)) < 0.01, `65% 断崖仍在：${W(28, 64)} vs ${W(28, 66)}`);
+  // ③ 冷侧阈值两侧
+  const warm = mk({ people: 20000, accords: acc([["amber", 70]]) });
+  const Wc = (t: number) => weatherMultiplier(warm, feelFromWeather(t, 55), t, 55);
+  assert.ok(Math.abs(Wc(10.1) - Wc(9.9)) < 0.01, `10℃ 断崖仍在：${Wc(10.1)} vs ${Wc(9.9)}`);
+
+  // ④ 高温段必须继续加强，不能 34℃ ≡ 28℃
+  assert.ok(W(34, 70) < W(28, 70) - 0.03, `34℃(${W(34, 70)}) 必须明显强于 28℃(${W(28, 70)})`);
+  // ⑤ 全程单调：温度越高，厚重香越受压
+  for (let t = 22; t <= 36; t += 1) {
+    assert.ok(W(t + 1, 70) <= W(t, 70) + 1e-9, `${t}→${t + 1}℃ 非单调`);
+  }
+  // ⑥ clamp 仍是安全网而非常态：实际取值不该贴到边界
+  assert.ok(W(40, 95) > 0.7, "clamp 下界不该被触发");
 });
 
 test("occasionFit：约会奖甜；运动重罚厚重但保序、不塌成同分(algo-5)", () => {
@@ -238,10 +291,35 @@ test("occasionFit：琥珀木质加分在 60 附近连续，无悬崖跳变", ()
   assert.ok(Math.abs(at60 - at61) < 0.005, `60→61 跳变 ${Math.abs(at60 - at61)}`);
 });
 
-test("feelFromWeather：回南天/梅雨（22℃/90%）按闷湿处理，不再判温和", () => {
-  assert.equal(feelFromWeather(22, 90), "hot_humid");
+test("feelFromWeather：22℃/90% 不再被判成闷热——它和 30℃/70% 干球温差 8℃，不是同一件事", () => {
+  // 曾经的规则：tempC>=20 && humidity>=85 → hot_humid（"回南天/梅雨"）。
+  // 循证复核推翻了它的机制（"湿空气裹住香气分子"物理上不成立），
+  // 而分档本身的问题更直接：8℃ 的干球温差不该被抹平成同一个体感。
+  assert.equal(feelFromWeather(22, 90), "mild");
   assert.equal(feelFromWeather(22, 60), "mild");
   assert.equal(feelFromWeather(30, 70), "hot_humid");
+  assert.equal(feelFromWeather(30, 40), "hot_dry");
+  // 回南天真正的问题是霉潮本底气味，属文案层，不进打分
+  assert.equal(mustyAir(22, 92), true);
+  assert.equal(mustyAir(30, 92), false, "盛夏高温高湿不是回南天");
+  assert.equal(mustyAir(22, 70), false);
+});
+
+test("高温防护不再是湿热专属：干热同样压强扩散香的喷量与分数", () => {
+  // 主变量是温度不是湿度。此前 hot_dry 档几乎没有任何减量保护。
+  const loud = mk({ people: 20000, sillage: 3.5, sillageTier: 4 });
+  const mild = computeUsage(loud, C({ occasion: "casual", feel: "mild", tempC: 20 }));
+  const dry = computeUsage(loud, C({ occasion: "casual", feel: "hot_dry", tempC: 33 }));
+  assert.ok(dry.sprays[1] < mild.sprays[1], `干热也该压喷量：mild=${mild.spraysLabel} dry=${dry.spraysLabel}`);
+  // 分数侧：厚重香在干热同样受罚，但罚得比湿热轻（湿热多出的是热舒适度惩罚）
+  const heavy = mk({ people: 20000, accords: acc([["amber", 70]]) });
+  const wDry = weatherMultiplier(heavy, "hot_dry");
+  const wHumid = weatherMultiplier(heavy, "hot_humid");
+  assert.ok(wDry < 1, "干热应压厚重香");
+  assert.ok(wHumid < wDry, "湿热罚得更重，但差距只有几个点");
+  assert.ok(wDry - wHumid < 0.08, "两档差距不该再是拍出来的 10 点");
+  // 部位也一并挪到更凉的落点
+  assert.ok(dry.placement.some((x) => x.includes("衣物") || x.includes("耳后")));
 });
 
 test("freshness：当天=1（今天的答案不摇摆），隔天让位，一周后归位；没喷过=1", () => {
@@ -294,6 +372,20 @@ test("aggregateBias：环境归因的「淡了」不进喷量校准（那笔算�
   const attributed = aggregateBias([fb({ rating: "too_weak", at: now, tags: ["env_attributed"] })], now).get(1)!;
   assert.ok(plain.perceivedStrength < 0, "正常「淡了」应记为偏淡");
   assert.equal(attributed.perceivedStrength, 0, "环境归因后不动喷量校准");
+});
+
+test("嗅觉适应归因：连着穿同一瓶时的「淡了」不得换算成加喷量", () => {
+  // 依据(strong)：重复暴露于同一款气味会造成持续数周的、气味特异性的敏感度下降。
+  // 若把这种"淡了"记成喷量不足，就形成正反馈：闻不到→多喷→适应更深→还是闻不到，
+  // 而周围人闻到的浓度一路上升。这是引擎里唯一一处会主动放大自身错误的回路。
+  const now = Date.now();
+  const plain = aggregateBias([fb({ rating: "too_weak", at: now })], now).get(1)!;
+  const adapted = aggregateBias(
+    [fb({ rating: "too_weak", at: now, tags: ["adaptation_attributed"] })],
+    now
+  ).get(1)!;
+  assert.ok(plain.perceivedStrength < 0, "普通的「淡了」仍应记为偏淡");
+  assert.equal(adapted.perceivedStrength, 0, "适应归因后不动喷量校准");
 });
 
 test("aggregateBias：负向信号存在 + 按月衰减（偏好不再只增不减、锁死不动）", () => {
@@ -386,6 +478,220 @@ test("rankSearchHits：统一榜单——文本档位优先，同档位内按主
   // 全无子串命中（拼写误差）→ 档位1 内按主流度，仍然给结果、不留空
   const fuzzy = rankSearchHits("sumer", [C("a", "Summer Hit", "Summer Hit X", 10), C("b", "Another", "Another Y", 500)]);
   assert.deepEqual(fuzzy, ["b", "a"]);
+});
+
+test("天气归因：冷天暖调不得被说成「清爽通透」——归因由 tone 决定，不由 W 数值反推(P0-3)", () => {
+  // 2℃ 的烟草香草：weatherFit 给 ×1.15 加成。旧代码只看 W>=1.08 就写「清爽通透」，
+  // 而这句是 reasons[0]，会作为"事实"送进 /api/explain 让 LLM 忠实复述。
+  const warmHeavy = mk({ people: 20000, accords: acc([["vanilla", 70], ["tobacco", 60], ["amber", 55]]) });
+  const cold = C({ feel: "cold", tempC: 2, occasion: "casual", season: "winter" });
+  const wf = weatherFit(warmHeavy, "cold", 2);
+  assert.ok(wf.w > 1.08, "确实拿到了加成");
+  assert.equal(wf.tone, "warm_in_cold");
+  const reasons = buildPick(warmHeavy, cold).reasons;
+  assert.ok(!reasons.some((r) => r.includes("清爽")), `冷天暖调不该说清爽：${JSON.stringify(reasons)}`);
+  assert.ok(reasons.some((r) => r.includes("暖意")), `应说暖意立得住：${JSON.stringify(reasons)}`);
+  // 反向：湿热天的清冽调才配"清爽通透"
+  const freshP = mk({ people: 20000, accords: acc([["citrus", 70]]) });
+  assert.equal(weatherFit(freshP, "hot_humid").tone, "fresh_in_heat");
+  assert.ok(buildPick(freshP, C({ feel: "hot_humid", tempC: 32 })).reasons.some((r) => r.includes("清爽")));
+});
+
+test("不许编造社区数据：无社区数据的香绝不出现「社区投票里…」(P0-4)", () => {
+  const custom = mk({ id: -1, custom: true, people: 0, rating: null });
+  const ctx = C({ season: "summer", feel: "mild", tempC: 20, occasion: "casual" });
+  const reasons = buildPick(custom, ctx).reasons;
+  assert.ok(!reasons.some((r) => r.includes("社区投票")), `手动记录的香不该提社区投票：${JSON.stringify(reasons)}`);
+  // 低票扩展集同样不许
+  const low = mk({ id: 9, lowVotes: true, people: 12, seasonPct: { winter: 0.05, spring: 0.05, summer: 0.8, autumn: 0.1 } });
+  assert.ok(!buildPick(low, ctx).reasons.some((r) => r.includes("社区投票")));
+  // 票数充足的才有资格说
+  const solid = mk({ id: 10, people: 20000, seasonPct: { winter: 0.05, spring: 0.05, summer: 0.8, autumn: 0.1 } });
+  assert.ok(buildPick(solid, ctx).reasons.some((r) => r.includes("社区投票")));
+});
+
+test("主推位一票否决：被自己判 avoid 的瓶子不得因轮换因子浮上来当主推(P0-5)", () => {
+  // 两瓶库（新用户的典型状态）：#1 今天合适但昨天喷过（freshness≈0.58 的 -42% 降权），
+  // #2 今天被判 avoid。旧代码按排名分取 ranked[0]，主推卡右上角会挂着「今天不建议」。
+  const good = mk({ id: 1, people: 20000, sillageTier: 2, accords: acc([["citrus", 60]]) });
+  const bad = mk({ id: 2, people: 20000, sillageTier: 4, accords: acc([["citrus", 60]]) }); // tier4×封闭场合 → avoid
+  const ctx = C({ occasion: "work", feel: "mild", tempC: 20 });
+  const now = new Date(2026, 6, 8, 9, 0).getTime();
+  const { primary, ranked } = recommend([good, bad], ctx, undefined, {
+    lastWornAt: new Map([[1, now - 24 * 3600 * 1000]]),
+    now,
+    daySeed: 1,
+  });
+  assert.equal(ranked.find((r) => r.perfume.id === 2)!.verdict, "avoid", "前提：#2 确实被判 avoid");
+  assert.notEqual(primary!.verdict, "avoid", "主推不得是 avoid");
+  assert.equal(primary!.perfume.id, 1);
+});
+
+test("成功配置不得越过安全阀：「上次刚好」覆盖不了今天更收着的场合(P0-1)", () => {
+  // 「用力过猛」组合（甜重×强扩散×通勤）规则会把喷量压到 1 下。
+  // 旧代码把 successConfig 放在所有安全阀之后无条件覆盖 → 压回 4 下。
+  const loudSweet = mk({ sillage: 2.8, sillageTier: 3, accords: acc([["sweet", 60], ["white floral", 55]]) });
+  const ctx = C({ occasion: "commute", feel: "mild", tempC: 20 });
+  const bias = {
+    likeScore: 0,
+    perceivedStrength: 0,
+    successConfigs: [{ occasion: "commute" as const, tempBand: "mild" as const, sprays: 4 }],
+  };
+  const u = computeUsage(loudSweet, ctx, bias);
+  assert.ok(u.sprays[1] <= 1, `安全阀必须赢：得 ${u.spraysLabel}`);
+  assert.ok(u.note?.includes("更收着"), "被压低时要说明白为什么，不能默默改数");
+});
+
+test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给提示(P0-7)", () => {
+  const loud = mk({ people: 20000, sillage: 2.8, sillageTier: 3, accords: acc([["sweet", 60]]) });
+  const base = C({ occasion: "social", feel: "mild", tempC: 20 });
+  const tense = C({ occasion: "social", feel: "mild", tempC: 20, tension: "high" });
+  assert.ok(score(loud, tense).total < score(loud, base).total, "高张力应降权强扩散甜香");
+  assert.ok(computeUsage(loud, tense).sprays[1] < computeUsage(loud, base).sprays[1], "高张力应再收一档");
+  assert.ok(computeRisks(loud, tense).some((r) => r.includes("成为被讨论")), "应给出社交提示");
+  // formality 同样必须被消费（自由文本说"很正式"时，哪怕 occasion 落在 social 也要收得住）
+  const formal = C({ occasion: "social", feel: "mild", tempC: 20, formality: 0.85 });
+  assert.ok(score(loud, formal).total < score(loud, base).total, "高正式度应降权甜香强扩散");
+});
+
+test("无幽灵香调键：引擎引用的每个 accord 都必须在真实数据集里存在", async () => {
+  // 曾经的实际情况：scoring.ts 引用 resinous / sandalwood / cedar / watery / jasmine / 裸 spicy，
+  // 而数据集里这些键出现 0 次——规则静默空转，谁也不会发现。
+  // 代价最大的是 resinous：数据集里这个家族其实叫 balsamic（208 款），
+  // 于是 208 款树脂香膏调在热天不算厚重、在冷天也不算暖调，两条规则都白写。
+  const fs = await import("node:fs");
+  const { ENGINE_ACCORD_KEYS } = await import("./scoring");
+  const real = new Set<string>();
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  for (const p of catalog) for (const a of p.accords) real.add(a.en);
+  const ghosts = ENGINE_ACCORD_KEYS.filter((k) => !real.has(k));
+  assert.deepEqual(ghosts, [], `引擎引用了数据集里不存在的香调键：${ghosts.join(", ")}`);
+});
+
+test("构建产物里不得出现 0 分：0 是「没有票」的哨兵，不是评分", async () => {
+  // rating/longevity/priceValue 量表是 1..5，sillage 是 1..4（ledecanteur/SCHEMA.md）——
+  // 0 在任何一个量表上都超出下界。而 `d?.longevity?.average ?? null` 只兜 null/undefined，
+  // 0 会原样通过，于是零票记录被当成"留香 0 分"这个真实档位继续往下走：
+  //   durationHint(0) → 「散得偏快…」；sillageTier(0) → 1 档「贴身可闻 · 密闭也安全」。
+  // 修复前实测：扩展集 458 条 longevity=0、444 条 sillage=0、252 条 rating=0，且高度集中在国货。
+  const fs = await import("node:fs");
+  const bad: string[] = [];
+  const check = (list: Perfume[], where: string) => {
+    for (const p of list) {
+      for (const k of ["rating", "longevity", "sillage", "priceValue"] as const) {
+        if (p[k] === 0) bad.push(`${where} id=${p.id} ${k}=0`);
+      }
+    }
+  };
+  check(JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")), "主目录");
+  for (const f of fs.readdirSync("public/data/ext")) {
+    if (!f.endsWith(".json")) continue;
+    check(JSON.parse(fs.readFileSync(`public/data/ext/${f}`, "utf8")), `ext/${f}`);
+  }
+  assert.deepEqual(bad.slice(0, 5), [], `构建产物里仍有 0 分（共 ${bad.length} 处）`);
+});
+
+test("无社区数据的香：留香话术必须落「因人而异」，且不许谎称社区投票", () => {
+  // 零票记录（多为国货）此前会被告知"散得偏快"与"贴身可闻·密闭也安全"——后者还是安全断言。
+  const noData = mk({ id: 99, lowVotes: true, people: 1, rating: null, longevity: null, sillage: null, sillageTier: 2 });
+  const pick = buildPick(noData, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  assert.ok(pick.usage.durationHint.includes("因人而异"), `应落"不知道"话术：${pick.usage.durationHint}`);
+  assert.ok(pick.reasons.some((r) => r.includes("社区数据还少")), "应主动声明数据少");
+  assert.ok(!pick.reasons.some((r) => r.includes("社区投票")), "不得谎称社区投票");
+});
+
+test("琥珀不是甜：干性琥珀香不得被判「偏甜重、容易发腻」(P0-2)", () => {
+  // 蔚蓝浓香精的真实数据：amber=86, sweet=0, vanilla=0
+  const blue = mk({ people: 20000, sillageTier: 3, accords: acc([["amber", 86], ["woody", 60]]) });
+  const humid = C({ occasion: "casual", feel: "hot_humid", tempC: 32, season: "summer" });
+  const risks = computeRisks(blue, humid);
+  assert.ok(!risks.some((r) => r.includes("甜")), `不甜的香不该被说甜：${JSON.stringify(risks)}`);
+  assert.ok(risks.some((r) => r.includes("树脂琥珀感偏厚")), `应给出树脂厚重的正确提示：${JSON.stringify(risks)}`);
+  // 真甜的香照旧要被点名
+  const gourmandP = mk({ people: 20000, accords: acc([["sweet", 70], ["vanilla", 60]]) });
+  assert.ok(computeRisks(gourmandP, humid).some((r) => r.includes("发腻")));
+  // 「别太甜」也不该误伤琥珀
+  assert.equal(avoidPenalty(blue, ["too_sweet"]), 1, "琥珀不该被「别太甜」罚");
+  assert.ok(avoidPenalty(gourmandP, ["too_sweet"]) < 1, "真甜的该被罚");
+});
+
+test("美食调邻居不算甜：cacao / coffee / almond 的干苦质感不得触发「发腻」", () => {
+  // 这是 amber 错误的同类——修 amber 时若顺手把整个"美食调邻居"塞进甜桶，就会复刻它。
+  // 数据取自本仓库真实目录，四款的核心甜调(sweet/vanilla/caramel/honey)全部 <30。
+  const humid = C({ occasion: "casual", feel: "hot_humid", tempC: 32, season: "summer" });
+  const cases: [string, [string, number][]][] = [
+    ["迪奥桀骜", [["iris", 100], ["cacao", 68], ["powdery", 67], ["leather", 50]]],
+    ["大写檀香", [["woody", 100], ["warm spicy", 77], ["cacao", 61]]],
+    ["完美先生香精", [["almond", 100], ["leather", 74]]],
+    ["万圣节男士X", [["warm spicy", 100], ["coffee", 59]]],
+  ];
+  for (const [name, accords] of cases) {
+    const risks = computeRisks(mk({ people: 20000, accords: acc(accords) }), humid);
+    assert.ok(!risks.some((r) => r.includes("甜感偏重")), `${name} 不该被判甜：${JSON.stringify(risks)}`);
+  }
+  // 而真正的美食甜香照旧命中
+  assert.ok(
+    computeRisks(mk({ people: 20000, accords: acc([["vanilla", 80], ["caramel", 60]]) }), humid).some((r) =>
+      r.includes("甜感偏重")
+    )
+  );
+});
+
+test("balsamic 不再空转：树脂香膏调在热天算厚重、冷天算暖调", () => {
+  const balsam = mk({ people: 20000, accords: acc([["balsamic", 70]]) });
+  assert.ok(weatherMultiplier(balsam, "hot_humid") < 1, "湿热应压树脂香膏");
+  assert.ok(weatherMultiplier(balsam, "cold") > 1, "寒冷应奖树脂香膏");
+});
+
+test("无香场合：就医/探病一律建议不用香，且任何个人偏好都覆盖不掉", () => {
+  // 全引擎依据最好的一条规则（约 1/3 人群报告对香味制品不良反应，多国医疗机构有访客无香要求），
+  // 而 format.ts 的 DISTANCE_HINT[1] 早就写着"适合电梯、会议、就医等密闭场合"，此前无任何规则兑现。
+  const gentle = mk({ people: 20000, sillage: 1.4, sillageTier: 1 });
+  const ctx = C({ occasion: "casual", feel: "mild", tempC: 20, fragranceFree: true });
+  // 连"上次这个量刚好"的成功配置也不能把它顶回去
+  const bias = {
+    likeScore: 1,
+    perceivedStrength: -1,
+    successConfigs: [{ occasion: "casual" as const, tempBand: "mild" as const, sprays: 4 }],
+  };
+  const u = computeUsage(gentle, ctx, bias);
+  assert.deepEqual(u.sprays, [0, 0], `应建议 0 下，得 ${u.spraysLabel}`);
+  assert.equal(u.spraysLabel, "今天不用");
+  assert.deepEqual(u.placement, []);
+  assert.equal(u.suitable, false);
+  // 裁决：不是"这瓶不合适"，是今天哪瓶都不合适
+  assert.equal(buildPick(gentle, ctx, bias).verdict, "avoid");
+  // 风险只说这一条，不再堆别的
+  const risks = computeRisks(gentle, ctx);
+  assert.equal(risks.length, 1);
+  assert.ok(risks[0].includes("留在家里"));
+});
+
+test("季节错配文案同样要过票数门槛：三票的噪声不得说「大家更多在◯季用它」", () => {
+  // 这与 buildReasons 里那条「社区投票里它更偏◯季」是同一类编造，只是藏在风险文案里晚一步被发现。
+  const peak = { winter: 0.75, spring: 0.1, summer: 0.05, autumn: 0.1 };
+  const summer = C({ season: "summer", feel: "mild", tempC: 20, occasion: "casual" });
+  const low = mk({ id: 7, lowVotes: true, people: 3, seasonPct: peak });
+  assert.ok(
+    !computeRisks(low, summer).some((r) => r.includes("大家更多在")),
+    `三票不该说"大家更多在"：${JSON.stringify(computeRisks(low, summer))}`
+  );
+  const custom = mk({ id: -2, custom: true, people: 0, seasonPct: peak });
+  assert.ok(!computeRisks(custom, summer).some((r) => r.includes("大家更多在")));
+  // 票数充足的照旧提示反季
+  const solid = mk({ id: 8, people: 20000, seasonPct: peak });
+  assert.ok(computeRisks(solid, summer).some((r) => r.includes("大家更多在冬季")));
+});
+
+test("织物提示是提示不是风险：它不得把裁决从 good 降级成 caution", () => {
+  // 封闭场合（通勤/上班/正式）的部位建议里必然出现"衣物内侧"，从而触发织物留印提示。
+  // 若这条提示参与裁决（computeVerdict 的规则是 risks.length > 0 → caution），
+  // 最常见的那几个场合就会被无端全部降级——这是提示与风险混为一谈的典型代价。
+  const clean = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["citrus", 60]]) });
+  const pick = buildPick(clean, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  assert.ok(pick.usage.placement.some((x) => x.includes("衣物")), "前提：确实建议了喷衣物");
+  assert.ok(pick.risks.some((r) => r.includes("留印子")), "前提：确实给了织物提示");
+  assert.equal(pick.verdict, "good", "织物提示不该影响裁决");
 });
 
 test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {

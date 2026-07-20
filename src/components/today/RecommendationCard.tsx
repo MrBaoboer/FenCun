@@ -4,6 +4,7 @@ import { Eyebrow, EvidenceBar, AccordBar, Stat } from "@/components/ui";
 import {
   DISTANCE_LABEL,
   DISTANCE_HINT,
+  DISTANCE_ATTRIB,
   DISTANCE_SUB,
   durationShort,
   genderLabel,
@@ -56,6 +57,8 @@ export function RecommendationCard({
   const p = pick.perfume;
   const np = nameParts(p);
   const tier = pick.usage.socialDistance;
+  // 无香场合（就医/探病）：建议是"今天不用"，规格行与分寸建议整块不该出现
+  const noFragrance = pick.usage.sprays[1] === 0;
   const weatherNorm = Math.max(0, Math.min(1, (pick.breakdown.weather - 0.7) / 0.6));
   const seasonZh = ctx.season === "summer" ? "夏" : ctx.season === "winter" ? "冬" : ctx.season === "spring" ? "春" : "秋";
 
@@ -137,6 +140,18 @@ export function RecommendationCard({
         </div>
       </div>
 
+      {/* 无香场合：答案是"今天不用"，就不该再摆喷量/社交距离/留香三个规格——
+          那和「今天不建议用它」下面挂着「喷 2 下」是同一种自相矛盾。只留一句话。 */}
+      {noFragrance ? (
+        <div className="mt-6 border-t-2 border-t-ink pt-4">
+          <Eyebrow className="!text-warn">今天的分寸 · 不用香</Eyebrow>
+          <p className="serif mt-2 text-[0.95rem] leading-relaxed text-ink-soft">{pick.usage.note}</p>
+          <p className="serif mt-2 text-[0.84rem] leading-relaxed text-ink-faint">
+            {pick.usage.durationHint}
+          </p>
+        </div>
+      ) : (
+        <>
       {/* 规格行 —— 规则线包裹 */}
       <div className="mt-6 flex border-b border-line border-t-2 border-t-ink py-4">
         <div className="flex-1">
@@ -163,7 +178,11 @@ export function RecommendationCard({
         <div className="flex flex-col gap-5 pb-2 pt-3">
           <div className="flex flex-col gap-2.5 text-[0.86rem]">
             <DetailRow label="喷在哪" value={pick.usage.placement.join("、")} />
-            <DetailRow label="社交距离" value={`${DISTANCE_LABEL[tier]}（${DISTANCE_HINT[tier]}）`} />
+            {/* 归因：这一档来自社区评价者的主观投票，不是测量值 */}
+            <DetailRow
+              label="社交距离"
+              value={`${DISTANCE_LABEL[tier]} · ${DISTANCE_ATTRIB}（${DISTANCE_HINT[tier]}）`}
+            />
             <DetailRow label="留香" value={pick.usage.durationHint} />
           </div>
 
@@ -202,6 +221,8 @@ export function RecommendationCard({
           <NotesTiers notes={p.notes} />
         </div>
       </details>
+        </>
+      )}
     </article>
   );
 }
