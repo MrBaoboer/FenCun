@@ -1,6 +1,9 @@
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
 import type { Perfume, Context, ScoredPick, Verdict, Bias, Feedback, Occasion, SuccessConfig } from "./types";
-import { score, type ScoreParts } from "./scoring";
+import { score, sweetness, balsamicWeight, type ScoreParts } from "./scoring";
+
+/** 单个 accord 强度（留印风险判定用） */
+const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
 import { computeUsage, computeRisks, buildReasons } from "./usage";
 import { tempBand } from "./season";
 
@@ -60,8 +63,12 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   // 对真丝、醋酸纤维和浅色外层是实打实的留印风险【行业惯例】。
   // 放在这里而不是 computeRisks 里，是为了避免把 placement 的判定逻辑抄第二份——
   // 条件就是"最终真的建议了衣物"，不需要再推导一遍。
-  if (usage.placement.some((x) => x.includes("衣物"))) {
-    risks.push("喷衣物请选内衬，避开真丝、醋酸和浅色外层——酒精和香精可能留印子。");
+  // 只对**真的会留印**的组分提示。机制是有色浸膏、树脂与香草醛的油渍及光氧化黄变，
+  // 清爽柑橘/水生本来就不在其列。不收窄的话，夏天几乎每张卡都建议喷衣物，
+  // 这句就会变成每次都出现的噪音——一条永远出现的提示等于没有提示。
+  const stainRisk = Math.max(sweetness(p), balsamicWeight(p)) >= 40 || accordAt(p, "tobacco") >= 40;
+  if (stainRisk && usage.placement.some((x) => x.includes("衣物"))) {
+    risks.push("喷衣物请选内衬，避开真丝、醋酸和浅色外层——它的树脂与浸膏可能留印子。");
   }
   const reasons = buildReasons(p, ctx, {
     season: parts.season,

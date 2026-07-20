@@ -703,11 +703,18 @@ test("织物提示是提示不是风险：它不得把裁决从 good 降级成 c
   // 封闭场合（通勤/上班/正式）的部位建议里必然出现"衣物内侧"，从而触发织物留印提示。
   // 若这条提示参与裁决（computeVerdict 的规则是 risks.length > 0 → caution），
   // 最常见的那几个场合就会被无端全部降级——这是提示与风险混为一谈的典型代价。
-  const clean = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["citrus", 60]]) });
-  const pick = buildPick(clean, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  // 用会留印的组分（树脂/浸膏），清爽柑橘按机制本就不触发这条提示
+  const resin = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["amber", 60], ["woody", 50]]) });
+  const pick = buildPick(resin, C({ occasion: "work", feel: "mild", tempC: 20 }));
   assert.ok(pick.usage.placement.some((x) => x.includes("衣物")), "前提：确实建议了喷衣物");
   assert.ok(pick.risks.some((r) => r.includes("留印子")), "前提：确实给了织物提示");
   assert.equal(pick.verdict, "good", "织物提示不该影响裁决");
+
+  // 反向：清爽柑橘同样建议喷衣物，但不该被这条噪音打扰
+  const fresh = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["citrus", 100]]) });
+  const fp = buildPick(fresh, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  assert.ok(fp.usage.placement.some((x) => x.includes("衣物")), "前提：也建议了喷衣物");
+  assert.ok(!fp.risks.some((r) => r.includes("留印子")), "柑橘不该触发留印提示");
 });
 
 test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {
