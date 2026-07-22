@@ -27,6 +27,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Dependency audit
+        run: npm audit --audit-level=high
       - name: Lint
         run: npm run lint
       - name: Test (engine unit tests)

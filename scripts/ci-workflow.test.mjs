@@ -18,3 +18,10 @@ test("gitleaks scans full history without event-derived commit ranges", async ()
   assert.match(workflow, /GIT_CONFIG_KEY_0:\s+safe\.directory/);
   assert.match(workflow, /GIT_CONFIG_VALUE_0:\s+\/github\/workspace/);
 });
+
+test("CI blocks high-severity dependency vulnerabilities", async () => {
+  const workflow = await readFile(workflowUrl, "utf8");
+
+  assert.match(workflow, /name:\s+Dependency audit/);
+  assert.match(workflow, /run:\s+npm audit --audit-level=high/);
+});
