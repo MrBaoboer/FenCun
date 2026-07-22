@@ -63,13 +63,13 @@ git commit -m "ci: 阻止高危依赖漏洞进入主分支"
 - 修改：`package.json`
 - 修改：`package-lock.json`
 
-- [ ] **步骤 1：确认安全审计失败基线**
+- [x] **步骤 1：确认安全审计失败基线**
 
 运行：`npm audit --json`
 
 预期：退出码为 1；报告 `sharp < 0.35.0`、`brace-expansion < 1.1.16`，高危节点合计 3 个。
 
-- [ ] **步骤 2：约束 Next.js 使用已修复的 sharp**
+- [x] **步骤 2：约束 Next.js 使用已修复的 sharp**
 
 在 `package.json` 的 `overrides` 中加入：
 
@@ -79,7 +79,7 @@ git commit -m "ci: 阻止高危依赖漏洞进入主分支"
 
 保留已有的 `postcss` override。
 
-- [ ] **步骤 3：重新解析受影响依赖**
+- [x] **步骤 3：重新解析受影响依赖**
 
 运行：`npm install`
 
@@ -87,7 +87,7 @@ git commit -m "ci: 阻止高危依赖漏洞进入主分支"
 
 预期：`package-lock.json` 中 `node_modules/sharp` 为 0.35.3 或更高的 0.35.x，顶层 `node_modules/brace-expansion` 为 1.1.16 或更高的 1.x；不改动 `brace-expansion` 5.x 的独立依赖节点。
 
-- [ ] **步骤 4：验证依赖图与安全审计**
+- [x] **步骤 4：验证依赖图与安全审计**
 
 运行：`npm ls sharp brace-expansion --all`
 
@@ -97,7 +97,7 @@ git commit -m "ci: 阻止高危依赖漏洞进入主分支"
 
 预期：退出码为 0，报告 0 vulnerabilities。
 
-- [ ] **步骤 5：提交依赖修复**
+- [x] **步骤 5：提交依赖修复**
 
 ```powershell
 git add package.json package-lock.json
@@ -112,13 +112,13 @@ git commit -m "fix(deps): 修复 Dependabot 高危告警"
 - 验证：`.github/workflows/ci.yml`
 - 验证：`scripts/ci-workflow.test.mjs`
 
-- [ ] **步骤 1：从锁文件重新安装**
+- [x] **步骤 1：从锁文件重新安装**
 
 运行：`npm ci`
 
 预期：退出码为 0，审计摘要为 0 vulnerabilities，且 `git status --short` 不产生新的文件变化。
 
-- [ ] **步骤 2：执行完整项目验证**
+- [x] **步骤 2：执行完整项目验证**
 
 依次运行：
 
@@ -131,7 +131,7 @@ npm run build
 
 预期：所有命令退出码为 0；测试 61 项或更多、0 失败；lint 无错误；Next.js 生产构建成功。
 
-- [ ] **步骤 3：核对告警修复范围**
+- [x] **步骤 3：核对告警修复范围**
 
 运行：`git diff main...HEAD -- package.json package-lock.json .github/workflows/ci.yml scripts/ci-workflow.test.mjs docs/superpowers/plans/2026-07-22-dependabot-alerts.md`
 
