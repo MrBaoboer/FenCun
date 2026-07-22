@@ -18,3 +18,16 @@ test("gitleaks scans full history without event-derived commit ranges", async ()
   assert.match(workflow, /GIT_CONFIG_KEY_0:\s+safe\.directory/);
   assert.match(workflow, /GIT_CONFIG_VALUE_0:\s+\/github\/workspace/);
 });
+
+test("CI blocks high-severity dependency vulnerabilities", async () => {
+  const workflow = (await readFile(workflowUrl, "utf8")).replaceAll("\r\n", "\n");
+  const verifyJob = workflow.match(
+    /^  verify:\n([\s\S]*?)(?=^  [\w-]+:\n|(?![\s\S]))/m,
+  );
+
+  assert.ok(verifyJob, "CI workflow must define the verify job");
+  assert.match(
+    verifyJob[1],
+    /^      - name: Install\n        run: npm ci\n      - name: Dependency audit\n        run: npm audit --audit-level=high$/m,
+  );
+});
