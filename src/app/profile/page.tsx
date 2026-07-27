@@ -1,10 +1,12 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStore, type ImportPreview } from "@/lib/store";
 import { useLibraryPerfumes } from "@/lib/hooks";
+import { useApp } from "@/components/AppProvider";
 import { aggregateBias } from "@/lib/recommend";
 import { Eyebrow } from "@/components/ui";
 import { OCCASION_LABEL } from "@/lib/format";
+import { buildDemoState } from "@/lib/demo";
 
 export default function ProfilePage() {
   const lib = useLibraryPerfumes();
@@ -18,6 +20,12 @@ export default function ProfilePage() {
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   // 待确认的导入：文件已读、已校验，但还没落盘——覆盖必须由用户在看到差额后亲手点下
   const [pending, setPending] = useState<{ raw: string; preview: ImportPreview } | null>(null);
+  // 示例香柜：既是"柜里现在是什么"的唯一说明处，也是回到初次打开那副样子的入口
+  const { catalog, resolveByCity } = useApp();
+  const demo = useStore((s) => s.demo);
+  const resetToDemo = useStore((s) => s.resetToDemo);
+  const [demoConfirm, setDemoConfirm] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   function doExport() {
     const blob = new Blob([exportData()], { type: "application/json" });
@@ -170,10 +178,78 @@ export default function ProfilePage() {
           <button onClick={doExport} className="btn-ghost flex-1 py-2.5 text-[0.82rem]">
             导出香柜（JSON）
           </button>
-          <label className="btn-ghost flex-1 cursor-pointer py-2.5 text-center text-[0.82rem]">
+          {/* 曾是 <label> 包一个 display:none 的 file input —— label 本身不在 tab 序列，
+              于是「导入」这个控件对键盘用户**完全不存在**。改成真按钮转发点击，
+              input 退居幕后只当文件选择器的载体。 */}
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            className="btn-ghost flex-1 py-2.5 text-[0.82rem]"
+          >
             导入
-            <input type="file" accept="application/json,.json" onChange={doImport} className="hidden" />
-          </label>
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={doImport}
+            className="hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+        </div>
+
+        {/* 示例香柜的自报身份 + 回到初次打开那副样子的入口。
+            刻意只放在这里，不做全站常驻横幅——那对初次到访的人是打扰，
+            而这一栏本来就是"这台机器上存了什么"的所在。 */}
+        <div className="mt-4 border-t border-line pt-3.5">
+          <p className="serif text-[0.84rem] leading-relaxed text-ink-soft">
+            {demo ? (
+              <>
+                柜里现在是<span className="font-semibold text-ink">示例香柜</span>
+                ：六瓶示例香水和一段用香记录，用来展示氛寸怎么工作。加入你自己的第一瓶，它就会退场。
+              </>
+            ) : (
+              <>清空本机的香柜、反馈与香历，换回那六瓶示例——也就是第一次打开氛寸时的样子。</>
+            )}
+          </p>
+          {demoConfirm ? (
+            <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">
+              <p className="serif text-[0.84rem] leading-relaxed text-ink">
+                这会清掉本机的<span className="text-warn">香柜、反馈与香历</span>，换回六瓶示例。
+              </p>
+              <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
+                这一步不可撤销。要保住现在这份，先「导出香柜」再回来。
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  onClick={() => {
+                    const d = buildDemoState(catalog, Date.now());
+                    setDemoConfirm(false);
+                    if (!d) {
+                      setImportMsg({ kind: "error", text: "香水目录还没加载好，稍等一下再试。" });
+                      return;
+                    }
+                    resetToDemo(d);
+                    // 城市也被复位成北京了，得跟着重新取一次天气——
+                    // 否则情境栏会停在上一座城市的读数上，屏上的城市和天气对不上
+                    void resolveByCity(d.city);
+                    setImportMsg({ kind: "ok", text: "已回到初次打开的样子。" });
+                  }}
+                  className="btn-primary flex-1 py-2 text-[0.8rem]"
+                >
+                  确认清空
+                </button>
+                <button onClick={() => setDemoConfirm(false)} className="btn-ghost flex-1 py-2 text-[0.8rem]">
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setDemoConfirm(true)} className="btn-ghost mt-3 w-full py-2.5 text-[0.82rem]">
+              重置到初始状态
+            </button>
+          )}
         </div>
         {pending && (
           <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">

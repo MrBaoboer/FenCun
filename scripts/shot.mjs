@@ -32,7 +32,7 @@ const targets = [
   { name: "today-day", route: "/", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
   { name: "today-night-2", route: "/", theme: "night", date: "2026-07-07T22:30:00", weather: CLOUDY },
   { name: "library", route: "/library", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
-  { name: "journal", route: "/journal", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY, seed: "journal" },
+  { name: "journal", route: "/journal", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
   { name: "profile", route: "/profile", theme: "day", date: "2026-07-07T14:30:00", weather: CLOUDY },
   // 排版压测（非 README）：最长问候 + 看是否换行/被省略号截断/挤温度
   { name: "stress-long", route: "/", theme: "day", date: "2026-01-07T08:30:00", weather: COLD },
@@ -40,45 +40,16 @@ const targets = [
   { name: "stress-rain", route: "/", theme: "day", date: "2026-04-07T14:00:00", weather: { tempC: 18, humidity: 72, windSpeed: 15, text: "小雨", city: "北京" } },
 ];
 
-// withJournal：香历截图专属种子——七月上旬的穿香记录（色点=主香调族群）+ 今日快照
-// （含「刚好」反馈与一句话手记）。只给 journal 目标用：那条 07-07 的反馈会让今日页的
-// 反馈栏进入「已记过」态，混进公共种子会污染 today-* 截图。
-const seedScript = (withJournal) => `(async () => {
-  try {
-    const all = await (await fetch('/data/perfumes.min.json')).json();
-    const want = ['Aventus','Sauvage','Black Opium','Wild Bluebell','Tobacco Vanille','Light Blue'];
-    const id = {}, zh = {};
-    for (const w of want) { const p = all.find(x => x.name === w); if (p) { id[w] = p.id; zh[w] = p.nameZh || p.name; } }
-    const now = 1782800000000, D = 8.64e7;
-    // 烟草香草给 wornCount → 它成为"常喷的那瓶"，天气突变预警走 basis='habit' 主线
-    //（不给的话预警卡退到冷启动兜底：眉标弱化成"这瓶今天要留意"，正文还会换成库里另一瓶
-    // 被判 avoid 的香，与"天气突变"不相干——旗舰钩子在门面上只剩弱化形态）。
-    const userPerfumes = Object.entries(id).map(([n, pid], i) => ({
-      perfumeId: pid,
-      addedAt: n === 'Wild Bluebell' ? now - 40*D : now - i*D,  // 蓝风铃入柜40天没碰 → 吃灰
-      ...(n === 'Tobacco Vanille' ? { wornCount: 2 } : {}),
-    }));
-    const tv = id['Tobacco Vanille'];
-    const feedbacks = tv ? [-3,-12,-22].map(d => ({ perfumeId: tv, at: now + d*D, context: { season: 'winter', daypart: 'night', tempC: 6, occasion: 'date' }, rating: 'perfect' })) : [];
-    const state = { userPerfumes, feedbacks, city: '北京', occasion: 'commute' };
-    ${
-      withJournal
-        ? `
-    const wb = id['Wild Bluebell'];
-    state.wearLog = [
-      { d: '2026-07-01', perfumeId: id['Light Blue'], name: zh['Light Blue'], fam: 'citrus', occasion: 'commute', tempC: 31, weatherText: '晴', feel: 'hot_humid' },
-      { d: '2026-07-02', perfumeId: id['Aventus'], name: zh['Aventus'], fam: 'fruity', occasion: 'work', tempC: 29, weatherText: '多云', feel: 'hot_humid' },
-      { d: '2026-07-04', perfumeId: id['Sauvage'], name: zh['Sauvage'], fam: 'woody', occasion: 'casual', tempC: 27, weatherText: '阴', feel: 'mild' },
-      { d: '2026-07-06', perfumeId: tv, name: zh['Tobacco Vanille'], fam: 'sweet', occasion: 'date', tempC: 24, weatherText: '小雨', feel: 'mild' },
-      { d: '2026-07-07', perfumeId: wb, name: zh['Wild Bluebell'], fam: 'floral', occasion: 'commute', tempC: 22, weatherText: '多云', feel: 'mild', note: '梅雨初歇，把它翻出来了——同事问了是什么香。' },
-    ];
-    state.feedbacks = [...feedbacks, { perfumeId: wb, at: new Date('2026-07-07T10:00:00').getTime(), context: { season: 'summer', daypart: 'day', tempC: 22, occasion: 'commute' }, rating: 'perfect' }];
-    `
-        : ""
-    }
-    localStorage.setItem('fencun-store', JSON.stringify({ state, version: 0 }));
-    return userPerfumes.length;
-  } catch(e) { return 'seed-fail:'+e.message; }
+// 种子 = 演示香柜本身。
+//
+// 这里曾经维护着**第二套**手写种子（六瓶名字、吃灰天数、常喷计数、香历条目全都另写一遍），
+// 于是 README 的门面图和初次到访者真正看到的东西是两份数据，改了一处就会悄悄漂移。
+// 现在只清空 localStorage，让 AppProvider 按 lib/demo.ts 自动装载——
+// 截图拍到的，逐字就是面试官点开链接看到的那一屏。
+//
+// 时间已被下方的 MockDate 冻结，而演示数据全部相对 Date.now() 生成，所以这仍然是确定性的。
+const seedScript = `(async () => {
+  try { localStorage.clear(); return 'cleared'; } catch(e) { return 'seed-fail:'+e.message; }
 })()`;
 
 // 只截某一屏（保住其它已满意的图）：SHOT_ONLY=today-night-2 node scripts/shot.mjs
@@ -127,7 +98,8 @@ try {
 
     // 先到根页种数据，再进目标路由（第二次导航时 localStorage 已就绪）
     await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-    await page.evaluate(seedScript(t.seed === "journal"));
+    await page.evaluate(seedScript);
+    // 演示香柜由应用在 rehydrate 后装载，需要一次导航才能生效
     // networkidle2 会等天气 fetch 落地（避免截到「没拿到你的位置」中间态）；
     // 但 DeepSeek /api/explain 偶发挂起会让它超时——用 try/catch 兜住，天气此时早已加载，继续走后续显式等待。
     try {
