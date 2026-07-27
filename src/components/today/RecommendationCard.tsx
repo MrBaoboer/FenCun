@@ -43,6 +43,7 @@ export function RecommendationCard({
   onChangeBottle,
   onReset,
   libCount,
+  allAvoid,
 }: {
   pick: ScoredPick;
   ctx: Context;
@@ -53,6 +54,8 @@ export function RecommendationCard({
   onChangeBottle: () => void;
   onReset: () => void;
   libCount: number;
+  /** 柜里今天一瓶合适的都没有——眉标与提示语跟着换（见 recommend.ts 的 allAvoid） */
+  allAvoid: boolean;
 }) {
   const p = pick.perfume;
   const np = nameParts(p);
@@ -65,8 +68,17 @@ export function RecommendationCard({
     <article key={p.id} className="card animate-fade-up p-6">
       {/* 眉标 + 右上角操作图标 */}
       <div className="flex items-center justify-between gap-3">
+        {/* 柜里今天一瓶合适的都没有时，绝不能继续叫「今日之选」——
+            那会让眉标说"选它"、正文说"别用它"、下面照挂喷量与留香，是同一张卡自己打自己。
+            依然给出"真要用就这么用"的那一瓶，但把它称作什么，得跟着结论走。 */}
         <Eyebrow>
-          {isSelected ? "你选了 · Your Pick" : ctx.daypart === "night" ? "今夜之选 · Tonight" : "今日之选 · Today"}
+          {isSelected
+            ? "你选了 · Your Pick"
+            : allAvoid
+              ? "今天柜里没有合适的 · None Today"
+              : ctx.daypart === "night"
+                ? "今夜之选 · Tonight"
+                : "今日之选 · Today"}
         </Eyebrow>
         <div className="flex shrink-0 items-center gap-3">
           {pick.verdict === "avoid" ? (
@@ -81,21 +93,21 @@ export function RecommendationCard({
             </span>
           ) : null}
           {isSelected ? (
-            <button onClick={onReset} aria-label="回到今日之选" title="回到今日之选" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+            <button onClick={onReset} aria-label="回到今日之选" title="回到今日之选" className="relative -mr-1 p-1 text-ink-faint transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-accent">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M9 7L4 12l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 12h11a5 5 0 0 1 0 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           ) : libCount > 1 ? (
-            <button onClick={onChangeBottle} aria-label="换一瓶" title="换一瓶" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+            <button onClick={onChangeBottle} aria-label="换一瓶" title="换一瓶" className="relative -mr-1 p-1 text-ink-faint transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-accent">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M5 8h14M16 5l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M19 16H5M8 13l-3 3 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           ) : (
-            <Link href="/library" aria-label="再加一瓶" title="再加一瓶" className="-mr-1 p-1 text-ink-faint transition-colors hover:text-accent">
+            <Link href="/library" aria-label="再加一瓶" title="再加一瓶" className="relative -mr-1 p-1 text-ink-faint transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-accent">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
               </svg>
@@ -113,6 +125,11 @@ export function RecommendationCard({
         {np.primary}
       </h2>
       {np.secondary && <p className="en-italic mt-1.5 text-[1.15rem]">{np.secondary}</p>}
+      {allAvoid && !isSelected && (
+        <p className="serif mt-2.5 text-[0.85rem] leading-relaxed text-warn">
+          下面这瓶是相对最稳的一瓶
+        </p>
+      )}
       <p className="mt-2.5 text-[0.8rem] text-ink-faint">
         {p.brandZh} · {genderLabel(p.gender)}
         {p.year ? ` · ${p.year}` : ""}

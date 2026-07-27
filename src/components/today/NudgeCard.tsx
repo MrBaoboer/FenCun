@@ -20,6 +20,12 @@ function AlertIcon() {
   );
 }
 
+const CAUSE_LABEL = {
+  weather: "今天的体感",
+  season: "季节不对",
+  venue: "场合偏封闭",
+} as const;
+
 export function NudgeCard({ nudge, onPick }: { nudge: Nudge; onPick: (id: number) => void }) {
   if (nudge.kind === "dusty") {
     const np = nameParts(nudge.perfume);
@@ -56,8 +62,11 @@ export function NudgeCard({ nudge, onPick }: { nudge: Nudge; onPick: (id: number
       <div className="flex items-start gap-3">
         <AlertIcon />
         <div className="min-w-0 flex-1">
+          {/* 眉标由 avoid 的**成因**决定，不再写死「天气突变」。
+              写死的代价实测过：20℃ 多云、天气乘子恰为 1.000 的一天照样弹「天气突变」，
+              正文却在说会议室或反季——看一眼窗外和情境栏就能证伪，这最伤信任。 */}
           <Eyebrow className="!text-warn">
-            {nudge.basis === "habit" ? "天气突变 · 你常喷的这瓶要留意" : "天气突变 · 这瓶今天要留意"}
+            {CAUSE_LABEL[nudge.cause]} · {nudge.basis === "habit" ? "你常喷的这瓶要留意" : "这瓶今天要留意"}
           </Eyebrow>
           <p className="serif mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
             <span className="font-bold text-ink">{hp.primary}</span>：{nudge.reason}

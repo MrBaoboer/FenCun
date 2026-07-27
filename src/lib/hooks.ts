@@ -5,12 +5,20 @@ import { useStore } from "./store";
 import { seasonFromDateTemp, feelFromWeather, daypartFromHour } from "./season";
 import { recommend, buildPick, aggregateBias, dayFloor } from "./recommend";
 import { DISTANCE_LABEL } from "./format";
-import type { Context, Perfume, ScoredPick } from "./types";
+import type { Context, Perfume, ScoredPick, AvoidCause } from "./types";
 
 // 发现型钩子（S4 天气突变预警 / S5 吃灰提醒）
 export type Nudge =
   | { kind: "dusty"; perfume: Perfume; days: number; pick: ScoredPick }
-  | { kind: "weather"; habitual: Perfume; better: Perfume | null; reason: string; basis: "habit" | "cold" };
+  | {
+      kind: "weather";
+      habitual: Perfume;
+      better: Perfume | null;
+      reason: string;
+      basis: "habit" | "cold";
+      /** 为什么不建议——眉标由它决定，不许再写死「天气突变」（见 NudgeCard） */
+      cause: Exclude<AvoidCause, "fragrance_free">;
+    };
 
 type RecResult = ReturnType<typeof recommend>;
 
@@ -109,6 +117,14 @@ export function useRecommendation(ctx: Context | null) {
   }, [lib, ctx, feedbacks, userPerfumes, swapAways]);
 }
 
+// risks 为空时的兜底措辞。也必须按成因分岔——
+// 原来无论什么成因都写「今天的天气不太适合它」，正是眉标那个错误的同一处根因。
+const CAUSE_FALLBACK_REASON: Record<Exclude<AvoidCause, "fragrance_free">, string> = {
+  weather: "今天的体感对它不太友好",
+  season: "它更偏另一个季节，今天用会有点反季",
+  venue: "它的扩散偏强，今天这类封闭场合容易过头",
+};
+
 const DAY_MS = 24 * 3600 * 1000;
 export const DUSTY_MS = 21 * DAY_MS; // 用过但很久没碰（全应用统一口径：吃灰=21 天）
 const NEVER_MS = 14 * DAY_MS; // 从没用过、入柜超两周
@@ -174,19 +190,31 @@ export function useNudges(ctx: Context | null, rec: RecResult | null): Nudge[] {
       }
       if (habitualId != null && habitualId !== primaryId) {
         const hp = buildPick(byId.get(habitualId)!, ctx, bias.get(habitualId));
-        if (hp.verdict === "avoid") {
+        // 无香场合下柜里每一瓶都是 avoid，这张卡会退化成"随便点一瓶说它不合适"——
+        // 而主推卡此时已经把「今天别用香」整件事说完了，再叠一张只是噪音。
+        if (hp.verdict === "avoid" && hp.avoidCause !== null && hp.avoidCause !== "fragrance_free") {
           // 必须排除主推：预警卡就浮在推荐卡上方，"换成 X 更合适"里的 X 若正是下面那瓶主推，
           // 等于让用户去换成他已经拿到的答案。没有第三瓶可换时宁可不给按钮——预警本身已经成立。
+          //
+          // 同样要排除吃灰卡刚推过的那瓶：两张卡是上下相邻的，一张说"把蓝风铃翻出来"、
+          // 另一张说"换成蓝风铃更合适"，等于同一个建议说了两遍，还让人以为是两件事。
+          // 这与上面那条排除主推是同一条规则——一屏之内，同一瓶只该被推荐一次。
+          const dustyId = dusty[0]?.p.id ?? null;
           const better =
             rec.ranked.find(
-              (r) => r.verdict === "good" && r.perfume.id !== habitualId && r.perfume.id !== primaryId
+              (r) =>
+                r.verdict === "good" &&
+                r.perfume.id !== habitualId &&
+                r.perfume.id !== primaryId &&
+                r.perfume.id !== dustyId
             )?.perfume ?? null;
           nudges.push({
             kind: "weather",
             habitual: byId.get(habitualId)!,
             better,
-            reason: hp.risks[0] || "今天的天气不太适合它",
+            reason: hp.risks[0] || CAUSE_FALLBACK_REASON[hp.avoidCause],
             basis,
+            cause: hp.avoidCause,
           });
         }
       }
