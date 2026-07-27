@@ -49,7 +49,7 @@ const ExplainSchema = z.object({
   reasons: z.array(z.string().max(140)).max(8),
   risks: z.array(z.string().max(180)).max(8),
 });
-type ExplainInput = z.infer<typeof ExplainSchema>;
+export type ExplainInput = z.infer<typeof ExplainSchema>;
 
 const SYSTEM = `你是"氛寸"——一个懂香水、懂场景、有分寸感的用香顾问。你的任务：把下面这些"已经由规则引擎算好的客观事实"，组织成一段自然、有温度、像懂行朋友会说的中文话。
 
@@ -65,7 +65,10 @@ const SYSTEM = `你是"氛寸"——一个懂香水、懂场景、有分寸感�
    · avoid：这瓶今天其实不合适——**必须先明确说出"今天其实不太建议用这瓶"，并用给定的风险/天气/季节事实说清为什么**，绝不为讨好用户假装它合适；然后话锋一转，给一句"但你今天要是就想用它，可以这样把影响降到最低：…"，用我给的用法（减量/贴肤/挪喷洒位置）。诚实比迁就更重要。
 7. 若给了"场景"字段（用户用自然语言描述的具体场合），要让解读**贴着这个场景**说话，呼应它的社交关系与分寸（如"初见投资人这种场合，稳一点更好"），别泛泛而谈。`;
 
-function template(input: ExplainInput): string {
+// 导出是为了可测：这是五条降级路径（无 key / 限流 / 日闸门 / 上游非 200 / 空文本 /
+// avoid 语义防线 / 数字白名单 / catch）的共同落点，也是「反伪精确」在 LLM 不可用时的兜底。
+// 纯函数、零副作用，导出不改变任何运行时行为。
+export function template(input: ExplainInput): string {
   const c = input.context;
   if (input.verdict === "avoid") {
     // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）：risks[0] 本身就是完整的一句话，

@@ -23,8 +23,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v8.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v8.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v9.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v9.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -65,14 +65,15 @@
 - 🔁 **反馈闭环** — 答一句「今天，刚好吗」，个人偏移按瓶收敛：嫌冲，下次就少喷；答「刚好」，就记住这套配置直接复用；高温天答「淡了」，归因给天气，不冤枉香水。
 - 🔂 **轮换有度** — 昨天刚喷的今天自然让位、久置的自然浮起，兑现「今天喷哪瓶每天不一样」。
 - 📖 **香历** — 采纳或反馈的每一瓶自动落进月历（色点 = 当日主香调），点开任一天是当日快照，可补一句话手记。无香的日子留白，不做打卡不做断签。
-- 🌗 **昼夜双主题** — 「明韵 / 暗香」设计语言：思源宋体做中文嗓音，白天宣纸暖白、夜晚炭黑 + 香槟金。
+- 🪞 **演示香柜** — 第一次打开就是满配：六瓶示例香水与近一个月的穿香记录，推荐、备选、预警、香历、画像全部有内容可看。六瓶全部取自主目录高票段，演示屏上每一句判断仍由真实社区数据算出。加进你自己的第一瓶，它就整体退场。
+- 🌗 **昼夜双主题** — 「明韵 / 暗香」设计语言：思源宋体做中文嗓音，明韵是宣纸暖白、暗香是炭黑 + 香槟金。默认明韵，右上角随时切，不跟系统深浅色走。
 
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v8.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/journal-v8.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v8.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v9.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v9.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v9.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -173,6 +174,16 @@ npm run build:data     # 应用中文映射 + 预计算 → public/data/perfumes
 npm run build:ext      # 全量扩展集：搜索索引 + 64 详情分片 → public/data/ext*
 ```
 
+门面素材（需先起**生产**服务器，`next dev` 的调试悬浮球会入镜）：
+
+```bash
+npm run build && npx next start -p 3100
+SHOT_BASE=http://localhost:3100 npm run shot   # README 截图 → .scratch/shots/
+SHOT_BASE=http://localhost:3100 npm run og     # 分享卡片与 PWA 图标 → public/
+```
+
+两个脚本都把无头浏览器开到站点自己的页面上再取材，所以字体、配色与排版和线上**同源**，不会出现"分享卡是一套设计、点进来是另一套"。截图用的就是演示香柜本身——门面图与初次到访者看到的是同一份数据。
+
 ---
 
 ## 目录结构
@@ -188,7 +199,8 @@ src/
   lib/                  types · scoring(打分) · usage(用法) · recommend(编排)
                         · journal(香历) · perfumes(统一搜索 + 扩展目录)
                         · numguard(数字白名单) · season · hooks · store · ratelimit
-scripts/                零依赖数据构建管线 + 截图脚本
+                        · demo(演示香柜黄金集，纯函数)
+scripts/                零依赖数据构建管线 + 截图 / 分享素材脚本
 data/zh-map/            英文→中文映射（accords / notes / brands / names）
 docs/                   产品方案 · 领域规则手册 · 数据工程 · 声音与文案 · 截图
 ```

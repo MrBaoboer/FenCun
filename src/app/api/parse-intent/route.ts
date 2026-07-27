@@ -46,7 +46,10 @@ const SYSTEM = `你是"氛寸"的场景理解引擎。用户会用一句话描�
 - "朋友生日局但不想太张扬" → social、avoid [too_strong]、intimacy neutral、meal true、label "生日局·低调不抢镜"。
 - "下午去医院看我妈" → formal/casual、fragranceFree true、riskNote "病房里有人对气味敏感且无法回避"、label "探病·今天不用香"。`;
 
-function heuristic(text: string) {
+// 导出是为了可测：这条启发式承载「无香场合」红线（见下方 fragranceFree），
+// 而它恰恰是**没有 API key 时唯一会走到的那条路**——贡献者本地跑、线上限流或超时后，
+// 用户看到的都是它的输出。纯函数、零副作用，导出不改变任何运行时行为。
+export function heuristic(text: string) {
   const t = text.toLowerCase();
   const has = (...ks: string[]) => ks.some((k) => t.includes(k));
   let occasion = "casual", formality = 0.4, intimacy: "close" | "neutral" | "broadcast" = "neutral";
