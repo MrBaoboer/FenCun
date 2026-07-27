@@ -23,8 +23,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v7.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v7.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v8.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v8.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -38,7 +38,7 @@
 氛寸不做导购、不做调香，只解决这一个每天真实发生的决策。
 
 - **「今天喷哪瓶」** 是入口：你的香柜 × 此刻情境 → 最合适的一瓶，不认同可一键换成任意一瓶（用法即时重算）。
-- **「这瓶怎么用」** 是灵魂：喷量档位 / 喷洒位置 / 社交距离 / 留香区间 / 风险提示，**全程不伪精确**——绝不给「留香 6.2 小时」这类无法验证的假数字。
+- **「这瓶怎么用」** 是灵魂：喷量档位 / 喷洒位置 / 社交距离 / 留香区间 / 风险提示，**全程只给区间与档位，不伪精确**。
 
 > 完整产品方案见 [`docs/氛寸-产品方案.md`](docs/氛寸-产品方案.md)。
 
@@ -70,9 +70,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v7.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/journal-v7.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v7.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v8.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v8.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v8.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -110,8 +110,8 @@ flowchart TD
 score =  ( 0.38·季节匹配 + 0.19·时段匹配 + 0.43·场合贴合 )   ← 线性主项，权重归一
        ×  天气乘子 W   ∈ [0.7, 1.3]                          ← 闷热压厚重、寒冷奖暖香
        ×  质量微调 Q   ∈ [0.96, 1.04]                        ← 社区口碑只作轻推，不替你挑瓶
-       ×  个人偏移 biasMul                                    ← 你的反馈，按瓶收敛（正负双向、按月衰减）
-       ×  场景规避 avoidPenalty                               ← 「别太甜 / 别太冲」硬降权
+       ×  个人偏移（按瓶偏好 · 场合差评）                     ← 你的反馈收敛而来，正负双向、按月衰减
+       ×  场景压制（规避项 · 张力与正式度）                   ← 「别太甜 / 别太冲」硬降权，高张力先压存在感
 
 rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 只动排序，不动裁决与展示
 ```
@@ -151,7 +151,7 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 
 - **分层**：原始 13.2 万款，按投票数 ≥ 50 筛得 3.67 万款。主目录取热度 **Top 1500 全中文精选**；其余进**扩展集**（索引懒加载，详情按 64 个分片取，含 785 款国货白名单）；再搜不到，还有**手动记一瓶**兜底——每一瓶都进得来。
 - **统一榜单**：主目录与扩展集合并重排、不分区，文本匹配档位优先、同档位按社区投票的主流度——高度匹配的结果永远靠前。
-- **中文化**：香调 / 气味词近全覆盖；香名 **89.0%** 有中文名（官方名 544 + 香圈通行绰号 39 + 直译 752），其中 **38.9% 是官方名或通行绰号**，其余为直译。剩下 165 款没有可靠中文名，保留英文——错的中文名比英文更糟。原始数据不入仓库，仅提交构建产物；完整管线与数字见 [数据工程](docs/数据工程.md)。
+- **中文化**：香调 / 气味词近全覆盖；香名 **89.0%** 有中文名——官方名 544、香圈通行绰号 39、直译 752。剩下 165 款没有可靠中文名，保留英文——错的中文名比英文更糟。原始数据不入仓库，仅提交构建产物；完整管线与数字见 [数据工程](docs/数据工程.md)。
 
 ---
 
@@ -208,12 +208,12 @@ docs/                   产品方案 · 领域规则手册 · 数据工程 · �
 ## 参与 · 许可
 
 - **贡献**：欢迎 Issue 与 PR；动手前请读 [贡献指南](.github/CONTRIBUTING.md)——尤其是四条戒律。
-- **获取帮助**：不知道去哪问？先看 [SUPPORT](.github/SUPPORT.md) 的分流图。
+- **获取帮助**：不知道去哪问？先看 [SUPPORT](.github/SUPPORT.md) 的分流表。
 - **行为准则**：本项目遵循 [Contributor Covenant](.github/CODE_OF_CONDUCT.md)。
 - **安全**：发现漏洞请按 [安全政策](.github/SECURITY.md) 私下报告，勿开公开 Issue。
 - **治理与路线图**：谁说了算、什么不进主线见[贡献指南 · 治理](.github/CONTRIBUTING.md#治理--governance)；路线图在 [产品方案](docs/氛寸-产品方案.md)。
 - **许可证**：源代码以 **AGPL-3.0-only** 授权（见 [LICENSE](LICENSE)）。作为网络服务，若你部署修改版，请依 AGPL §13 向使用者提供对应源码。
-- **数据出处**：`public/data/perfumes.min.json` 派生自 **ledecanteur / Fragrantica** 社区数据，版权归原始来源；本仓库仅作学习与展示用途，**不随代码一并按 AGPL 授权**，如作它用请自行核实来源许可。
+- **数据出处**：`public/data/perfumes.min.json` 派生自 **ledecanteur / Fragrantica** 社区数据，版权归原始来源；本仓库仅作学习与展示用途，**不随代码一并按 AGPL 授权**，如作他用请自行核实来源许可。
 
 ---
 

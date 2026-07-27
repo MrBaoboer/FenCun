@@ -121,7 +121,7 @@ export default function JournalPage() {
 
         {monthStats && (
           <p className="mt-3 border-t border-line pt-3 text-[0.76rem] text-ink-faint">
-            本月记香 {monthStats.days} 天 · 最常穿『{monthStats.topName}』
+            本月记香 {monthStats.days} 天 · 最常穿「{monthStats.topName}」
             {monthStats.topCount > 1 ? `（${monthStats.topCount} 次）` : ""}
           </p>
         )}

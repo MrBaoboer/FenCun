@@ -47,7 +47,7 @@ export default function ProfilePage() {
         const ok = importData(raw);
         setImportMsg(
           ok
-            ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
+            ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
             : { kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" }
         );
         return;
@@ -70,9 +70,9 @@ export default function ProfilePage() {
     }
     const lines: string[] = [];
     if (strongN > 0)
-      lines.push(`有 ${strongN} 瓶你反馈过偏冲——推荐它们时，氛寸已按你的反馈各自帮你收一点喷量与扩散。`);
+      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐它们时，喷量与扩散都会各自收一点。`);
     if (weakN > 0)
-      lines.push(`有 ${weakN} 瓶你反馈过偏淡——推荐它们时，氛寸会建议略增喷量。`);
+      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐它们时，会建议略增喷量。`);
     if (lines.length === 0)
       lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
     return lines;
@@ -147,7 +147,7 @@ export default function ProfilePage() {
                     {/* 防御性访问：损坏/旧版数据缺 context 时也不白屏（store 导入已深校验，这里是双保险） */}
                     <span className="disp ml-2 text-[0.7rem] tracking-wide text-ink-faint">
                       {OCCASION_LABEL[f.context?.occasion ?? ""] ?? f.context?.occasion ?? "—"}
-                      {typeof f.context?.tempC === "number" ? ` · ${Math.round(f.context.tempC)}°` : ""}
+                      {typeof f.context?.tempC === "number" ? ` · ${Math.round(f.context.tempC)}℃` : ""}
                     </span>
                   </div>
                   <span className="serif shrink-0 text-[0.82rem] font-semibold text-accent">
@@ -196,7 +196,7 @@ export default function ProfilePage() {
                   setPending(null);
                   setImportMsg(
                     ok
-                      ? { kind: "ok", text: "导入完成，香柜与反馈都回来了。" }
+                      ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
                       : { kind: "error", text: "导入没能完成，现在的数据没有被改动。" }
                   );
                 }}

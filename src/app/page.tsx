@@ -111,7 +111,7 @@ export default function TodayPage() {
         <EmptyShelf />
       ) : !ctx ? (
         <p className="serif px-1 text-[0.82rem] leading-relaxed text-ink-faint">
-          等你的此刻天气到位，氛寸就为你从香柜里挑一瓶。
+          等此刻的天气到位，氛寸就从你的香柜里挑一瓶。
         </p>
       ) : activePick ? (
         <>

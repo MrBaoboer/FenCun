@@ -60,7 +60,6 @@ export function RecommendationCard({
   // 无香场合（就医/探病）：建议是"今天不用"，规格行与分寸建议整块不该出现
   const noFragrance = pick.usage.sprays[1] === 0;
   const weatherNorm = Math.max(0, Math.min(1, (pick.breakdown.weather - 0.7) / 0.6));
-  const seasonZh = ctx.season === "summer" ? "夏" : ctx.season === "winter" ? "冬" : ctx.season === "spring" ? "春" : "秋";
 
   return (
     <article key={p.id} className="card animate-fade-up p-6">
@@ -201,13 +200,14 @@ export function RecommendationCard({
 
           <div className="flex flex-col gap-3">
             <Eyebrow className="eyebrow-mute">为什么是这些建议</Eyebrow>
-            <EvidenceBar label="季节匹配" value={pick.breakdown.season} hint={`社区在${seasonZh}季的投票占比`} tone="accent" />
+            {/* 季节分是 seasonFit（以主场季为基准、按票数收缩），不是投票占比；无数据香不冒称「社区」 */}
+            <EvidenceBar label="季节匹配" value={pick.breakdown.season} hint={p.custom || p.lowVotes ? undefined : "以它的主场季为满格"} tone="accent" />
             <EvidenceBar label="场合贴合" value={pick.breakdown.occasion} tone="accent" />
             <EvidenceBar
               label="天气适应"
               value={weatherNorm}
               tone={pick.breakdown.weather < 0.95 ? "warn" : "accent"}
-              hint={pick.breakdown.weather >= 1.05 ? "今天更通透" : pick.breakdown.weather <= 0.95 ? "今天偏厚" : ""}
+              hint={pick.breakdown.weather >= 1.05 ? "天气帮它加分" : pick.breakdown.weather <= 0.95 ? "天气让它吃亏" : ""}
             />
           </div>
 

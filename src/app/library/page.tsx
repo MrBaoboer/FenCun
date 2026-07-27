@@ -80,7 +80,7 @@ export default function LibraryPage() {
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
             香柜还空着<br />
             在上面搜一搜你拥有的香水<br />
-            可以搜品牌（如 香奈儿 / Chanel）、香名，或香调（如 玫瑰、木质）
+            品牌、香名、香调都能搜，如「香奈儿」「玫瑰」「木质」
           </p>
         </div>
       ) : (
@@ -113,7 +113,7 @@ export default function LibraryPage() {
           className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
         >
           <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
-            已把『{undoItem.name}』移出香柜
+            已把「{undoItem.name}」移出香柜
           </span>
           <button
             onClick={() => {

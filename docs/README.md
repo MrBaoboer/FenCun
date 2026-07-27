@@ -23,5 +23,5 @@
 
 ## 还没决定从哪开始
 
-- [项目 README](../README.md) —— 产品全貌与技术栈，五分钟读完。
+- [项目 README](../README.md) —— 产品全貌与技术栈，30 秒速览。
 - 在线体验：[fencun.vercel.app](https://fencun.vercel.app)

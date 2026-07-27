@@ -34,8 +34,8 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 这是全引擎唯一一条建议"不用"的规则，也是依据最好的一条——
   // 约三分之一人群报告对香味制品有不良反应，多国医疗机构对访客有明确无香要求。
   // 放在最前面是有意的：任何个人偏好、成功配置、场合加成都不该把它覆盖掉。
-  // 注意 format.ts 的 DISTANCE_HINT[1] 早就写着"适合电梯、会议、就医等密闭场合"，
-  // 却一直没有任何规则兑现"就医"这两个字——这条补的正是那个承诺缺口。
+  // （format.ts 的 DISTANCE_HINT[1] 因此不把"就医"列为贴肤香的适用场合——
+  // 就医场合的答案是"今天不用"，不是"选贴肤的"。）
   if (ctx.fragranceFree) {
     return {
       sprays: [0, 0],
@@ -157,7 +157,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 「发梢少量」是用户无法执行的指令（少量是多少？），喷梳子再梳过去是同等效果、几乎零风险的替代。
   // 高温时整条去掉，理由是出汗与投射失控，**不是"酒精伤发"**——那句是没有依据的美妆口头禅。
   if (ctx.occasion === "date" && sil < 2.8 && !hotFeel) {
-    placement.push("喷一下梳子，再梳过发尾");
+    placement.push("发尾（喷在梳子上，再梳过去）");
   }
   if (hotFeel) {
     placement = placement

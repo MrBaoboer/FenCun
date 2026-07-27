@@ -50,9 +50,13 @@ const seedScript = (withJournal) => `(async () => {
     const id = {}, zh = {};
     for (const w of want) { const p = all.find(x => x.name === w); if (p) { id[w] = p.id; zh[w] = p.nameZh || p.name; } }
     const now = 1782800000000, D = 8.64e7;
+    // 烟草香草给 wornCount → 它成为"常喷的那瓶"，天气突变预警走 basis='habit' 主线
+    //（不给的话预警卡退到冷启动兜底：眉标弱化成"这瓶今天要留意"，正文还会换成库里另一瓶
+    // 被判 avoid 的香，与"天气突变"不相干——旗舰钩子在门面上只剩弱化形态）。
     const userPerfumes = Object.entries(id).map(([n, pid], i) => ({
       perfumeId: pid,
       addedAt: n === 'Wild Bluebell' ? now - 40*D : now - i*D,  // 蓝风铃入柜40天没碰 → 吃灰
+      ...(n === 'Tobacco Vanille' ? { wornCount: 2 } : {}),
     }));
     const tv = id['Tobacco Vanille'];
     const feedbacks = tv ? [-3,-12,-22].map(d => ({ perfumeId: tv, at: now + d*D, context: { season: 'winter', daypart: 'night', tempC: 6, occasion: 'date' }, rating: 'perfect' })) : [];
@@ -133,12 +137,16 @@ try {
     // 今日页：确保天气已渲染。定位/rehydrate 偶发竞态会让页面短暂停在「没拿到你的位置」，
     // 且此时 networkidle2 可能因暂无网络活动而提前判定空闲。轮询等温度出现；卡住就 reload 重试
     //（localStorage 已有城市，reload 后 rehydrate 必定读到 → fetchByCity → mock 天气）。
+    // 日期一并等：ContextBar 的日期是挂载后才求值的（首帧空串），只等温度会截到缺日期的一帧。
     if (t.route === "/") {
       let wok = false;
       for (let attempt = 0; attempt < 4 && !wok; attempt++) {
         try {
           await page.waitForFunction(
-            () => !document.body.innerText.includes("没拿到你的位置") && /\d°/.test(document.body.innerText),
+            () =>
+              !document.body.innerText.includes("没拿到你的位置") &&
+              /\d°/.test(document.body.innerText) &&
+              /\d+月\d+日/.test(document.body.innerText),
             { timeout: 7000, polling: 300 }
           );
           wok = true;

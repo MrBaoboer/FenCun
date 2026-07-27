@@ -17,7 +17,7 @@ export default function ErrorPage({
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="card w-full max-w-md px-6 py-12 text-center">
-        <div className="eyebrow eyebrow-mute">出了点状况 · Hiccup</div>
+        <div className="eyebrow eyebrow-mute">小插曲 · Hiccup</div>
         <h1 className="serif mt-3 text-[1.4rem] font-bold leading-snug text-ink">
           出了点问题，这不是你的错
         </h1>
@@ -28,7 +28,7 @@ export default function ErrorPage({
           再试一次
         </button>
         <p className="mx-auto mt-4 max-w-xs text-[0.74rem] leading-relaxed text-ink-faint">
-          重试会清除本次会话的临时状态（如刚选的场合），香柜与反馈不受影响；若反复出现，刷新页面或稍后再来。
+          重试会清除本次会话的临时状态（如刚手动换上的那瓶），香柜与反馈不受影响；若反复出现，刷新页面或稍后再来。
         </p>
       </div>
     </div>

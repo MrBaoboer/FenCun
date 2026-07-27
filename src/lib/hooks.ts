@@ -228,7 +228,7 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
     }
     // 无天气降级：不调 DeepSeek（避免臆造天气），直接用规则要点
     if (ctx.approximate) {
-      setText(pick.reasons.join("，") + "。");
+      setText(pick.reasons.map((r) => r.replace(/。$/, "")).join("，") + "。");
       setSource("template");
       setLoading(false);
       return;

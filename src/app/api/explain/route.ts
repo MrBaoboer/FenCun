@@ -68,17 +68,17 @@ const SYSTEM = `你是"氛寸"——一个懂香水、懂场景、有分寸感�
 function template(input: ExplainInput): string {
   const c = input.context;
   if (input.verdict === "avoid") {
-    const why = input.risks[0] || "它和此刻的天气或场合不太合拍";
-    // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）没有"减到最低"的版本，
-    // 不能拼出"就今天不用、只喷"这种残句，更不能劝用户"你要是就想用它"。
+    // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）：risks[0] 本身就是完整的一句话，
+    // 直接用它，不再补一句同义的"留在家里"；更不能劝用户"你要是就想用它"。
     if (input.usage.placement.length === 0) {
-      return `${why}今天把它留在家里，是更稳妥的选择。`;
+      return input.risks[0] || "今天的场合对气味格外敏感，把香水留在家里是更稳妥的选择。";
     }
-    return `说实话，今天不太建议用${input.name}——${why}。你要是今天就想用它，就${input.usage.spraysLabel}、只喷${input.usage.placement.join("、")}，把存在感压到最低。`;
+    const why = (input.risks[0] || "它和此刻的天气或场合不太合拍").replace(/。$/, "");
+    return `说实话，今天不太建议用「${input.name}」——${why}。你要是今天就想用它，就只喷 ${input.usage.spraysLabel}（${input.usage.placement.join("、")}），把存在感压到最低。`;
   }
   const parts: string[] = [`今天${c.city}${c.weatherText}、${Math.round(c.tempC)}℃。`];
-  if (input.reasons.length) parts.push(input.reasons[0] + "。");
-  parts.push(`建议喷 ${input.usage.spraysLabel}，喷在${input.usage.placement.join("、")}，留香${input.usage.durationHint}。`);
+  if (input.reasons.length) parts.push(input.reasons[0].replace(/。$/, "") + "。");
+  parts.push(`建议喷 ${input.usage.spraysLabel}，喷在${input.usage.placement.join("、")}；${input.usage.durationHint}。`);
   if (input.risks.length) parts.push(input.risks[0]);
   return parts.join("");
 }

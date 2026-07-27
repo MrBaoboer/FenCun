@@ -38,7 +38,7 @@ function CityForm({ onDone }: { onDone: () => void }) {
     const ok = await resolveByCity(cityInput.trim());
     setBusy(false);
     if (ok) onDone();
-    else setErr("没找到这个城市，换个写法试试");
+    else setErr("没找到这个城市，换个写法试试。");
   }
   return (
     <>
@@ -131,7 +131,7 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
             <LocationPin />
             <span className="serif text-[0.95rem] font-medium text-ink-soft">没拿到你的位置</span>
           </div>
-          <p className="serif mt-1.5 text-[0.88rem] text-ink-faint">告诉我你在哪座城市，我来感知今天的天气。</p>
+          <p className="serif mt-1.5 text-[0.88rem] text-ink-faint">你在哪座城市？氛寸来感知今天的天气。</p>
           <CityForm onDone={() => {}} />
           <button onClick={resolveByCoords} className="mt-2.5 text-xs text-ink-faint underline-offset-2 hover:underline">
             或再试一次自动定位

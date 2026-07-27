@@ -113,7 +113,7 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         </div>
 
         <p className="mt-5 text-[0.72rem] leading-relaxed text-ink-faint">
-          社交距离约「{DISTANCE_LABEL[p.sillageTier]}」。数据来自社区投票，浓度等未标注项以官方为准。
+          社交距离「{DISTANCE_LABEL[p.sillageTier]}」来自社区投票，是多数评价者的感受；浓度等未标注项以官方为准。
         </p>
       </div>
     </div>
