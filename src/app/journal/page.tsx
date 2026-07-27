@@ -51,6 +51,8 @@ export default function JournalPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* 同今日页：月份那一行是 h2（它随翻页变），页面本身的标题用视觉隐藏的 h1 补齐 */}
+      <h1 className="sr-only">香历 · 你的穿香记录</h1>
       {/* 月导航 */}
       <div className="card px-5 py-4">
         <div className="flex items-center justify-between">
