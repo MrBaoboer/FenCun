@@ -33,7 +33,7 @@ Please include, if possible: affected page / endpoint, reproduction steps, impac
 
 - **No backend database** — the shelf, journal, and feedback live only in the user's browser `localStorage`; no user data is stored server-side.
 - **Server-side secrets** — QWeather / DeepSeek keys are used only in server Route Handlers and never sent to the client.
-- **API proxies** — `/api/context`, `/api/explain`, `/api/parse-intent` have built-in rate limiting and graceful degradation, with input length caps.
+- **API proxies** — `/api/context`, `/api/explain`, `/api/parse-intent` have built-in rate limiting and graceful degradation; `/api/explain` and `/api/parse-intent` additionally cap input length.
 
 So the most valuable areas to look at are usually: the abuse / injection surface of the proxy routes, dependency-chain vulnerabilities, and any path that could leak server-side secrets.
 

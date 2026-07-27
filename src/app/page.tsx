@@ -86,6 +86,10 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* 今日页的视觉开头是情境条（问候语随天气变），设计上刻意没有页面标题。
+          但"没有 h1"对屏幕阅读器和搜索引擎都是缺一个入口——首页此前全站唯一的标题层级是一个 h3。
+          用视觉隐藏的 h1 补上语义，不动已经立住的版面。 */}
+      <h1 className="sr-only">今日 · 从你的香柜里挑一瓶，并告诉你怎么喷</h1>
       <ContextBar ctx={ctx} />
 
       {hydrated && lib.length > 0 && ctx && nudges.length > 0 && (
@@ -111,7 +115,7 @@ export default function TodayPage() {
         <EmptyShelf />
       ) : !ctx ? (
         <p className="serif px-1 text-[0.82rem] leading-relaxed text-ink-faint">
-          等你的此刻天气到位，氛寸就为你从香柜里挑一瓶。
+          等此刻的天气到位，氛寸就从你的香柜里挑一瓶。
         </p>
       ) : activePick ? (
         <>
@@ -130,6 +134,7 @@ export default function TodayPage() {
             explainSource={explain.source}
             onChangeBottle={() => setSheetOpen(true)}
             onReset={() => setSelectedId(null)}
+            allAvoid={rec?.allAvoid ?? false}
           />
           {/* 无香场合建议的是"今天不用"——既不该给备选（换哪瓶都一样不该用），
               也不该问「今天，刚好吗」（今天根本没喷，这个问题不成立） */}

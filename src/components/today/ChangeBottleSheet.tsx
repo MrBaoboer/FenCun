@@ -28,7 +28,7 @@ export function ChangeBottleSheet({
         aria-modal="true"
         aria-label="换一瓶：从你的香柜里选"
         tabIndex={-1}
-        className="relative z-10 flex max-h-[72vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-card border border-line bg-surface shadow-float outline-none md:rounded-card"
+        className="relative z-10 flex max-h-[72vh] w-full max-w-md animate-fade-up flex-col overflow-hidden rounded-t-card border border-line bg-surface pb-[env(safe-area-inset-bottom,0px)] shadow-float outline-none md:rounded-card md:pb-0"
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>

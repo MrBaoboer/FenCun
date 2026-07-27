@@ -45,7 +45,7 @@ npm run dev                  # http://localhost:3000
 
 ```bash
 npm run lint    # 代码风格
-npm test        # 引擎 / 香历 / 搜索单测：改了 scoring / usage / recommend / journal / 搜索逻辑必须让它过，并补相应用例
+npm test        # 引擎 / 香历 / 搜索 / 存储单测：改了 scoring / usage / recommend / journal / 搜索或存储逻辑必须让它过，并补相应用例
 npm run build   # 确保能构建
 ```
 

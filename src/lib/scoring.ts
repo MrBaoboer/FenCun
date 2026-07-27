@@ -67,6 +67,38 @@ function maxStrength(p: Perfume, names: readonly string[]): number {
   return Math.max(0, ...names.map((n) => accStrength(p, n)));
 }
 
+/**
+ * 家族**主导度** = 该族最强项 ÷ 这瓶最强的 accord（0..1）。
+ *
+ * accord 的 strength 是相对**这一瓶自身轮廓**的排位强度，首位几乎总是 100，不是绝对浓度。
+ * 于是同一个「sweet=54」，在蓝风铃里只是第五位的一点甜尾（powdery 100 / musky 98 / green 95），
+ * 在烟草香草里却是 vanilla=100 的主体。拿绝对阈值判"这瓶厚不厚重"，必然把前者也判进去：
+ * 实测主目录 1500 款里有 855 款过了 ≥50 的绝对线，其中包括蓝风铃、信仰之水、旷野、
+ * 蔚蓝、绿爱尔兰花呢这些公认的清爽香。
+ *
+ * 这是 amber 混进甜桶那个归类错误的**下一层**：上次修的是「哪些键属于哪一族」，
+ * 这次修的是「某一族要占到多重，才配代表这瓶的气质」。同一族里换键还会再犯，
+ * 换成比例判据才是把这一类堵死。
+ *
+ * 0.75 不是拍的。对主目录全量实测，两簇之间有 0.29 的空档：
+ *   公认厚重  烟草香草 1.00 · 黑鸦片 1.00 · 天使 1.00 · 香水炸弹极致 1.00 · 红 540 0.97
+ *   公认清爽  绿爱尔兰花呢 0.68 · 旷野 0.59 · 信仰之水 0.55 · 蓝风铃 0.54 · 蔚蓝 0.53
+ * 门槛落在空档中央，±0.05 结论不变。
+ */
+export function familyDominance(p: Perfume, names: readonly string[]): number {
+  const top = Math.max(1, ...p.accords.map((a) => a.strength));
+  return maxStrength(p, names) / top;
+}
+
+/** 「这一族代表了这瓶的气质」的统一门槛 */
+export const DOMINANT = 0.75;
+
+/** 甜/树脂香膏是否主导这瓶——高温闷重判定与衣物留印提示共用同一条口径 */
+export function richDominates(p: Perfume, absMin: number): boolean {
+  const keys = [...F.sweet, ...F.balsamic];
+  return maxStrength(p, keys) >= absMin && familyDominance(p, keys) >= DOMINANT;
+}
+
 // 「不知道」不等于「满分」。
 // 原公式 当前季占比 ÷ 最高季占比 有一个致命性质：**分布越平坦，得分越高**。
 // 手动记录的香 seasonPct 是 0.25×4（我们诚实地不假装知道），代入后四季恒得 1.0——
@@ -194,7 +226,11 @@ export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: nu
   // 再经嗅觉的 Stevens 幂律（n≈0.2–0.3）传到主观强度只剩个位数百分比，就在最小可辨差附近。
   // 方向站得住，量级站不住。要标定只能靠用户反馈做 A/B，不能靠再拍一次脑袋。
   if (H > 0) {
-    if (anyStrength(p, heavy, 50)) hit("heavy_in_heat", 1 - 0.13 * H - 0.06 * M);
+    // 厚重要求这一族**主导**这瓶，而不只是越过绝对线（见 familyDominance）：
+    // 没有这道比例判据，蓝风铃（sweet 是它第五位的 54）会和烟草香草（vanilla=100）
+    // 拿到同一句「它偏厚重，今天的体感里要留意会不会闷」。
+    if (anyStrength(p, heavy, 50) && familyDominance(p, heavy) >= DOMINANT)
+      hit("heavy_in_heat", 1 - 0.13 * H - 0.06 * M);
     if (anyStrength(p, fresh, 45)) hit("fresh_in_heat", 1 + 0.12 * H);
   }
   // 冷侧两条**都没有物理支持**——按被引物理算，低温下低挥发材料被压制得更狠，方向甚至相反。
@@ -236,7 +272,7 @@ export function weatherMultiplier(p: Perfume, feel: Feel, tempC?: number, humidi
  *
  * 【B 类 · 风格与文化惯例】**没有任何可引用的消费者研究**。
  * 「职场偏清爽木质」「约会偏甜花」「运动要清新」——循证复核的结论是：这些是文化建构与社交惯例，
- * 不是科学。下面每一个加减分系数（0.4 / 0.42 / 0.3 / 0.22 …）都是编者先验，没有实证标定。
+ * 不是科学。下面每一个加减分系数（0.4 / 0.3 / 0.2 …）都是编者先验，没有实证标定。
  * 对应：各分支里所有按香调家族的加减分。
  *
  * 保留 B 类是正确的——它就是这个产品要提供的判断，用户要的正是"一个懂行的人会怎么选"。

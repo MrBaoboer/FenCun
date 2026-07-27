@@ -14,7 +14,7 @@ export const DISTANCE_LABEL: Record<1 | 2 | 3 | 4, string> = {
   4: "整间屋都是它",
 };
 export const DISTANCE_HINT: Record<1 | 2 | 3 | 4, string> = {
-  1: "适合电梯、会议、就医等密闭场合",
+  1: "适合电梯、会议等密闭场合",
   2: "正常社交距离可感，安全日常",
   3: "同桌或小房间能闻到，注意场合",
   4: "户外、夜场加分，密闭空间慎用",

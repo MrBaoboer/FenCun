@@ -33,7 +33,7 @@
 
 - **无后端数据库**：香柜、香历与反馈只存在用户浏览器的 `localStorage`，服务端不保存用户数据。
 - **服务端密钥**：和风天气 / DeepSeek 密钥仅在服务端 Route Handler 使用，不下发到前端。
-- **API 代理**：`/api/context`、`/api/explain`、`/api/parse-intent` 已内置**限流与优雅降级**，并对输入长度设上限。
+- **API 代理**：`/api/context`、`/api/explain`、`/api/parse-intent` 已内置**限流与优雅降级**；`/api/explain` 与 `/api/parse-intent` 另对输入长度设上限。
 
 所以最值得先看的，通常是：代理路由的滥用 / 注入面、依赖链漏洞，以及任何可能泄露服务端密钥的路径。
 

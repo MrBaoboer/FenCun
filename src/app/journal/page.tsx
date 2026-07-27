@@ -51,6 +51,8 @@ export default function JournalPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* 同今日页：月份那一行是 h2（它随翻页变），页面本身的标题用视觉隐藏的 h1 补齐 */}
+      <h1 className="sr-only">香历 · 你的穿香记录</h1>
       {/* 月导航 */}
       <div className="card px-5 py-4">
         <div className="flex items-center justify-between">
@@ -121,7 +123,7 @@ export default function JournalPage() {
 
         {monthStats && (
           <p className="mt-3 border-t border-line pt-3 text-[0.76rem] text-ink-faint">
-            本月记香 {monthStats.days} 天 · 最常穿『{monthStats.topName}』
+            本月记香 {monthStats.days} 天 · 最常穿「{monthStats.topName}」
             {monthStats.topCount > 1 ? `（${monthStats.topCount} 次）` : ""}
           </p>
         )}

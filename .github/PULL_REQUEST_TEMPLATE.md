@@ -20,7 +20,7 @@
 
 ## 检查清单 / Checklist
 
-- [ ] 守住[四条戒律](.github/CONTRIBUTING.md)：不伪精确 · 不过度设计 · 轻冷启动 · 有反馈闭环
+- [ ] 守住[四条戒律](https://github.com/MrBaoboer/FenCun/blob/main/.github/CONTRIBUTING.md)：不伪精确 · 不过度设计 · 轻冷启动 · 有反馈闭环
 - [ ] `npm run lint` 通过 / passes
 - [ ] `npm test` 通过（改了引擎已补用例）/ passes (added cases for engine changes)
 - [ ] `npm run build` 通过 / passes

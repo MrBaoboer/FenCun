@@ -49,13 +49,6 @@ export function daypartFromHour(hour: number): Daypart {
   return hour >= 6 && hour < 18 ? "day" : "night";
 }
 
-export const SEASON_ZH: Record<Season, string> = {
-  winter: "冬",
-  spring: "春",
-  summer: "夏",
-  autumn: "秋",
-};
-
 export const FEEL_ZH: Record<Feel, string> = {
   hot_humid: "闷热潮湿",
   hot_dry: "干热",

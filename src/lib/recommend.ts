@@ -1,6 +1,6 @@
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
-import type { Perfume, Context, ScoredPick, Verdict, Bias, Feedback, Occasion, SuccessConfig } from "./types";
-import { score, sweetness, balsamicWeight, type ScoreParts } from "./scoring";
+import type { Perfume, Context, ScoredPick, Verdict, AvoidCause, Bias, Feedback, Occasion, SuccessConfig } from "./types";
+import { score, richDominates, dataConfidence, type ScoreParts } from "./scoring";
 
 /** 单个 accord 强度（留印风险判定用） */
 const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
@@ -38,17 +38,33 @@ export function swapPenalty(swapAwayTs: number[] | undefined, now: number): numb
 }
 
 // 用香裁决 —— 不迁就用户：确实不合的场景明确判 avoid
-function computeVerdict(p: Perfume, ctx: Context, parts: ScoreParts, risks: string[]): Verdict {
+function computeVerdict(
+  p: Perfume,
+  ctx: Context,
+  parts: ScoreParts,
+  risks: string[]
+): { verdict: Verdict; avoidCause: AvoidCause | null } {
   // 无香场合：无论哪一瓶都判 avoid。这不是"这瓶不合适"，是"今天哪瓶都不合适"
-  if (ctx.fragranceFree) return "avoid";
+  if (ctx.fragranceFree) return { verdict: "avoid", avoidCause: "fragrance_free" };
   const entries = Object.entries(p.seasonPct) as [keyof typeof p.seasonPct, number][];
   const best = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
-  const seasonMiss = best[0] !== ctx.season && best[1] - p.seasonPct[ctx.season] >= 0.22;
+  // 反季判定必须过票数门槛，和它对应的那句风险文案用**同一道**闸（usage.ts:computeRisks）。
+  // 原来只有文案有门槛、裁决没有，于是低票记录会走到一个荒唐的位置上：
+  // 判了「今天不建议」，却一条风险都说不出来——实测扩展集 35990 条里有 3874 条正处在这个状态，
+  // 而解释位还挂着「和今天比较合拍」。主目录一条都没有（票数高，恒过门槛），
+  // 所以这个洞只在"搜冷门香入柜"这条最常见的路径上暴露。
+  // 更根本的问题是：avoid 是输出最强、最不可逆的一档，却由三五十票的噪声分布驱动。
+  const seasonKnown = !p.custom && !p.lowVotes && dataConfidence(p) >= 0.75;
+  const seasonMiss = seasonKnown && best[0] !== ctx.season && best[1] - p.seasonPct[ctx.season] >= 0.22;
   const closed = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
   const tooLoudClosed = p.sillageTier === 4 && closed;
-  if (parts.weather <= 0.82 || seasonMiss || tooLoudClosed) return "avoid";
-  if (risks.length > 0 || parts.weather < 0.95) return "caution";
-  return "good";
+  // 成因随裁决一起带出来，顺序即优先级：天气最强、其次反季、最后场地。
+  // 下游只认这个字段，不许再从 parts 的数值反推——数值说得出"扣了分"，说不出"因为什么"。
+  if (parts.weather <= 0.82) return { verdict: "avoid", avoidCause: "weather" };
+  if (seasonMiss) return { verdict: "avoid", avoidCause: "season" };
+  if (tooLoudClosed) return { verdict: "avoid", avoidCause: "venue" };
+  if (risks.length > 0 || parts.weather < 0.95) return { verdict: "caution", avoidCause: null };
+  return { verdict: "good", avoidCause: null };
 }
 
 export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
@@ -58,7 +74,7 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   // ⚠️ 裁决必须在追加织物提示**之前**算完。
   // computeVerdict 的规则是 risks.length > 0 → caution，而织物留印是**提示**不是"这瓶今天要留意"——
   // 若先追加再判，所有封闭场合（通勤/上班/正式，恰恰是最常见的那几个）都会被无端降级成 caution。
-  const verdict = computeVerdict(p, ctx, parts, risks);
+  const { verdict, avoidCause } = computeVerdict(p, ctx, parts, risks);
   // 建议喷衣物时，把真实存在的那个代价一并说了：高浓度乙醇 + 香精油脂 + 有色浸膏的光氧化黄变，
   // 对真丝、醋酸纤维和浅色外层是实打实的留印风险【行业惯例】。
   // 放在这里而不是 computeRisks 里，是为了避免把 placement 的判定逻辑抄第二份——
@@ -66,7 +82,13 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   // 只对**真的会留印**的组分提示。机制是有色浸膏、树脂与香草醛的油渍及光氧化黄变，
   // 清爽柑橘/水生本来就不在其列。不收窄的话，夏天几乎每张卡都建议喷衣物，
   // 这句就会变成每次都出现的噪音——一条永远出现的提示等于没有提示。
-  const stainRisk = Math.max(sweetness(p), balsamicWeight(p)) >= 40 || accordAt(p, "tobacco") >= 40;
+  //
+  // 只用绝对阈值收得**不够**：实测主目录 1500 款里 967 款（64.5%）过线，
+  // 连蓝风铃（sweet 是第五位的 54）和旷野（Ambroxan 干琥珀 59）都在内——
+  // 那句"永远出现的提示"其实一直在出现。所以判据换成"甜/树脂香膏是否主导这瓶"
+  // （richDominates，见 scoring.ts:familyDominance），过线降到 590 款（39.3%）。
+  // tobacco 单列且仍用绝对阈值：烟草的焦油质地本身就会在织物上留色，不问它占多重。
+  const stainRisk = richDominates(p, 40) || accordAt(p, "tobacco") >= 40;
   if (stainRisk && usage.placement.some((x) => x.includes("衣物"))) {
     risks.push("喷衣物请选内衬，避开真丝、醋酸和浅色外层——它的树脂与浸膏可能留印子。");
   }
@@ -93,6 +115,7 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
     risks,
     reasons,
     verdict,
+    avoidCause,
   };
 }
 
@@ -108,7 +131,13 @@ export function recommend(
   ctx: Context,
   biasMap?: Map<number, Bias>,
   extras: RecommendExtras = {}
-): { primary: ScoredPick | null; alternatives: ScoredPick[]; ranked: ScoredPick[] } {
+): {
+  primary: ScoredPick | null;
+  alternatives: ScoredPick[];
+  ranked: ScoredPick[];
+  /** 柜里今天没有一瓶判 good/caution——UI 必须换一套说法，不能继续叫「今日之选」 */
+  allAvoid: boolean;
+} {
   const now = extras.now ?? Date.now();
   const daySeed = extras.daySeed ?? 0;
 
@@ -146,9 +175,24 @@ export function recommend(
   // 于是"库里最合适的那瓶"被压下去、被自己判了 avoid 的那瓶浮上来当主推——
   // 卡片右上角挂着「今天不建议」，解释开头写着「说实话，今天不太建议用它」。
   // 排序照旧，但主推必须跳过 avoid：宁可推第二合适的，也不当场自相矛盾。
-  const primary = ranked.find((r) => r.verdict !== "avoid") ?? ranked[0] ?? null;
+  const firstOk = ranked.find((r) => r.verdict !== "avoid") ?? null;
+  // 全柜今天没有一瓶合适，是一个**真实且必须说出口**的结论，不是一个要遮掩的边界情况。
+  // 此前用 `?? ranked[0]` 兜底，把上面这段注释明令禁止的自相矛盾又放了回来：
+  // 卡片眉标写着「今日之选」，正文写着「说实话，今天不太建议用它」，下面照挂喷量与留香。
+  // 现在把这件事升成一个状态交给 UI（见 app/page.tsx 的 allAvoid 分支）：
+  // 依然给出"真要用就这么用"的那一瓶，但绝不把它称作今日之选。
+  const allAvoid = ranked.length > 0 && firstOk === null;
+  const primary = firstOk ?? ranked[0] ?? null;
   // 注意：primary 不再必然是 ranked[0]，rest 只能按身份剔除，不能再用 slice(1)
-  const rest = primary ? ranked.filter((r) => r !== primary) : [];
+  //
+  // 备选同样要过 avoid 滤网。一票否决此前只做了主推位，备选位漏了——
+  // 实测 300 组随机香柜 × 随机情境，42.7% 的情境里「也可以考虑」至少有一瓶是引擎自己判
+  // 「今天不建议」的，而 AltList 根本不显示裁决，用户点下去就是采纳、直接记进香历。
+  // 「也可以考虑」这个标题下面不该出现产品自己反对的选项；不足 3 条就少给，备选不必凑满。
+  // 例外是全柜皆 avoid：那时滤掉就一条不剩，反而不如把同样处境的其它瓶列出来让人自己挑。
+  const rest = primary
+    ? ranked.filter((r) => r !== primary && (allAvoid || r.verdict !== "avoid"))
+    : [];
   const alternatives: ScoredPick[] = [];
   const usedBrand = new Set(primary ? [primary.perfume.brand] : []);
   // 第一趟：优先换品牌，制造"另一种选择"的感觉
@@ -164,7 +208,7 @@ export function recommend(
     if (alternatives.includes(pk)) continue;
     alternatives.push(pk);
   }
-  return { primary, alternatives, ranked };
+  return { primary, alternatives, ranked, allAvoid };
 }
 
 // 由反馈聚合为个人偏置（简单、可感、不需大数据）。

@@ -28,7 +28,10 @@ jobs:
       - name: Install
         run: npm ci
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        # 只审生产依赖——门禁要挡的是发出去的代码。开发链路那批 brace-expansion 公告
+        # 在当前依赖树里无解：eslint-config-next 内置的 eslint-plugin-* 锁着 minimatch@3，
+        # 而 minimatch@3 吃不了改成命名导出的 brace-expansion@5，1.x 又没有补丁版。
+        run: npm audit --audit-level=high --omit=dev
       - name: Lint
         run: npm run lint
       - name: Test (engine unit tests)

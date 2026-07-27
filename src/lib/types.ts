@@ -143,7 +143,17 @@ export interface ScoredPick {
   risks: string[];
   reasons: string[]; // 规则生成的要点，DeepSeek 不可用时即为兜底解释
   verdict: Verdict; // 用香裁决：good 推荐 / caution 留意 / avoid 今天不建议
+  /**
+   * avoid 的成因（其余裁决为 null）。**归因必须在算的那一刻带出来**——
+   * 这是 scoring.ts:WeatherTone 已经确立的纪律，此处是把它贯彻到裁决层。
+   * 下游（发现型钩子的眉标）此前无从得知"为什么不建议"，只能写死「天气突变」，
+   * 于是 20℃ 多云的一天也会弹出「天气突变」，正文却在说会议室或反季。
+   */
+  avoidCause: AvoidCause | null;
 }
+
+/** 判「今天不建议」的四种成因，与 computeVerdict 的四条触发一一对应 */
+export type AvoidCause = "weather" | "season" | "venue" | "fragrance_free";
 
 export interface UserPerfume {
   perfumeId: number;

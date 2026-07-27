@@ -105,7 +105,15 @@ export function SearchAdd() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            // 扩展索引（gzip 748KB + 主线程建索引，桌面实测 330–580ms）此前是在**敲下第一个字符**
+            // 时才开始下载与建索引的，正好压在用户打字最密集的那两秒里。
+            // 「搜名字秒添加」是产品红线，这里把它提前到手指还在移向键盘的那几百毫秒。
+            // fire-and-forget：loadExtSearch 内部有单例缓存，重复调用不会重复下载；
+            // 失败也不处理——真正的取舍与降级仍由下面那条 q-effect 负责。
+            void loadExtSearch();
+          }}
           placeholder="搜香名 / 品牌 / 香调，点一下就入柜"
           className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
         />

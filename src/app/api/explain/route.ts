@@ -49,7 +49,7 @@ const ExplainSchema = z.object({
   reasons: z.array(z.string().max(140)).max(8),
   risks: z.array(z.string().max(180)).max(8),
 });
-type ExplainInput = z.infer<typeof ExplainSchema>;
+export type ExplainInput = z.infer<typeof ExplainSchema>;
 
 const SYSTEM = `你是"氛寸"——一个懂香水、懂场景、有分寸感的用香顾问。你的任务：把下面这些"已经由规则引擎算好的客观事实"，组织成一段自然、有温度、像懂行朋友会说的中文话。
 
@@ -65,20 +65,23 @@ const SYSTEM = `你是"氛寸"——一个懂香水、懂场景、有分寸感�
    · avoid：这瓶今天其实不合适——**必须先明确说出"今天其实不太建议用这瓶"，并用给定的风险/天气/季节事实说清为什么**，绝不为讨好用户假装它合适；然后话锋一转，给一句"但你今天要是就想用它，可以这样把影响降到最低：…"，用我给的用法（减量/贴肤/挪喷洒位置）。诚实比迁就更重要。
 7. 若给了"场景"字段（用户用自然语言描述的具体场合），要让解读**贴着这个场景**说话，呼应它的社交关系与分寸（如"初见投资人这种场合，稳一点更好"），别泛泛而谈。`;
 
-function template(input: ExplainInput): string {
+// 导出是为了可测：这是五条降级路径（无 key / 限流 / 日闸门 / 上游非 200 / 空文本 /
+// avoid 语义防线 / 数字白名单 / catch）的共同落点，也是「反伪精确」在 LLM 不可用时的兜底。
+// 纯函数、零副作用，导出不改变任何运行时行为。
+export function template(input: ExplainInput): string {
   const c = input.context;
   if (input.verdict === "avoid") {
-    const why = input.risks[0] || "它和此刻的天气或场合不太合拍";
-    // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）没有"减到最低"的版本，
-    // 不能拼出"就今天不用、只喷"这种残句，更不能劝用户"你要是就想用它"。
+    // 无香场合（喷洒位置为空 = 引擎给的是"今天不用"）：risks[0] 本身就是完整的一句话，
+    // 直接用它，不再补一句同义的"留在家里"；更不能劝用户"你要是就想用它"。
     if (input.usage.placement.length === 0) {
-      return `${why}今天把它留在家里，是更稳妥的选择。`;
+      return input.risks[0] || "今天的场合对气味格外敏感，把香水留在家里是更稳妥的选择。";
     }
-    return `说实话，今天不太建议用${input.name}——${why}。你要是今天就想用它，就${input.usage.spraysLabel}、只喷${input.usage.placement.join("、")}，把存在感压到最低。`;
+    const why = (input.risks[0] || "它和此刻的天气或场合不太合拍").replace(/。$/, "");
+    return `说实话，今天不太建议用「${input.name}」——${why}。你要是今天就想用它，就只喷 ${input.usage.spraysLabel}（${input.usage.placement.join("、")}），把存在感压到最低。`;
   }
   const parts: string[] = [`今天${c.city}${c.weatherText}、${Math.round(c.tempC)}℃。`];
-  if (input.reasons.length) parts.push(input.reasons[0] + "。");
-  parts.push(`建议喷 ${input.usage.spraysLabel}，喷在${input.usage.placement.join("、")}，留香${input.usage.durationHint}。`);
+  if (input.reasons.length) parts.push(input.reasons[0].replace(/。$/, "") + "。");
+  parts.push(`建议喷 ${input.usage.spraysLabel}，喷在${input.usage.placement.join("、")}；${input.usage.durationHint}。`);
   if (input.risks.length) parts.push(input.risks[0]);
   return parts.join("");
 }

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteNotice } from "@/components/SiteNotice";
 
 const NAV = [
   { href: "/", label: "今日" },
@@ -50,9 +51,13 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </div>
+        <SiteNotice />
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-28 pt-7 md:pb-16">{children}</main>
+      {/* tabIndex={-1}：弹层关闭时若触发元素已被卸载，焦点退到这里而不是掉回 <body>（见 useDialogA11y） */}
+      <main tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 px-6 pb-28 pt-7 outline-none md:pb-16">
+        {children}
+      </main>
 
       {/* 移动端 —— 悬浮胶囊分段导航 */}
       <nav className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] z-30 flex justify-center px-6 md:hidden">

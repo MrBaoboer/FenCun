@@ -39,13 +39,13 @@ cp .env.example .env.local   # add your own QWeather / DeepSeek keys
 npm run dev                  # http://localhost:3000
 ```
 
-See the project layout in the README's "目录结构" (directory structure) section.
+See the project layout in the [README's "目录结构" (directory structure) section](../README.md#目录结构).
 
 ## Pre-submit checklist
 
 ```bash
 npm run lint    # code style
-npm test        # engine / journal / search unit tests (must pass if you touched the corresponding modules — add cases too)
+npm test        # engine / journal / search / store unit tests (must pass if you touched the corresponding modules — add cases too)
 npm run build   # make sure it builds
 ```
 

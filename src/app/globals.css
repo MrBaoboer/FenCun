@@ -124,11 +124,14 @@ html[data-theme="night"] {
   }
 
   /* 眉标：Fraunces 大写、宽字距、金色（浅色版更深，够醒目） */
+  /* 眉标：大写 + 0.24em 字距是全站的标识性排版装置，但字号是有下限的——
+     0.64rem 折合 10.24px，中文在这个尺寸上已经开始糊。抬到 0.68rem 保住装置本身，
+     同时把最小可读字号从 9.28px（Stat 曾经的 !text-[0.58rem] 覆盖）拉起来。 */
   .eyebrow {
     font-family: var(--font-display);
     letter-spacing: 0.24em;
     text-transform: uppercase;
-    font-size: 0.64rem;
+    font-size: 0.68rem;
     color: var(--color-accent);
     font-weight: 600;
   }
@@ -195,4 +198,11 @@ html.theme-switching, html.theme-switching *, html.theme-switching *::before, ht
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up, .animate-fade-in, .bar-grow { animation: none; }
+}
+
+/* iOS Safari 会在聚焦字号 <16px 的输入框时强制放大整页，而且**不会自动缩回**——
+   用户被留在一个横向溢出的版面里，得自己双指缩回去。全站六个输入框此前都在 16px 以下。
+   只在触屏窄屏生效：桌面端保留原本更紧凑的排版密度。type=file 不参与（它不接受键入）。 */
+@media (max-width: 767px) {
+  input:not([type="file"]), textarea, select { font-size: 16px; }
 }

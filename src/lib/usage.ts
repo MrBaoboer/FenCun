@@ -34,8 +34,8 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 这是全引擎唯一一条建议"不用"的规则，也是依据最好的一条——
   // 约三分之一人群报告对香味制品有不良反应，多国医疗机构对访客有明确无香要求。
   // 放在最前面是有意的：任何个人偏好、成功配置、场合加成都不该把它覆盖掉。
-  // 注意 format.ts 的 DISTANCE_HINT[1] 早就写着"适合电梯、会议、就医等密闭场合"，
-  // 却一直没有任何规则兑现"就医"这两个字——这条补的正是那个承诺缺口。
+  // （format.ts 的 DISTANCE_HINT[1] 因此不把"就医"列为贴肤香的适用场合——
+  // 就医场合的答案是"今天不用"，不是"选贴肤的"。）
   if (ctx.fragranceFree) {
     return {
       sprays: [0, 0],
@@ -80,20 +80,36 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   }
   // 餐桌场合：气味干扰味觉，收一档
   if (ctx.meal) hi = Math.max(lo, hi - 1);
+  // 高张力场合（前任婚礼 / 谈判 / 见家长）：目标是"不被记住是因为香水"，一律再收一档
+  if (ctx.tension === "high") hi = Math.max(lo, hi - 1);
+  if (ctx.avoid?.includes("too_strong")) {
+    lo = Math.max(1, lo - 1);
+    hi = Math.max(lo, hi - 1);
+  }
   // 甜重/浓白花 × 强扩散 × 通勤会议：容易显得用力过猛，压到 1 下（与风险文案一致）
   if (overdressedCombo(p, ctx)) {
     lo = 1;
     hi = 1;
   }
+  lo = Math.max(1, Math.min(lo, hi));
+  hi = Math.max(lo, hi);
+
+  // ── 安全上限在这里定死 ──────────────────────────────────────────────
+  // 到这里为止的 hi 是"这个场合 × 这个天气 × 这瓶香，最多能喷几下"。
+  // 它由封闭空间、餐桌、高张力、闷热、用力过猛组合这几道**安全阀**共同压出来，与个人偏好无关。
+  //
+  // ⚠️ 这一行的位置就是它的全部意义。原先它在个人偏好之后取值，于是偏好把闸抬起来之后，
+  // 抬起来的那个值反过来成了"安全上限"——闸门自己被它要防的东西顶开了。
+  // 实测（烟草香草 / 通勤 / 20℃，overdressedCombo 三条全中，风险文案写着「压到 1 下」）：
+  //   纯净 = 1 下 · 场景写了「想被注意到」= 1–2 下 · 历史两次「淡了点」= 1–2 下 · 两者叠加 = 1–3 下
+  // 同一张卡上「压到 1 下」和「1–3 下」并排出现。手册把礼仪/公共卫生取向的规则列为 A 类，
+  // 个人偏好是 B 类，B 类不该覆盖 A 类。
+  const safetyCap = hi;
+
+  // ── 个人偏好：可升可降，但一律不得越过 safetyCap ────────────────────
   // 自然语言场景：想贴身则收一档、想被注意到可略增
-  if (ctx.intimacy === "close") hi = Math.max(lo, hi - 1);
+  if (ctx.intimacy === "close") hi = Math.max(1, hi - 1);
   if (ctx.intimacy === "broadcast") hi = Math.min(hi + 1, 5);
-  if (ctx.avoid?.includes("too_strong")) {
-    lo = Math.max(1, lo - 1);
-    hi = Math.max(lo, hi - 1);
-  }
-  // 高张力场合（前任婚礼 / 谈判 / 见家长）：目标是"不被记住是因为香水"，一律再收一档
-  if (ctx.tension === "high") hi = Math.max(lo, hi - 1);
   // 反馈闭环：你多次觉得"太冲"(perceivedStrength>0)→少喷；"太淡"(<0)→多喷。兑现"下次帮你少喷半下"
   const ps = bias?.perceivedStrength ?? 0;
   if (ps >= 0.4) {
@@ -102,13 +118,9 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   } else if (ps <= -0.4) {
     hi = Math.min(hi + 1, 5);
   }
-  // 不变式收口：任何修正路径都不允许出现 "2–1 下" 这种反向区间
+  // 收口：偏好只能在安全上限之内活动；同时任何路径都不允许出现 "2–1 下" 这种反向区间
+  hi = Math.min(hi, safetyCap);
   lo = Math.max(1, Math.min(lo, hi));
-  hi = Math.max(lo, hi);
-
-  // 到这里为止得出的 hi 是"这个场合 × 这个天气 × 这瓶香，最多能喷几下"的安全上限。
-  // 它由封闭空间、餐桌、闷热、用力过猛组合等安全阀共同压出来，与个人偏好无关。
-  const safetyCap = hi;
 
   // 成功配置复用：同温度档 × 同场合你反馈过「刚好」→ 按那次的量来。
   // 但它只能在安全上限之内复用——"上次刚好"记的是上次的场合，覆盖不了今天更封闭的会议室、
@@ -157,7 +169,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 「发梢少量」是用户无法执行的指令（少量是多少？），喷梳子再梳过去是同等效果、几乎零风险的替代。
   // 高温时整条去掉，理由是出汗与投射失控，**不是"酒精伤发"**——那句是没有依据的美妆口头禅。
   if (ctx.occasion === "date" && sil < 2.8 && !hotFeel) {
-    placement.push("喷一下梳子，再梳过发尾");
+    placement.push("发尾（喷在梳子上，再梳过去）");
   }
   if (hotFeel) {
     placement = placement
@@ -302,8 +314,19 @@ export function buildReasons(
   if (parts.season >= 0.85 && parts.confidence >= 0.75 && !p.custom && !p.lowVotes) {
     r.push(`正是它的主场季——社区投票里它更偏${SEASON_NAME[ctx.season]}`);
   }
-  const wp = WEATHER_PHRASE[parts.weatherTone](topAccords);
-  if (wp) r.push(wp);
+  // 降级情境（拒绝定位 / 接口失败）下**一个字都不许提天气**。
+  // 那时 tempC 是我们按季节填的代表值（夏 27℃ / 冬 6℃，见 hooks.ts:useResolvedContext），
+  // 天气乘子照常算出来，于是模板会写出「正合今天的天气」「在今天这个温度里更立得住」——
+  // 而同一屏的顶部横幅正写着「还没拿到天气，先按季节 · 时段为你推荐」。
+  // 实测降级情境各 200 组随机香柜：夏 92%、冬 88.5% 的解读里出现了这类断言。
+  // hooks.ts:61 自己写下的不变式是"不冒充的是实时天气"——预警和 LLM 都关掉了，这条模板出口漏了。
+  //
+  // 降级时我们确实知道季节，所以不是闭嘴，而是**只说知道的那部分**：
+  // 季节主场那一句照常给（它由 seasonPct 得出，与天气无关），天气这一句整条跳过。
+  if (!ctx.approximate) {
+    const wp = WEATHER_PHRASE[parts.weatherTone](topAccords);
+    if (wp) r.push(wp);
+  }
   if (parts.occasion >= 0.8) r.push(`风格（${p.styleTags.join("·")}）贴合${ctx.occasion === "date" ? "约会" : "今天的场合"}`);
   if (p.custom) r.push(`这瓶是你手动记录的，按所选香调的典型情况估计，用两次并反馈后会更准`);
   else if (p.lowVotes) r.push(`这瓶的社区数据还少，判断偏保守，你的反馈会让它更准`);
