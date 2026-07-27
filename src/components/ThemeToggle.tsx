@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"day" | "night" | null>(null);
 
-  // 单一事实源是 <html data-theme>：AppProvider 的分钟节拍可能自动翻转昼夜，
-  // 这里用 MutationObserver 跟随，图标/aria-label 才不会与实际主题脱节
+  // 单一事实源是 <html data-theme>（首帧由 layout 内联脚本定，默认明韵）。
+  // 这里用 MutationObserver 跟随而不是自持一份状态：外部改写 data-theme 时
+  //（截图脚本会直接设，将来若加别的入口同理）图标与 aria-label 不会和实际主题脱节。
   useEffect(() => {
     const read = () =>
       setTheme((document.documentElement.dataset.theme as "day" | "night") || "day");
@@ -36,7 +37,9 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === "night" ? "切到明韵" : "切到暗香"}
       title={theme === "night" ? "切到明韵" : "切到暗香"}
-      className="text-ink-faint transition-colors hover:text-accent"
+      /* 图标只有 19×19，热区靠 ::after 撑到 44×44（全站既有写法，见 ChangeBottleSheet 的关闭钮）。
+         视觉不变，手指点得中。 */
+      className="relative text-ink-faint transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-accent"
     >
       {theme === "night" ? (
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none">

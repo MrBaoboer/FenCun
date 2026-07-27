@@ -18,10 +18,41 @@ export function useDialogA11y(open: boolean, onClose: () => void): RefObject<HTM
     if (!open) return;
     const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panelRef.current?.focus();
+    // 焦点陷阱：声明了 aria-modal="true" 就等于向辅助技术承诺"面板之外的东西现在不存在"。
+    // 没有陷阱时 Tab 会走进背景里那些视觉上被遮住、语义上仍可聚焦的控件（实测 27 个），
+    // 键盘用户看不见焦点在哪，也走不回来——这比不声明 aria-modal 更糟。
+    const focusables = () => {
+      const panel = panelRef.current;
+      if (!panel) return [] as HTMLElement[];
+      const sel =
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+      // offsetParent 为 null = 被 display:none 折叠；position:fixed 例外，故一并放行
+      return [...panel.querySelectorAll<HTMLElement>(sel)].filter(
+        (el) => el.offsetParent !== null || getComputedStyle(el).position === "fixed"
+      );
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
         closeRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) {
+        e.preventDefault();
+        panelRef.current?.focus();
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panelRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -30,7 +61,14 @@ export function useDialogA11y(open: boolean, onClose: () => void): RefObject<HTM
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
-      prevFocus?.focus();
+      // 焦点还给触发元素——但「选定后关闭」这条路径上，触发元素往往已经被 React 卸下或换掉了
+      // （换一瓶 → 推荐卡整块重渲染）。对一个脱离了文档的节点调 focus() 是空操作，
+      // 焦点于是掉回 <body>，键盘用户被扔回页面最顶端。所以先确认它还在文档里，
+      // 不在就退到主内容容器——那里离用户刚才的位置最近。
+      requestAnimationFrame(() => {
+        if (prevFocus && document.contains(prevFocus)) prevFocus.focus();
+        else document.querySelector<HTMLElement>("main")?.focus();
+      });
     };
   }, [open]);
   return panelRef;
@@ -80,8 +118,12 @@ export function AccordBar({ zh, strength }: { zh: string; strength: number }) {
 export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
   return (
     <div className="flex flex-col items-center gap-2 text-center">
-      <span className="eyebrow eyebrow-mute !text-[0.58rem]">{label}</span>
-      <span className="serif text-[1.15rem] font-bold leading-none text-ink">{value}</span>
+      {/* 曾覆盖成 !text-[0.58rem]（9.28px）——中文在那个尺寸上读不动，去掉覆盖回到 .eyebrow */}
+      <span className="eyebrow eyebrow-mute">{label}</span>
+      {/* 375px 下三等分列宽约 93px：1.15rem 的「一整个白天」正好装不下而换行，
+          再叠 leading-none 就两行贴死。降到 1.08rem 让五字档位词一行放得下，
+          并把行高还回去——万一仍换行也不至于糊成一团。 */}
+      <span className="serif text-[1.08rem] font-bold leading-[1.2] text-ink">{value}</span>
       {sub && <span className="text-[0.68rem] leading-tight text-ink-faint">{sub}</span>}
     </div>
   );

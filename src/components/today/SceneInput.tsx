@@ -96,7 +96,7 @@ export function SceneInput() {
       <button
         type="submit"
         disabled={busy || !text.trim()}
-        className="shrink-0 text-accent transition-opacity disabled:text-ink-faint disabled:opacity-50"
+        className="relative shrink-0 text-accent transition-opacity after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] disabled:text-ink-faint disabled:opacity-50"
         aria-label="解析场景"
       >
         {busy ? (

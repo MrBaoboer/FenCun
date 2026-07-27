@@ -65,7 +65,8 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         aria-modal="true"
         aria-label={`香气档案：${np.primary}`}
         tabIndex={-1}
-        className="card relative z-10 max-h-[86vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none p-6 shadow-float outline-none md:rounded-card"
+        // pb 补 iOS 全面屏的底部安全区：不补的话，弹层末尾那几行会压在 Home 指示条底下
+        className="card relative z-10 max-h-[86vh] w-full max-w-md animate-fade-up overflow-y-auto rounded-b-none p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-float outline-none md:rounded-card md:pb-6"
       >
         <div className="flex items-start justify-between">
           <Eyebrow>香气档案 · Profile</Eyebrow>

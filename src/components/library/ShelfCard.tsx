@@ -24,7 +24,11 @@ export function ShelfCard({
       <button
         type="button"
         onClick={onOpen}
-        className="w-full cursor-pointer pr-14 text-left after:absolute after:inset-0 after:content-['']"
+        // 只有真的挂了角标才给它让位。原来无条件 pr-14（56px）：375px 下卡内宽仅 125px，
+        // 香名只剩 69px —— 连四个字的「烟草香草」都要被省略号截掉，而多数卡根本没有角标。
+        className={`w-full cursor-pointer text-left after:absolute after:inset-0 after:content-[''] ${
+          dusty ? "pr-14" : ""
+        }`}
       >
         <span className={`block truncate text-[1.08rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
           {np.primary}
