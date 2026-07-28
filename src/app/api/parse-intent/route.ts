@@ -88,6 +88,31 @@ export function heuristic(text: string) {
   return { occasion, formality, intimacy, avoid, tension, meal, fragranceFree, label };
 }
 
+/**
+ * 无香场合这条红线取**并集**：关键词判定说 true 就一定是 true，LLM 只能加不能减。
+ *
+ * 此前 LLM 一旦成功返回，上面那十三个关键词的判定就被整条丢弃——而这是全引擎
+ * 依据最好、后果最重的一条规则（就医 / 探病 → 今天不用香），它的可靠性不该
+ * 取决于模型这一次有没有想起来给 fragranceFree。启发式那条路专门为它写了守卫，
+ * 却只在 LLM 不可用时才跑，也就是说**平时它一次都不生效**。
+ *
+ * 方向本来就是不对称的：用户句子里出现「病房」而模型漏判，代价是推荐一个人
+ * 喷着香水进病房；反过来模型多判一次，代价只是今天少喷一瓶香。
+ * 不对称的代价，就不该用对称的规则去处理。
+ *
+ * 纯函数、零副作用，导出是为了可测。
+ */
+export function unionFragranceFree(
+  llm: { fragranceFree?: boolean; label: string },
+  heuristic: { fragranceFree: boolean; label: string }
+): { fragranceFree: boolean; label: string } {
+  const fragranceFree = Boolean(llm.fragranceFree) || heuristic.fragranceFree;
+  // 模型漏判时它的 label 多半也没提这件事，跟着兜底那句走——
+  // 否则会出现眉标写「探病·从容」、结论写「今天不用香」的错位。
+  const label = fragranceFree && !llm.fragranceFree ? heuristic.label : llm.label;
+  return { fragranceFree, label };
+}
+
 export async function POST(req: NextRequest) {
   let text = "";
   try {
@@ -132,8 +157,9 @@ export async function POST(req: NextRequest) {
     if (s < 0 || e <= s) return NextResponse.json(fallback);
     const parsed = PatchSchema.safeParse(JSON.parse(raw.slice(s, e + 1)));
     if (!parsed.success) return NextResponse.json(fallback);
+    const merged = unionFragranceFree(parsed.data, fallback);
     // label 与提示口径对齐（≤12 字），与启发式兜底一致，防超长撑版
-    return NextResponse.json({ ...parsed.data, label: parsed.data.label.slice(0, 12), source: "deepseek" });
+    return NextResponse.json({ ...parsed.data, ...merged, label: merged.label.slice(0, 12), source: "deepseek" });
   } catch {
     return NextResponse.json(fallback);
   }

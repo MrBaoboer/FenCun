@@ -6,7 +6,7 @@
 // 只写在注释里、没有任何东西守着。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { heuristic, PatchSchema } from "./parse-intent/route";
+import { heuristic, PatchSchema, unionFragranceFree } from "./parse-intent/route";
 import { template, type ExplainInput } from "./explain/route";
 import { carriesNumber, extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
 
@@ -40,6 +40,30 @@ test("启发式兜底：普通场合仍各归各位，无香判定不误伤", ()
   for (const t of ["去前任的婚礼", "第一次见投资人", "周末去健身房", "晚上朋友生日局"]) {
     assert.equal(heuristic(t).fragranceFree, false, `「${t}」被误判成无香场合`);
   }
+});
+
+test("无香场合取并集：LLM 漏判时关键词判定必须仍然作数", () => {
+  // 这条守卫此前只写在启发式那条路上，而启发式**只在 LLM 不可用时才跑**——
+  // 也就是说平时它一次都不生效，红线的可靠性全押在模型这一次记不记得给 fragranceFree。
+  const fb = heuristic("下班后去医院看我妈"); // 关键词判定：true
+  assert.equal(fb.fragranceFree, true);
+
+  // ① 模型漏判 → 并集救回来，眉标也跟着兜底那句走，不留「探病·从容」配「今天不用香」的错位
+  const missed = unionFragranceFree({ label: "探望家人·从容" }, fb);
+  assert.equal(missed.fragranceFree, true, "模型漏判时关键词判定必须作数");
+  assert.equal(missed.label, "就医探病·今天不用香");
+
+  // ② 模型判对 → 用模型自己的 label（它读得懂上下文，比十三个关键词细）
+  const hit = unionFragranceFree({ fragranceFree: true, label: "陪诊·今天不用香" }, fb);
+  assert.deepEqual(hit, { fragranceFree: true, label: "陪诊·今天不用香" });
+
+  // ③ 只有模型看出来的场合（关键词表里没有的说法）同样成立——并集只能加不能减
+  const onlyLlm = unionFragranceFree({ fragranceFree: true, label: "术后探望·不用香" }, heuristic("去看刚做完手术的同事"));
+  assert.equal(onlyLlm.fragranceFree, true);
+
+  // ④ 普通场合不许被误伤
+  const normal = unionFragranceFree({ label: "前任婚礼·得体克制" }, heuristic("去前任的婚礼"));
+  assert.deepEqual(normal, { fragranceFree: false, label: "前任婚礼·得体克制" });
 });
 
 // ---------- explain · 降级模板 ----------
