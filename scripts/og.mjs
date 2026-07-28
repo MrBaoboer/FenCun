@@ -46,8 +46,13 @@ const ogHtml = `
   position:relative;overflow:hidden;">
   <div style="position:absolute;inset:0;border:1px solid var(--color-line);margin:26px;border-radius:20px;"></div>
   <div style="position:relative;">
-    <!-- 直接写预组合的大写字形，不要靠 text-transform：uppercase 会把 ē 拆成 E + 组合长音符，
-         而 Fraunces 的拉丁子集里没有这个组合的合成字形，大字号下会渲染成断开的「FEˉN」。 -->
+    <!-- 直接写预组合的大写字形，不要靠 text-transform。
+         注：这里原本写的机制是错的（"uppercase 会把 ē 拆成 E + 组合长音符"）——实测
+         uppercase 给出的就是预组合的「Ē」(U+0112)，并不拆。真正的原因是 Ē 属
+         Latin Extended-A，而 Fraunces 以 subsets:["latin"] 引入、只发 Latin-1 那一片：
+         document.fonts.check(Fraunces, "Ē") 为 false，写进 DOM 也不会触发新的字体请求。
+         也就是说这一个字形无论如何都落在回退字体上。截图这一路字号大、是离屏渲染，
+         回退到系统衬线尚可接受；报头那一处已改用裸字母（见 SiteChrome）。 -->
     <div style="font-family:var(--font-display);font-size:22px;letter-spacing:.34em;
                 color:var(--color-accent);font-weight:600;">FĒN&nbsp;CÙN</div>
     <div style="font-family:var(--font-serif);font-size:118px;font-weight:700;letter-spacing:.1em;
