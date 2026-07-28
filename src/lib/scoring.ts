@@ -93,6 +93,7 @@ export function familyDominance(p: Perfume, names: readonly string[]): number {
 /** 「这一族代表了这瓶的气质」的统一门槛 */
 export const DOMINANT = 0.75;
 
+
 /** 甜（美食调）主导这瓶——「发腻」这句话的唯一资格判据 */
 export function sweetDominates(p: Perfume, absMin: number): boolean {
   return maxStrength(p, F.sweet) >= absMin && familyDominance(p, F.sweet) >= DOMINANT;
@@ -137,10 +138,12 @@ export function stainProneDominates(p: Perfume, absMin: number): boolean {
  * 抽出来是为了让打分层与风险文案层共用同一次判定：weatherFit 判了 heavy_in_heat，
  * computeRiskNotes 就必须说得出一句对应的话，否则会出现"判了却说不出为什么"。
  */
+const HEAVY_KEYS = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
+
 export function heavyDominates(p: Perfume, absMin: number): boolean {
-  const keys = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
-  return maxStrength(p, keys) >= absMin && familyDominance(p, keys) >= DOMINANT;
+  return maxStrength(p, HEAVY_KEYS) >= absMin && familyDominance(p, HEAVY_KEYS) >= DOMINANT;
 }
+
 
 // 「不知道」不等于「满分」。
 // 原公式 当前季占比 ÷ 最高季占比 有一个致命性质：**分布越平坦，得分越高**。

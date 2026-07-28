@@ -106,7 +106,8 @@ const UserPerfumeSchema = z.object({
   addedAt: z.number(),
   lastWornAt: z.number().optional(),
   wornCount: z.number().int().min(0).optional(),
-  bias: z.object({ likeScore: z.number(), perceivedStrength: z.number() }).optional(),
+  // 不再校验 bias：那个字段从来没被写过（偏置是 aggregateBias 每次现算的）。
+  // 老备份里若带着它，zod 默认剥掉未声明的键，导入照常成功。
 });
 const FeedbackSchema = z.object({
   perfumeId: z.number().int(),

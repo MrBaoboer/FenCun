@@ -2,6 +2,7 @@
 import type { Perfume, Context, Usage, Bias } from "./types";
 import { durationHint, SEASON_NAME } from "./format";
 import { tempBand } from "./season";
+import { DENSITY, isClosedOccasion } from "./occasion-priors";
 import {
   sweetness,
   balsamicWeight,
@@ -14,17 +15,7 @@ import {
   type WeatherTone,
 } from "./scoring";
 
-// 场景的空间密度（影响喷量与风险）
-const DENSITY: Record<string, "dense" | "closed" | "normal" | "open"> = {
-  commute: "dense",
-  work: "closed",
-  formal: "closed",
-  date: "normal",
-  social: "normal",
-  casual: "normal",
-  home: "open",
-  sport: "open",
-};
+// 空间密度与「封闭场合」的定义只有一处：occasion-priors.ts
 
 function accStrength(p: Perfume, en: string): number {
   const a = p.accords.find((x) => x.en === en);
@@ -43,8 +34,7 @@ function accStrength(p: Perfume, en: string): number {
 function overdressedCombo(p: Perfume, ctx: Context): boolean {
   const loudSweet = sweetDominates(p, 50);
   const loudFloral = accStrength(p, "white floral") >= 50;
-  const officeish = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
-  return (loudSweet || loudFloral) && p.sillageTier >= 3 && officeish;
+  return (loudSweet || loudFloral) && p.sillageTier >= 3 && isClosedOccasion(ctx.occasion);
 }
 
 export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {

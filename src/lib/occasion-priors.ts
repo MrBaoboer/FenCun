@@ -26,6 +26,32 @@
 // 报告对香味制品有不良反应，CDC / CCOHS / CDPH / 美国肺脏协会均有正式无香政策。
 // 「强扩散香在封闭场合扣分」「密闭场合减喷量」属于 A 类，理直气壮，不要挪进来。
 
+/**
+ * 场合的空间密度。**这是「封闭场合」这个概念在全仓的唯一定义。**
+ *
+ * 它此前有三份各写一遍的判据：usage.ts 的 DENSITY 表、同文件 overdressedCombo 里的
+ * `officeish`、以及 recommend.ts computeVerdict 里的 `closed`。三处的枚举列表
+ * 恰好一致，但那是巧合不是保证——加一个新场合时漏改任意一处，
+ * 就会出现「按封闭场合减了喷量、却不按封闭场合判裁决」这类分家。
+ * 本仓库自己写下的纪律是同一个概念只准有一处判据，这里补上。
+ */
+export const DENSITY: Record<string, "dense" | "closed" | "normal" | "open"> = {
+  commute: "dense",
+  work: "closed",
+  formal: "closed",
+  date: "normal",
+  social: "normal",
+  casual: "normal",
+  home: "open",
+  sport: "open",
+};
+
+/** 人多且不通风：通勤 / 上班 / 正式。喷量、裁决与「用力过猛」判定共用这一条 */
+export function isClosedOccasion(occasion: string): boolean {
+  const d = DENSITY[occasion];
+  return d === "dense" || d === "closed";
+}
+
 /** 各家族在加/扣分时的相对折扣（例：正式场合看重"干净木质"但不希望它太张扬 → 0.8） */
 export const FAMILY_DISCOUNT = {
   formalAmberWoody: 0.8,

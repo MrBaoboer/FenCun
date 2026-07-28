@@ -1159,3 +1159,36 @@ test("场景提示照常上屏，但一个字都不许动裁决——它对柜�
   assert.equal(ff.verdict, "avoid");
   assert.equal(ff.avoidCause, "fragrance_free");
 });
+
+test("「不合场合」会随时间衰减，同场合后来的「刚好」能把它抵掉", () => {
+  // scoring.ts:mismatchMul 的注释写着「反向反馈可抵消」，而聚合处此前是纯计数：
+  // 半年前的一次「不合场合」和昨天的一次话语权相同，且永远抵不掉。
+  const NOW = Date.UTC(2026, 6, 28);
+  const DAY = 86400000;
+  const at = (daysAgo: number) => NOW - daysAgo * DAY;
+  const fb = (rating: Feedback["rating"], daysAgo: number): Feedback =>
+    ({ perfumeId: 1, at: at(daysAgo), rating, context: C({ occasion: "work", feel: "mild", tempC: 20 }) }) as Feedback;
+
+  const fresh = aggregateBias([fb("scene_mismatch", 1)], NOW).get(1)!;
+  const stale = aggregateBias([fb("scene_mismatch", 300)], NOW).get(1)!;
+  assert.ok(
+    (stale.sceneMismatch?.work ?? 0) < (fresh.sceneMismatch?.work ?? 0),
+    "十个月前的「不合场合」不该和昨天的一样重"
+  );
+
+  // 同场合后来又说「刚好」→ 抵掉；抵干净就不该留一个恒等于 1 的乘子占位
+  const offset = aggregateBias([fb("scene_mismatch", 30), fb("perfect", 1)], NOW).get(1)!;
+  assert.equal(offset.sceneMismatch, undefined, `应被抵干净：${JSON.stringify(offset.sceneMismatch)}`);
+});
+
+test("留印提示的成因必须与文案同源：烟草不许被说成树脂与浸膏", () => {
+  const work = C({ occasion: "work", feel: "mild", tempC: 20 });
+  const tobacco = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["tobacco", 100], ["woody", 60]]) });
+  const t = buildPick(tobacco, work).risks.find((r) => r.includes("喷衣物")) ?? "";
+  assert.ok(t.includes("烟草"), `烟草触发的提示要说烟草：${t}`);
+  assert.ok(!t.includes("树脂与浸膏"), `不该扣上一个它自己不成立的机制：${t}`);
+  // 真正的树脂/香膏照旧说树脂
+  const balsam = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["balsamic", 100], ["oud", 70]]) });
+  const b = buildPick(balsam, work).risks.find((r) => r.includes("喷衣物")) ?? "";
+  assert.ok(b.includes("树脂与浸膏"), `树脂香膏仍要说树脂：${b}`);
+});
