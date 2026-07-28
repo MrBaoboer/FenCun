@@ -14,6 +14,8 @@
 //   public/icon-192.png           192×192   PWA 图标
 //   public/icon-512.png           512×512   PWA 图标
 //   public/icon-maskable-512.png  512×512   可裁切图标（安全区内留白，见下）
+//   public/apple-touch-icon.png   180×180   iOS 添加到主屏幕
+//   src/app/favicon.ico           16/32/48  浏览器标签页（Next 的文件约定，自动挂到 /favicon.ico）
 import puppeteer from "puppeteer-core";
 import fs from "node:fs";
 import path from "node:path";
@@ -22,7 +24,72 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const OUT = path.join(ROOT, "public");
+// favicon 不放 public/：Next 的文件约定要求它在 app/ 目录里，由框架自己挂到 /favicon.ico
+// 并生成 <link rel="icon">。放进 public/ 会出现两份同名资源，谁赢取决于路由顺序。
+const OUT_APP = path.join(ROOT, "src", "app");
 const BASE = process.env.SHOT_BASE || "http://localhost:3100";
+
+/**
+ * 原始 RGBA 像素 → ICO 里的一个 BMP/DIB 条目。
+ *
+ * ICO 从 Vista 起也允许直接内嵌 PNG，但那条路走不通：Next 的图标解码器要求内嵌的 PNG
+ * **必须是 RGBA**，而 Chrome 给不透明画面截图时会编码成不带 alpha 的 RGB，
+ * 构建期直接报 `The PNG is not in RGBA format`。BMP 这条经典路径没有这个歧义，
+ * 也正是原来那个默认 favicon 里 16/32/48 三档的存法。
+ *
+ * 结构：BITMAPINFOHEADER(40) + XOR 位图(BGRA，**自下而上**) + AND 掩码(1bpp，行补齐到 4 字节)。
+ * 高度字段要写两倍——这是 ICO 的历史包袱：它把 XOR 与 AND 两张图当成一张来记。
+ * 32 位色下 alpha 已经在 XOR 里，AND 掩码全 0（全不透明）即可，但**不能省**。
+ */
+function dibEntry(rgba, size) {
+  const header = Buffer.alloc(40);
+  header.writeUInt32LE(40, 0); // biSize
+  header.writeInt32LE(size, 4); // biWidth
+  header.writeInt32LE(size * 2, 8); // biHeight = XOR + AND
+  header.writeUInt16LE(1, 12); // biPlanes
+  header.writeUInt16LE(32, 14); // biBitCount
+  header.writeUInt32LE(0, 16); // biCompression = BI_RGB
+  const xor = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    const src = (size - 1 - y) * size * 4; // 自下而上
+    const dst = y * size * 4;
+    for (let x = 0; x < size; x++) {
+      const s = src + x * 4;
+      const d = dst + x * 4;
+      xor[d] = rgba[s + 2]; // B
+      xor[d + 1] = rgba[s + 1]; // G
+      xor[d + 2] = rgba[s]; // R
+      xor[d + 3] = rgba[s + 3]; // A
+    }
+  }
+  const maskRow = Math.ceil(size / 8 / 4) * 4;
+  return Buffer.concat([header, xor, Buffer.alloc(maskRow * size)]);
+}
+
+/**
+ * 把若干个 DIB 条目打成一个 .ico。零依赖——ICO 的容器格式就是一个定长目录加数据段。
+ */
+function packIco(entries) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: 1 = icon
+  header.writeUInt16LE(entries.length, 4);
+  const dir = Buffer.alloc(16 * entries.length);
+  let offset = 6 + dir.length;
+  entries.forEach((e, i) => {
+    const o = i * 16;
+    dir[o] = e.size >= 256 ? 0 : e.size; // 0 表示 256
+    dir[o + 1] = e.size >= 256 ? 0 : e.size;
+    dir[o + 2] = 0; // 调色板颜色数：真彩色为 0
+    dir[o + 3] = 0; // reserved
+    dir.writeUInt16LE(1, o + 4); // color planes
+    dir.writeUInt16LE(32, o + 6); // bits per pixel
+    dir.writeUInt32LE(e.buf.length, o + 8);
+    dir.writeUInt32LE(offset, o + 12);
+    offset += e.buf.length;
+  });
+  return Buffer.concat([header, dir, ...entries.map((e) => e.buf)]);
+}
 
 const CHROME_CANDIDATES = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -46,15 +113,14 @@ const ogHtml = `
   position:relative;overflow:hidden;">
   <div style="position:absolute;inset:0;border:1px solid var(--color-line);margin:26px;border-radius:20px;"></div>
   <div style="position:relative;">
-    <!-- 直接写预组合的大写字形，不要靠 text-transform。
-         注：这里原本写的机制是错的（"uppercase 会把 ē 拆成 E + 组合长音符"）——实测
-         uppercase 给出的就是预组合的「Ē」(U+0112)，并不拆。真正的原因是 Ē 属
-         Latin Extended-A，而 Fraunces 以 subsets:["latin"] 引入、只发 Latin-1 那一片：
-         document.fonts.check(Fraunces, "Ē") 为 false，写进 DOM 也不会触发新的字体请求。
-         也就是说这一个字形无论如何都落在回退字体上。截图这一路字号大、是离屏渲染，
-         回退到系统衬线尚可接受；报头那一处已改用裸字母（见 SiteChrome）。 -->
+    <!-- 与报头同口径：**不带声调**。「Ē」(U+0112) 属 Latin Extended-A，而 Fraunces 以
+         subsets:["latin"] 引入、只发 Latin-1 那一片——document.fonts.check(Fraunces, "Ē")
+         为 false，写进 DOM 也不会触发新的字体请求，所以那个字形只会落在回退字体上，
+         与旁边真·Fraunces 的字母不同源。（此处原本的注释把成因写成"uppercase 会把 ē
+         拆成 E + 组合长音符"，实测不成立：uppercase 给出的就是预组合的 Ē。）
+         裸字母全部落在 Latin-1，分享卡片与站内报头也就是同一套字形。 -->
     <div style="font-family:var(--font-display);font-size:22px;letter-spacing:.34em;
-                color:var(--color-accent);font-weight:600;">FĒN&nbsp;CÙN</div>
+                color:var(--color-accent);font-weight:600;">FEN&nbsp;CUN</div>
     <div style="font-family:var(--font-serif);font-size:118px;font-weight:700;letter-spacing:.1em;
                 color:var(--color-ink);line-height:1.05;margin-top:14px;">氛寸</div>
   </div>
@@ -86,6 +152,15 @@ const iconHtml = (size, safeRatio) => `
               font-family:var(--font-serif);font-weight:700;color:var(--color-ink);
               font-size:${Math.round(size * safeRatio * 0.86)}px;line-height:1;">氛</div>
 </div>`;
+
+// favicon 的三档尺寸。字比 PWA 图标放得更满（0.92/0.88/0.84）：
+// 标签页上那一格只有十几个像素，「氛」是十二画的字，留白留多了就只剩一团墨。
+// 底色仍是宣纸白、字仍是墨色——与 PWA 图标同一套设计，不为了小尺寸另造一个反白版。
+const FAVICON_SIZES = [
+  { size: 16, ratio: 0.92 },
+  { size: 32, ratio: 0.88 },
+  { size: 48, ratio: 0.84 },
+];
 
 const targets = [
   { name: "og.png", w: 1200, h: 630, html: ogHtml, scale: 1 },
@@ -125,6 +200,46 @@ try {
     console.log(`✓ public/${t.name}  ${t.w}×${t.h}`);
     await page.close();
   }
+
+  // favicon：同一套画法渲染三个尺寸，再打成一个 .ico。
+  // 仓库此前一直挂着 Next 脚手架自带的那个默认图标（黑底白三角），
+  // 也就是说线上标签页从来没显示过这个产品自己的标记。
+  const icoEntries = [];
+  for (const { size, ratio } of FAVICON_SIZES) {
+    const page = await browser.newPage();
+    await page.setViewport({ width: size, height: size, deviceScaleFactor: 1 });
+    await page.goto(BASE + "/", { waitUntil: "networkidle0" });
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "day";
+    });
+    await page.evaluate((html) => {
+      document.body.style.margin = "0";
+      document.body.innerHTML = html;
+    }, iconHtml(size, ratio));
+    await page.evaluate(() => document.fonts.ready);
+    // 取**原始像素**而不是 PNG：截图回来的 PNG 色彩类型不由我们决定（见 dibEntry 的说明），
+    // 而 canvas 的 getImageData 恒定给 RGBA。
+    const b64 = await page.screenshot({ type: "png", encoding: "base64" });
+    const rgba = await page.evaluate(
+      async (data, n) => {
+        const img = new Image();
+        img.src = "data:image/png;base64," + data;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = n;
+        c.height = n;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        return Array.from(ctx.getImageData(0, 0, n, n).data);
+      },
+      b64,
+      size
+    );
+    icoEntries.push({ size, buf: dibEntry(rgba, size) });
+    await page.close();
+  }
+  fs.writeFileSync(path.join(OUT_APP, "favicon.ico"), packIco(icoEntries));
+  console.log(`✓ src/app/favicon.ico  ${FAVICON_SIZES.map((f) => f.size).join("/")}`);
 } finally {
   await browser.close();
 }
