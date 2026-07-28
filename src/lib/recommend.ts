@@ -4,7 +4,7 @@ import { score, sweetDominates, stainProneDominates, dataConfidence, type ScoreP
 
 /** 单个 accord 强度（留印风险判定用） */
 const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
-import { computeUsage, computeRiskNotes, buildReasons } from "./usage";
+import { computeUsage, computeRiskNotes, buildReasons, isBottleRisk } from "./usage";
 import { tempBand } from "./season";
 
 export type { Bias } from "./types";
@@ -81,10 +81,14 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   const notes = computeRiskNotes(p, ctx);
   const risks = notes.map((n) => n.text);
   const usage = computeUsage(p, ctx, bias);
-  // ⚠️ 裁决必须在追加织物提示**之前**算完。
-  // computeVerdict 的规则是 risks.length > 0 → caution，而织物留印是**提示**不是"这瓶今天要留意"——
-  // 若先追加再判，所有封闭场合（通勤/上班/正式，恰恰是最常见的那几个）都会被无端降级成 caution。
-  const { verdict, avoidCause } = computeVerdict(p, ctx, parts, risks);
+  // ⚠️ 裁决只吃**本瓶风险**，且必须在追加织物提示**之前**算完。
+  //
+  // 两件事同一个道理：computeVerdict 的规则是 risks.length > 0 → caution，而它要回答的是
+  //「这一瓶今天要不要留意」。凡是对柜里每一瓶都成立的句子，都没有资格进这个入口——
+  //   · 织物留印是**提示**：先追加再判，所有封闭场合（通勤/上班/正式，最常见的那几个）会被无端降级；
+  //   · 场景提示是**场合级**：一旦进来，全柜同时 caution，good 归零（见 usage.ts:isBottleRisk）。
+  // 上一次靠调用顺序绕开了第一件，这一次把第二件变成带类型的判据，两条都不再依赖"记得别写错"。
+  const { verdict, avoidCause } = computeVerdict(p, ctx, parts, notes.filter(isBottleRisk).map((n) => n.text));
   // 触发这次 avoid 的**那一条**风险，与成因同源取出（见 usage.ts:computeRiskNotes）。
   // 预警卡的正文要它：眉标按成因分岔，正文就不能再猜 risks[0]。
   // 取不到时下游退到按成因写死的兜底句，仍然对得上眉标。

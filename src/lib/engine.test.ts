@@ -1051,3 +1051,27 @@ test("riskNote：场景解析的社交风险以受控字段进入风险列表", 
   const risks = computeRisks(p, C({ occasion: "formal", feel: "mild", tempC: 20, riskNote: "婚礼焦点是新人，不宜喧宾夺主" }));
   assert.ok(risks.some((r) => r.includes("喧宾夺主")));
 });
+
+test("场景提示照常上屏，但一个字都不许动裁决——它对柜里每一瓶都成立，没有区分力", () => {
+  // 一句 riskNote 曾经就能让全目录的 good 归零（实测 caution 1209 / avoid 291 / good 0），
+  // 连带吃灰卡与预警卡的「换成 X」一起哑火——两者的准入闸都是 verdict === "good"。
+  const bottles = [
+    mk({ id: 1, accords: acc([["citrus", 100]]) }),
+    mk({ id: 2, sillageTier: 3, accords: acc([["vanilla", 100], ["sweet", 90]]) }),
+    mk({ id: 3, accords: acc([["woody", 100], ["green", 40]]) }),
+  ];
+  const plain = C({ occasion: "date", feel: "mild", tempC: 20 });
+  const scened = C({ occasion: "date", feel: "mild", tempC: 20, riskNote: "初次见家长，别太张扬" });
+  for (const b of bottles) {
+    const a = buildPick(b, plain);
+    const s = buildPick(b, scened);
+    assert.equal(s.verdict, a.verdict, `${b.id}：场景提示不该改变裁决`);
+    assert.equal(s.usage.suitable, a.usage.suitable, `${b.id}：场景提示不该改变 suitable`);
+    // 但它必须仍然被说出来——不进裁决不等于不告诉用户
+    assert.ok(s.risks.some((r) => r.includes("别太张扬")), `${b.id}：场景提示仍要上屏`);
+  }
+  // 无香场合是另一回事：它本来就该让每一瓶都 avoid，不能被这条豁免顺手放行
+  const ff = buildPick(bottles[0], C({ occasion: "date", feel: "mild", tempC: 20, fragranceFree: true }));
+  assert.equal(ff.verdict, "avoid");
+  assert.equal(ff.avoidCause, "fragrance_free");
+});

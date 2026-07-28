@@ -246,7 +246,9 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   if (ps >= 0.4) distReduce++;
   const effTier = Math.max(1, p.sillageTier - Math.min(distReduce, 2)) as 1 | 2 | 3 | 4;
 
-  const risks = computeRisks(p, ctx);
+  // suitable 问的是「这一瓶今天合不合适」，所以与 computeVerdict 同口径：只看本瓶风险。
+  // 场景提示对柜里每一瓶都成立，算进来会让全柜同时变成"不合适"（见 isBottleRisk）。
+  const bottleRisks = computeRiskNotes(p, ctx).filter(isBottleRisk);
 
   // 留香提示：在场时间不短 + 这瓶偏短效 → 提醒带分装（时长来自场景解析的档位值，不精确到小时）
   let dHint = durationHint(p.longevity);
@@ -260,7 +262,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
     placement,
     socialDistance: effTier,
     durationHint: dHint,
-    suitable: risks.length === 0,
+    suitable: bottleRisks.length === 0,
     note,
   };
 }
@@ -284,6 +286,24 @@ export interface RiskNote {
   kind: RiskKind;
   text: string;
 }
+
+/**
+ * 这一条说的是**这一瓶**，还是**今天这个场合**？
+ *
+ * scene 一档（来自 ctx.riskNote，即 LLM 从用户原话里读出的场合常识，以及无香场合那一句）
+ * 对柜里每一瓶都成立，因此它**不具备区分力**，不能参与"这瓶今天行不行"的裁决。
+ * 混进去的后果是可测的：computeVerdict 的规则是 risks.length > 0 → caution，
+ * 于是只要场景解析返回了任何一句 riskNote，全目录 1500 款的裁决实测塌成
+ * caution 1209 / avoid 291 / **good 0**——而 good 正是三处闸门的通行证：
+ * nudges 的吃灰卡（verdict==="good"）、预警卡的「换成 X」（同上）、以及 usage.suitable。
+ * 也就是说，用户一旦用起产品的旗舰能力（自然语言场景），发现型钩子就整体哑火。
+ *
+ * 这与「织物留印提示被 computeVerdict 吃掉」是同一个坑换了个门：
+ * **提示与风险必须分清，混用会污染裁决。** 上次是靠调整调用顺序绕过去的，
+ * 这次把它变成一条带类型的、任何调用方都绕不过的判据。
+ * 场景提示照常上屏（它对用户有用），只是不再参与裁决。
+ */
+export const isBottleRisk = (n: RiskNote): boolean => n.kind !== "scene";
 
 /** 只要文本的调用方走这里；需要按成因取某一条的走 computeRiskNotes */
 export function computeRisks(p: Perfume, ctx: Context): string[] {
