@@ -227,13 +227,27 @@ test("排序不变式：任何后位候选的排名分不得高出前位超过 E
     mk({ id: i + 1, brand: "B", rating: null, accords: acc([["sweet", 80 - i * 2]]) })
   );
   const c = C({ season: "spring", feel: "mild", tempC: 20, occasion: "date" });
+  // ⚠️ 用例名说的是**排名分**，而 recommend 只把内容分挂在 pick.score 上，
+  // rank = score × freshness × swapPenalty 从返回值里看不见。此前断言取的是 score，
+  // 只在 freshness = swapPenalty = 1 的退化配置下才等价——也就是说
+  // 「轮换因子参与排序之后这条不变式还成不成立」从来没被测过。
+  // 这里在测试内按同一公式重算一遍 rank，并且**真的注入**两个因子，让名实相符。
+  const NOW = Date.UTC(2026, 6, 28);
+  const DAY = 86400000;
+  const lastWornAt = new Map(lib.map((p, i) => [p.id, NOW - (i % 5) * DAY]));
+  const swapAways = new Map([[lib[2].id, [NOW - DAY, NOW - 2 * DAY]]]);
+  const rankOf = (id: number, score: number) =>
+    score * freshness(lastWornAt.get(id), NOW) * swapPenalty(swapAways.get(id), NOW);
+
   for (let seed = 0; seed < 40; seed++) {
-    const { ranked } = recommend(lib, c, undefined, { daySeed: seed });
+    const { ranked } = recommend(lib, c, undefined, { daySeed: seed, lastWornAt, swapAways, now: NOW });
     for (let i = 0; i < ranked.length; i++) {
       for (let j = i + 1; j < ranked.length; j++) {
+        const a = rankOf(ranked[i].perfume.id, ranked[i].score);
+        const b = rankOf(ranked[j].perfume.id, ranked[j].score);
         assert.ok(
-          ranked[j].score <= ranked[i].score + 0.012 + 1e-9,
-          `seed=${seed}: 位次 ${j}(${ranked[j].score.toFixed(4)}) 比位次 ${i}(${ranked[i].score.toFixed(4)}) 高出超过 EPS`
+          b <= a + 0.012 + 1e-9,
+          `seed=${seed}: 位次 ${j}(rank ${b.toFixed(4)}) 比位次 ${i}(rank ${a.toFixed(4)}) 高出超过 EPS`
         );
       }
     }

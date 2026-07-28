@@ -58,7 +58,14 @@ const WEAR_SCHEDULE: { daysAgo: number; name: string; occasion: Occasion; note?:
 
 /**
  * 反馈序列——产品唯一的真壁垒，演示态必须让它可见地在起作用：
- * 烟草香草三次「刚好」会沉淀成成功配置，黑鸦片一次「太冲了」会让它下次的喷量自动收一档。
+ * 黑鸦片**两次**「太冲了」会让它下次的喷量与扩散各自收一档（原因见下方那段注释：
+ * 单次会被时间衰减吃到够不着门槛）。
+ *
+ * ⚠️ 这段原本写着「烟草香草三次『刚好』会沉淀成成功配置」，两处与代码不符：
+ * 它只有两条 perfect，而且这张表没有 sprays 字段——而 aggregateBias 沉淀成功配置的
+ * 唯一入口就挂在 `f.sprays` 上，所以演示态**从来没有**产出过成功配置。
+ * 补 sprays 属于改动演示黄金集（会连带 README 截图），留到单独一轮；
+ * 但注释先得说真话，否则下一个人会照着它去找一个不存在的东西。
  */
 const FEEDBACK_SCHEDULE: { daysAgo: number; name: string; occasion: Occasion; rating: Feedback["rating"] }[] = [
   { daysAgo: 15, name: "Tobacco Vanille", occasion: "date", rating: "perfect" },

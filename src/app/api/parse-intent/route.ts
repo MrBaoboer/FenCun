@@ -68,14 +68,21 @@ export function heuristic(text: string) {
   let occasion = "casual", formality = 0.4, intimacy: "close" | "neutral" | "broadcast" = "neutral";
   const avoid: string[] = [];
   let meal: boolean | undefined;
+  // 在场时长档位。此前这条路一个都不给，于是「在外时间不短，带上分装中途补 1 下更稳」
+  // 这条已上线的能力在无 key / 限流 / 上游超时时整条消失——而降级路径恰恰是最需要它的时候。
+  // 档位取值与 SYSTEM 提示词里给 LLM 的那四档同源：快事≈2、饭局婚礼看展≈4、长活动≈6、上班全天≈9。
+  let duration: 2 | 4 | 6 | 9 | undefined;
   let label = text.length <= 12 ? text : text.slice(0, 11) + "…";
-  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; label = "婚礼场合·得体克制"; }
-  else if (has("投资人", "面试", "客户", "领导", "见家长", "正式", "商务", "会议")) { occasion = "formal"; formality = 0.8; avoid.push("too_strong"); label = "正式场合·稳重不抢戏"; }
-  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; label = "约会·宜近距离"; }
-  else if (has("聚会", "派对", "生日", "朋友", "局", "夜店", "酒吧")) { occasion = "social"; label = "聚会·自在"; }
-  else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; label = "运动·清爽"; }
+  // 有没有真的读懂：任何一条规则命中才算。全都没中时不许拿原话回显冒充理解（见下方 matched）
+  let hit = true;
+  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; duration = 4; label = "婚礼场合·得体克制"; }
+  else if (has("投资人", "面试", "客户", "领导", "见家长", "正式", "商务", "会议")) { occasion = "formal"; formality = 0.8; avoid.push("too_strong"); duration = 2; label = "正式场合·稳重不抢戏"; }
+  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; duration = 4; label = "约会·宜近距离"; }
+  else if (has("聚会", "派对", "生日", "朋友", "局", "夜店", "酒吧")) { occasion = "social"; duration = 4; label = "聚会·自在"; }
+  else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; duration = 2; label = "运动·清爽"; }
   else if (has("居家", "在家", "睡前", "休息")) { occasion = "home"; formality = 0.1; label = "居家·放松"; }
-  else if (has("通勤", "上班", "地铁", "工作")) { occasion = "commute"; formality = 0.5; label = "通勤·清爽得体"; }
+  else if (has("通勤", "上班", "地铁", "工作")) { occasion = "commute"; formality = 0.5; duration = 9; label = "通勤·清爽得体"; }
+  else hit = false;
   // 横切信号（与场合正交）：关系张力、饭桌、无香场合
   const tension = has("前任", "前女友", "前男友", "谈判", "对手") ? ("high" as const) : undefined;
   if (meal === undefined && has("吃", "饭", "餐厅", "火锅", "日料", "酒局", "宴")) meal = true;
@@ -85,7 +92,9 @@ export function heuristic(text: string) {
     occasion = "casual";
     label = "就医探病·今天不用香";
   }
-  return { occasion, formality, intimacy, avoid, tension, meal, fragranceFree, label };
+  // 横切信号也算读懂了一部分
+  const matched = hit || fragranceFree || tension != null || meal === true;
+  return { occasion, formality, intimacy, avoid, tension, meal, duration, fragranceFree, label, matched };
 }
 
 /**

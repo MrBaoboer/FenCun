@@ -218,3 +218,30 @@ test("riskNote 带数字必须在源头丢掉——否则用户自己的输入�
   const clean = PatchSchema.safeParse({ occasion: "formal", label: "会议", riskNote: "会议室密闭，浓香会被放大" });
   assert.equal(clean.success && clean.data.riskNote, "会议室密闭，浓香会被放大");
 });
+
+test("启发式兜底：也要给出在场时长档位，且没读懂时不许拿原话回显冒充理解", () => {
+  // ① duration 此前这条路一个都不给，于是「在外时间不短，带上分装中途补 1 下更稳」
+  //    在无 key / 限流 / 上游超时时整条消失——降级路径恰恰是最需要它的时候。
+  const cases: [string, 2 | 4 | 6 | 9][] = [
+    ["明天去参加婚礼", 4],
+    ["第一次见投资人", 2],
+    ["晚上和喜欢的人看展", 4],
+    ["朋友生日局", 4],
+    ["周末去健身房", 2],
+    ["明天上班", 9],
+  ];
+  for (const [text, want] of cases) {
+    assert.equal(heuristic(text).duration, want, `「${text}」的时长档位不对`);
+  }
+
+  // ② 一条规则都没命中时 matched=false。此前它照样返回 occasion="casual" + 原话回显的 label，
+  //    屏上写着「氛寸读到 · <原话>」，而推荐其实是按 casual 算的——回显不是理解。
+  const blank = heuristic("嗯嗯嗯");
+  assert.equal(blank.matched, false, "什么都没命中却自称读懂了");
+  assert.equal(blank.label, "嗯嗯嗯", "label 仍是原话回显（由前端按 matched 决定不采信）");
+
+  // ③ 命中任意一条（含横切信号）就算读懂了一部分
+  assert.equal(heuristic("明天上班").matched, true);
+  assert.equal(heuristic("下午去医院").matched, true, "无香场合是横切信号，必须算命中");
+  assert.equal(heuristic("和前任吃饭").matched, true, "张力与饭桌也是横切信号");
+});
