@@ -1,5 +1,5 @@
 // 人话化表达 —— 全部区间/档位，绝不伪精确
-import type { Season } from "./types";
+import type { Perfume, Season } from "./types";
 
 // 社交距离：直接绑 sillage 四档，不按小数切。
 //
@@ -19,8 +19,23 @@ export const DISTANCE_HINT: Record<1 | 2 | 3 | 4, string> = {
   3: "同桌或小房间能闻到，注意场合",
   4: "户外、夜场加分，密闭空间慎用",
 };
-/** 归因前缀：详情展开处用，把主观投票说成主观投票 */
+/**
+ * 归因前缀：详情展开处用，把主观投票说成主观投票。
+ *
+ * ⚠️ 前提是**真的有票**。这句话此前对每一瓶都照说不误，包括扩散投票为空的那批——
+ * 实测扩展集 35990 条里 444 条 sillage 为 null（几乎全是国货白名单，people 常年个位数），
+ * derive.mjs 对它们统一落到 sillageTier=2；手动记一瓶更直接：那一档是用户自己在
+ * ManualAdd 里勾的，产品转头把用户自己的猜测说成「多数评价者的感受」。
+ *
+ * 同一排三格里的对照很刺眼：「留香」已经诚实地写「因人而异」，「社交距离」却拿一份
+ * 从未存在过的投票给出「日常安全」——三格里唯一带安全含义的恰恰是这一格。
+ * 紧邻的 EvidenceBar 早就按 `p.custom || p.lowVotes` 分岔了，这里只是漏了。
+ */
 export const DISTANCE_ATTRIB = "多数评价者的感受";
+/** 手动记一瓶：这一档是用户自己勾的，别说成社区评价 */
+export const DISTANCE_ATTRIB_SELF = "按你填的扩散档";
+/** 有记录但没票：不知道就说不知道，也不给「安全」这类断言 */
+export const DISTANCE_ATTRIB_THIN = "这瓶社区数据还少，先按中庸档估";
 
 // 规格行副标签（按档，替代原写死的"近身可感"）
 export const DISTANCE_SUB: Record<1 | 2 | 3 | 4, string> = {
@@ -29,6 +44,19 @@ export const DISTANCE_SUB: Record<1 | 2 | 3 | 4, string> = {
   3: "注意场合",
   4: "密闭慎用",
 };
+
+/** 这瓶的扩散档背后到底有没有社区投票——决定上面那三句该用哪一句 */
+export function sillageAttrib(p: Perfume): string {
+  if (p.custom) return DISTANCE_ATTRIB_SELF;
+  if (p.lowVotes || p.sillage == null) return DISTANCE_ATTRIB_THIN;
+  return DISTANCE_ATTRIB;
+}
+/** 规格行的副标签同理：没票就不许出现「日常安全」「密闭也安全」这类断言 */
+export function sillageSub(p: Perfume, tier: 1 | 2 | 3 | 4): string {
+  if (p.custom) return "你填的档";
+  if (p.lowVotes || p.sillage == null) return "数据少·估算";
+  return DISTANCE_SUB[tier];
+}
 
 // 留香：longevity 1..5 → 定性描述 + 可执行动作，绝不给小时数。
 //

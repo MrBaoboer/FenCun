@@ -4,8 +4,8 @@ import { Eyebrow, EvidenceBar, AccordBar, Stat } from "@/components/ui";
 import {
   DISTANCE_LABEL,
   DISTANCE_HINT,
-  DISTANCE_ATTRIB,
-  DISTANCE_SUB,
+  sillageAttrib,
+  sillageSub,
   durationShort,
   genderLabel,
   nameParts,
@@ -179,7 +179,7 @@ export function RecommendationCard({
           <Stat label="喷量" value={pick.usage.spraysLabel} sub="先少后补" />
         </div>
         <div className="flex-1 border-l border-line">
-          <Stat label="社交距离" value={DISTANCE_LABEL[tier]} sub={DISTANCE_SUB[tier]} />
+          <Stat label="社交距离" value={DISTANCE_LABEL[tier]} sub={sillageSub(p, tier)} />
         </div>
         <div className="flex-1 border-l border-line">
           <Stat label="留香" value={durationShort(p.longevity)} sub="今日预估" />
@@ -199,10 +199,12 @@ export function RecommendationCard({
         <div className="flex flex-col gap-5 pb-2 pt-3">
           <div className="flex flex-col gap-2.5 text-[0.86rem]">
             <DetailRow label="喷在哪" value={pick.usage.placement.join("、")} />
-            {/* 归因：这一档来自社区评价者的主观投票，不是测量值 */}
+            {/* 归因：这一档来自社区评价者的主观投票，不是测量值。
+                没票的那批（手动记一瓶、国货白名单里 sillage 为 null 的 444 条）换一句说法——
+                同一排里「留香」已经诚实写了「因人而异」，这一格不能拿不存在的投票给安全断言 */}
             <DetailRow
               label="社交距离"
-              value={`${DISTANCE_LABEL[tier]} · ${DISTANCE_ATTRIB}（${DISTANCE_HINT[tier]}）`}
+              value={`${DISTANCE_LABEL[tier]} · ${sillageAttrib(p)}（${DISTANCE_HINT[tier]}）`}
             />
             <DetailRow label="留香" value={pick.usage.durationHint} />
           </div>

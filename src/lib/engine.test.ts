@@ -996,6 +996,27 @@ test("季节错配文案同样要过票数门槛：三票的噪声不得说「�
   assert.ok(computeRisks(solid, summer).some((r) => r.includes("大家更多在冬季")));
 });
 
+test("社交距离的归因也要过票数这道门：没票就不许署名「多数评价者的感受」", async () => {
+  // 同一排三格里的对照此前很刺眼：「留香」诚实写「因人而异」，「社交距离」却拿一份
+  // 从未存在过的投票给出「日常安全」——三格里唯一带安全含义的恰恰是这一格。
+  // 实测扩展集 35990 条里 444 条 sillage 为 null（几乎全是国货白名单，people 常年个位数）。
+  const { sillageAttrib, sillageSub, DISTANCE_ATTRIB } = await import("./format");
+
+  const solid = mk({ people: 20000, sillage: 2.5, sillageTier: 2 });
+  assert.equal(sillageAttrib(solid), DISTANCE_ATTRIB, "有票的照旧署名社区");
+  assert.equal(sillageSub(solid, 2), "日常安全");
+
+  // 手动记一瓶：那一档是用户在 ManualAdd 里自己勾的
+  const custom = mk({ id: -3, custom: true, people: 0, sillage: 2.7, sillageTier: 2 });
+  assert.ok(!sillageAttrib(custom).includes("评价者"), `手动记录不该署名社区：${sillageAttrib(custom)}`);
+  assert.ok(!sillageSub(custom, 2).includes("安全"), `手动记录不该给安全断言：${sillageSub(custom, 2)}`);
+
+  // 国货白名单：有记录但一票都没有，sillage 为 null 时 derive.mjs 统一落到 tier 2
+  const thin = mk({ id: 9, lowVotes: true, people: 1, sillage: null as unknown as number, sillageTier: 2 });
+  assert.ok(!sillageAttrib(thin).includes("评价者"), `零票不该署名社区：${sillageAttrib(thin)}`);
+  assert.ok(!sillageSub(thin, 2).includes("安全"), `零票不该给安全断言：${sillageSub(thin, 2)}`);
+});
+
 test("安全阀不许被个人偏好顶开：说了「压到 1 下」就必须真的是 1 下", () => {
   // 原实现在个人偏好**之后**才取 safetyCap，于是偏好把闸抬起来之后，
   // 抬起来的那个值反过来成了"安全上限"。触发门槛极低：场景里写一句「想让人注意到」，
