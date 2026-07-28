@@ -345,3 +345,21 @@ test("采纳可撤销：穿戴计数、当天香历与隐式差评必须原样�
   silent(() => st().undoAdopt(snap2));
   assert.equal(st().wearLog.length, 0, "这次采纳才建的那条香历应当被撤掉");
 });
+
+test("多标签页：另一页写盘要认，读盘出过错时一切自动动作都停手", async () => {
+  // persist 是全量写、没有 merge：两个标签页各自持有一份内存态，谁后点谁覆盖。
+  // 在 A 页加的三瓶香、写的手记，连同「演示香柜已退场」这个标记，
+  // 都会被早就开着的 B 页的下一次点击整包盖掉，六瓶示例还会复活。
+  // 浏览器事件在 node --test 下造不出来，但判据可以。
+  const { shouldRehydrateOnStorage, STORE_KEY } = await import("./store");
+
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null), true, "另一页写了我们的键就要重读");
+  // localStorage.clear() 的事件 key 是 null，同样要认——那时盘上已空，
+  // 继续按旧内存态写回去只会造出一份半新半旧的数据
+  assert.equal(shouldRehydrateOnStorage(null, null), true, "整清也要认");
+  assert.equal(shouldRehydrateOnStorage("别人的键", null), false, "无关的键不理会");
+  assert.equal(shouldRehydrateOnStorage(`${STORE_KEY}.bak`, null), false, "另存的备份不是状态源");
+  // 读盘出过错时写入已被冻结（见 onRehydrateStorage），这时任何自动重读都要停手
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "boom"), false, "读盘出过错就不许再自动动");
+  assert.equal(shouldRehydrateOnStorage(null, "boom"), false);
+});

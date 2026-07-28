@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import type { Perfume, Weather } from "@/lib/types";
 import { loadCatalog } from "@/lib/perfumes";
 import { feelFromWeather } from "@/lib/season";
-import { useStore, hasOwnData } from "@/lib/store";
+import { useStore, hasOwnData, shouldRehydrateOnStorage } from "@/lib/store";
 import { buildDemoState } from "@/lib/demo";
 
 type LocState = "idle" | "locating" | "ok" | "denied" | "error";
@@ -55,6 +55,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       hydrated: true,
       persistError: "storage_unavailable",
     });
+  }, []);
+
+  // 多标签页：另一页写盘之后，这一页必须跟着把内存态重读一遍。
+  //
+  // persist 是**全量写、没有 merge**：两个标签页各自持有一份内存态，谁后点谁覆盖。
+  // 于是在 A 页加了三瓶香、写了手记，回到早就开着的 B 页随手点一下反馈——
+  // A 页那三瓶、那条手记、连同「演示香柜已退场」这个标记，一起被 B 页的旧快照盖掉，
+  // 六瓶示例复活。而这些数据只有本机一份、没有云端，覆盖不可逆。
+  //
+  // 重读会让这一页跟上另一页的改动（zustand 的默认 merge 是持久化态覆盖内存态），
+  // 代价是这一页上未落盘的临时选择可能被换掉——比静默丢掉别人写下的东西轻得多。
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!shouldRehydrateOnStorage(e.key, useStore.getState().hydrateError)) return;
+      void useStore.persist?.rehydrate();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   // 分钟级时钟节拍（回到前台/聚焦时也补一拍）：驱动情境/主题重算与天气保鲜（超 30 分钟静默重取，见下方），

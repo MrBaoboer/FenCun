@@ -186,8 +186,31 @@ export const PERSIST_VERSION = 1;
  */
 export const EXPORT_VERSION = 2;
 
+/** 持久化的键。listener 要按它过滤 storage 事件，所以不能只写在 persist 配置里 */
+export const STORE_KEY = "fencun-store";
+
 /** 读盘失败时另存原始字节的键 */
 const BACKUP_KEY = "fencun-store.bak";
+
+/**
+ * 另一个标签页写盘之后，这一页要不要跟着重读。
+ *
+ * 不重读的代价是**整包覆盖**：两个标签页各自持有一份内存态，persist 是全量写、没有 merge，
+ * 于是旧标签页的下一次点击会把另一页刚写下的香柜、香历与手记一起盖掉，
+ * 连「演示香柜已退场」这个标记也会被盖回去、六瓶示例复活。
+ * 而这些数据只有本机一份、没有云端，覆盖不可逆。
+ *
+ * 两个边界：
+ * · `key === null` 是 `localStorage.clear()`，同样要认——那时我们这一页的内存态是唯一的幸存者，
+ *   但盘上已经空了，继续按旧状态写回去只会造出一份半新半旧的数据；
+ * · 读盘出过错时写入已经被冻结（见 onRehydrateStorage），这时一切自动动作都要停手。
+ *
+ * 抽成纯函数是为了可测：浏览器事件本身在 node --test 下造不出来，判据可以。
+ */
+export function shouldRehydrateOnStorage(key: string | null, hydrateError: string | null): boolean {
+  if (hydrateError) return false;
+  return key === null || key === STORE_KEY;
+}
 
 /**
  * 用户在示例态下添加自己的第一瓶香水 → 示例香柜整体退场（「我的 · 数据」那一栏也是这么写的）。
@@ -624,7 +647,7 @@ export const useStore = create<State>()(
       },
     }),
     {
-      name: "fencun-store",
+      name: STORE_KEY,
       // 服务端无 localStorage → 返回 undefined，persist 自动跳过；客户端正常持久化。
       //
       // ⚠️ setItem 必须自己接住异常，原因有两层：
@@ -693,7 +716,7 @@ export const useStore = create<State>()(
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
           try {
-            const raw = safeLocalStorage()?.getItem("fencun-store");
+            const raw = safeLocalStorage()?.getItem(STORE_KEY);
             if (raw) safeLocalStorage()?.setItem(BACKUP_KEY, raw);
           } catch {
             // 备份本身失败（存储被禁/配额满）也不能让流程卡住，错误标志仍要立起来
