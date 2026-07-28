@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/AppProvider";
 import { useStore } from "./store";
 import { seasonFromDateTemp, feelFromWeather, daypartFromHour } from "./season";
-import { recommend, buildPick, aggregateBias, dayFloor } from "./recommend";
+import { recommend, aggregateBias, dayFloor } from "./recommend";
 import { pickNudges, type Nudge } from "./nudges";
 import { DISTANCE_LABEL } from "./format";
 import type { Context, Perfume, ScoredPick } from "./types";

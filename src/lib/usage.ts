@@ -7,7 +7,6 @@ import {
   balsamicWeight,
   sweetDominates,
   balsamicDominates,
-  richDominates,
   heavyDominates,
   dataConfidence,
   weatherFit,
@@ -98,13 +97,20 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 此前只认 sillage≥3.2，于是蔚蓝浓香精(sil=2.17, amber=86) 在 33℃ 会一边被提醒"收着些"、
   // 一边拿到 3–4 下的最高档，文案与数字互相打脸。
   //
-  // ⚠️ 这里必须与 computeRisks 用**同一个** richDominates，不能各用一条绝对线。
+  // ⚠️ 这里必须与 computeRisks 用**同一个**判据，不能各用一条绝对线。
   // 上一版两边都写 `max(sweet, balsam) >= 55`，看着一致，实则和打分层（scoring.ts 早已换成
   // 主导度判据）分了家：旷野(fresh spicy=100, balsamic=59) 在 33℃ 会被同一张卡先夸
   // "调性清爽通透"、再罚"树脂琥珀感偏厚"，喷量还跟着少一下。主目录实测 793 → 567 款，
   // 少掉的 226 款正是清爽当家的那批。同一个概念只准有一处判据。
+  //
+  // 上一版换成 richDominates(55) 之后仍然差半步：风险文案的三支合起来是
+  // sweetDominates(55) ∪ balsamicDominates(55) ∪ heavyDominates(50)，而前两者都被
+  // heavyDominates(50) 包住（族更宽、绝对线更低、主导度门槛同一条），也就是说
+  // **文案的口径其实就是 heavyDominates(50)**，减量却停在 richDominates(55)。
+  // 差出来的正是烟草与动物性主导的那一批：卡上写着「厚重感在高温里会放大，
+  // 喷得收着些更稳」，喷量却纹丝不动地给到最高档。取并集不如直接认那个更宽的口径。
   // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
-  if (hotFeel && (sil >= 3.2 || richDominates(p, 55))) {
+  if (hotFeel && (sil >= 3.2 || heavyDominates(p, 50))) {
     hi = Math.max(lo, hi - 1);
     capped = true;
   }
@@ -155,6 +161,22 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 「略微多喷一点」和「想被注意到」各自都是"略"，叠加起来不该变成两档。
   const prefCeiling = capped ? safetyCap : Math.min(safetyCap + 1, 5);
 
+  // ── 成功配置：它是**基准**，不是终点 ────────────────────────────────
+  // 同温度档 × 同场合你反馈过「刚好」→ 从那次的量起算，但只能在安全上限之内复用：
+  //「上次刚好」记的是上次的场合，覆盖不了今天更封闭的会议室、更闷的天、
+  // 或这瓶香本身的用力过猛组合。个性化不能凌驾于安全阀之上。
+  //
+  // ⚠️ 它此前写在偏好**之后**，且是 `lo = hi = applied` 的无条件覆盖，于是只夹住了安全阀、
+  // 把更近的信号一并抹掉：一条旧的「刚好 4 下」会盖过随后两次「太冲了」，
+  // 也盖过场景解析出的「今晚想贴身一点」。而反馈闭环恰恰是这个产品唯一的真壁垒——
+  // 让最新的反馈失效，比不做这个功能更糟。
+  // 顺序改成「安全阀 → 记忆的基准 → 当下的偏好 → 收口」，四层各司其职。
+  const cfg = bias?.successConfigs?.find(
+    (c) => c.occasion === ctx.occasion && c.tempBand === tempBand(ctx.tempC)
+  );
+  const remembered = cfg ? Math.max(1, Math.min(5, cfg.sprays)) : null;
+  if (remembered != null) lo = hi = Math.max(1, Math.min(remembered, safetyCap));
+
   // ── 个人偏好：可升可降，但一律不得越过 safetyCap ────────────────────
   // 自然语言场景：想贴身则收一档、想被注意到可略增
   if (ctx.intimacy === "close") hi = Math.max(1, hi - 1);
@@ -172,21 +194,18 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   hi = Math.min(hi, prefCeiling);
   lo = Math.max(1, Math.min(lo, hi));
 
-  // 成功配置复用：同温度档 × 同场合你反馈过「刚好」→ 按那次的量来。
-  // 但它只能在安全上限之内复用——"上次刚好"记的是上次的场合，覆盖不了今天更封闭的会议室、
-  // 更闷的天、或这瓶香本身的用力过猛组合。个性化不能凌驾于安全阀之上。
+  // 成功配置的回执：说的必须是**最终这个数**是怎么来的，不能停在"按那次的量来"——
+  // 上面已经允许更近的反馈与场景把它推开了，回执跟不上就又变成一句不兑现的话。
   let note: string | undefined;
-  const cfg = bias?.successConfigs?.find(
-    (c) => c.occasion === ctx.occasion && c.tempBand === tempBand(ctx.tempC)
-  );
-  if (cfg) {
-    const remembered = Math.max(1, Math.min(5, cfg.sprays));
-    const applied = Math.max(1, Math.min(remembered, safetyCap));
-    lo = hi = applied;
+  if (remembered != null) {
     note =
-      applied < remembered
-        ? "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
-        : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
+      hi < remembered
+        ? ps >= 0.4
+          ? "上次同样天气、同样场合你说「刚好」——不过你后来又说过它偏冲，这次在那个量上再收一点。"
+          : "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
+        : hi > remembered
+          ? "上次同样天气、同样场合你说「刚好」——今天在那个量上略放开一点。"
+          : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
   }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;

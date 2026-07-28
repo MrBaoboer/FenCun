@@ -427,8 +427,13 @@ export function avoidPenalty(p: Perfume, avoid?: string[]): number {
   const has = (t: string) => avoid.includes(t);
   // 「别太甜」只该罚真正的甜——琥珀不在其列。混进 amber 会让用户说一句"别太甜"，
   // 就把蔚蓝浓香精(sweet=0)、旷野这些一点也不甜的香罚掉 32%。
+  // 拆完桶还有第二层：这一族得**主导**这瓶，才配代表它的气质。
+  // 只看绝对线的代价与 amber 混进甜桶是同一类——实测主目录 672 款过 ≥50 的绝对线，
+  // 其中 225 款的甜只是第 N 位的尾调：信仰之水(fruity=100, sweet=55)、
+  // 爱神烈焰(citrus=100, sweet=58)、温暖壁炉(woody=100, sweet=69)。
+  // 用户说一句「别太甜」，这 225 款一起被罚掉 32%，而它们本来就不甜。
   if (has("too_sweet") || has("cloying")) {
-    if (sweetness(p) >= 50) m *= 0.68;
+    if (sweetDominates(p, 50)) m *= 0.68;
   }
   if (has("too_strong")) {
     if (p.sillageTier >= 4) m *= 0.6;
@@ -447,15 +452,20 @@ export function avoidPenalty(p: Perfume, avoid?: string[]): number {
 //   哪怕 occasion 落在 social，也要能收得住。
 export function socialToneMultiplier(p: Perfume, ctx: Context): number {
   let m = 1;
-  const gourmand = maxStrength(p, ["sweet", "vanilla", "caramel", "honey", "chocolate", "gourmand"]);
+  // 这里原本把 F.sweet 的六个键**又抄了一份**，然后拿绝对线判。两处毛病同根：
+  // 抄一份意味着 F.sweet 下次调整时这里不会跟着动（cacao/coffee 那轮排除就差点漏在这儿）；
+  // 绝对线意味着 187 款甜只是尾调的香——信仰之水、爱神烈焰、黑兰花——
+  // 在高张力场合与正式场合被当作"甜美食调"再罚 15%。
+  // 判据只留一处：sweetDominates。
+  const sweetLeads = sweetDominates(p, 55);
   if (ctx.tension === "high") {
     if (p.sillageTier >= 4) m *= 0.7;
     else if (p.sillageTier === 3) m *= 0.85;
-    if (gourmand >= 55) m *= 0.85;
+    if (sweetLeads) m *= 0.85;
   }
   if ((ctx.formality ?? 0) >= 0.7) {
     if (p.sillageTier >= 4) m *= 0.8;
-    if (gourmand >= 55) m *= 0.85;
+    if (sweetLeads) m *= 0.85;
   }
   return m;
 }

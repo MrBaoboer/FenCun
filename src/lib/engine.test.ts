@@ -544,6 +544,25 @@ test("成功配置不得越过安全阀：「上次刚好」覆盖不了今天�
   assert.ok(u.note?.includes("更收着"), "被压低时要说明白为什么，不能默默改数");
 });
 
+test("成功配置是基准不是终点：更近的反馈与场景必须还能推动它", () => {
+  // 它此前写在偏好**之后**、且是无条件覆盖，于是只夹住了安全阀：
+  // 一条旧的「刚好 4 下」会盖过随后两次「太冲了」，也盖过场景解析出的「今晚想贴身」。
+  // 反馈闭环是这个产品唯一的真壁垒，让最新的反馈失效比不做这个功能更糟。
+  const p = mk({ people: 2000, sillage: 2.5, sillageTier: 2, accords: acc([["woody", 80]]) });
+  const cfg = { occasion: "home" as const, tempBand: "mild" as const, sprays: 4 };
+  const at = (bias: Parameters<typeof computeUsage>[2], patch: Partial<Context> = {}) =>
+    computeUsage(p, C({ occasion: "home", feel: "mild", tempC: 20, ...patch }), bias);
+
+  const base = at({ likeScore: 0.5, perceivedStrength: 0, successConfigs: [cfg] });
+  const afterTooStrong = at({ likeScore: 0.2, perceivedStrength: 0.8, successConfigs: [cfg] });
+  const wantClose = at({ likeScore: 0.5, perceivedStrength: 0, successConfigs: [cfg] }, { intimacy: "close" });
+
+  assert.ok(afterTooStrong.sprays[1] < base.sprays[1], `两次「太冲了」之后必须更少：${afterTooStrong.spraysLabel}`);
+  assert.ok(wantClose.sprays[1] < base.sprays[1], `场景说「想贴身」也要能推动它：${wantClose.spraysLabel}`);
+  // 回执必须跟着最终这个数走，不能停在「就按那次的量来」
+  assert.ok(afterTooStrong.note?.includes("偏冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
+});
+
 test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给提示(P0-7)", () => {
   const loud = mk({ people: 20000, sillage: 2.8, sillageTier: 3, accords: acc([["sweet", 60]]) });
   const base = C({ occasion: "social", feel: "mild", tempC: 20 });
@@ -848,10 +867,13 @@ test("厚重只准有一条判据：喷量、风险文案与打分归因不得�
   // 主目录实测 111 款卡片自相矛盾、226 款拿到与分数相反的断言，其中包括旷野、信仰之水、
   // 探索家、邂逅柔情这些公认的清爽香。这条测试锁的不是某一款香，是"同一个概念只准有一处判据"。
   const fs = await import("node:fs");
-  const { sweetDominates, balsamicDominates, richDominates } = await import("./scoring");
+  const { sweetDominates, balsamicDominates, richDominates, heavyDominates } = await import("./scoring");
   const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
   const hot = C({ occasion: "casual", feel: "hot_dry", tempC: 33, humidity: 45, season: "summer" });
-  const HEAVY_LINE = (s: string) => s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚");
+  // 三支都要数进来。此前这个谓词只认前两支，于是「厚重感在高温里会放大」那一支
+  // ——烟草与动物性主导的那批——在断言里根本不存在，而减量恰恰就漏在它身上。
+  const HEAVY_LINE = (s: string) =>
+    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感在高温里会放大");
 
   const contradictory: string[] = [];
   const mismatched: string[] = [];
@@ -860,13 +882,22 @@ test("厚重只准有一条判据：喷量、风险文案与打分归因不得�
     // ① 同一张卡不许既说清爽又说厚/腻
     if (pick.reasons.some((r) => r.includes("清爽通透")) && pick.risks.some(HEAVY_LINE))
       contradictory.push(`${p.nameZh || p.name}`);
-    // ② 风险文案必须与高温减量走同一条判据（usage.ts 的第二条触发用的就是 richDominates）
-    if (pick.risks.some(HEAVY_LINE) !== richDominates(p, 55)) mismatched.push(`${p.nameZh || p.name}`);
+    // ② 风险文案必须与高温减量走**同一个符号**：两边现在都是 heavyDominates(50)
+    if (pick.risks.some(HEAVY_LINE) !== heavyDominates(p, 50)) mismatched.push(`${p.nameZh || p.name}`);
     // ③ 两族互斥且穷尽：并集的最大值必落在其中一族里
     assert.equal(richDominates(p, 55), sweetDominates(p, 55) || balsamicDominates(p, 55));
   }
   assert.deepEqual(contradictory.slice(0, 5), [], `卡片自相矛盾（共 ${contradictory.length} 款）`);
   assert.deepEqual(mismatched.slice(0, 5), [], `文案与减量判据脱节（共 ${mismatched.length} 款）`);
+
+  // ④ 说了「收着些」，数字就得真的收——烟草主导的那一类正是此前只说不做的那批
+  const mild = C({ occasion: "casual", feel: "mild", tempC: 20, humidity: 50, season: "autumn" });
+  const tobaccoLed = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["tobacco", 100], ["leather", 62]]) });
+  assert.ok(computeRisks(tobaccoLed, hot).some(HEAVY_LINE), "烟草主导在高温下必须说得出厚重");
+  assert.ok(
+    computeUsage(tobaccoLed, hot).sprays[1] < computeUsage(tobaccoLed, mild).sprays[1],
+    "说了「喷得收着些更稳」，高温下的喷量上限就必须真的比温和天低"
+  );
 
   // 具体回归：清爽当家的三款不许拿到厚重断言，真厚重的照旧要被抓住
   const clean: [string, [string, number][]][] = [
