@@ -29,20 +29,56 @@ export function allow(key: string, limit: number, windowMs: number): boolean {
 // 诚实说明它的局限（与 allow() 同源）：Vercel 多实例时这是「每实例」上限，不是全局上限，
 // 实例越多总量越高。它是纵深防御的一层，不是硬保险。**真正的硬保险是在 DeepSeek 控制台
 // 给账户设消费上限**——那一层在我们的代码之外，任何实例数都绕不过去。
-const DAILY_CAP = Number(process.env.LLM_DAILY_CAP ?? 3000);
-let dayKey = "";
-let dayCount = 0;
-
-export function withinDailyBudget(): boolean {
-  const today = new Date().toISOString().slice(0, 10);
-  if (today !== dayKey) {
-    dayKey = today;
-    dayCount = 0;
+// 环境变量用裸 Number() 解析会有两个静默方向：留空得 0（全站永久降级）、
+// 写错格式得 NaN（`dayCount >= NaN` 恒为 false，闸门被彻底关掉）。
+// 两种都不会有人发现，所以在这里收口：取不到有效正整数就用默认值，并说一声。
+export function capFrom(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    console.warn(`[ratelimit] ${name}="${raw}" 不是有效的正整数，回退到默认值 ${fallback}`);
+    return fallback;
   }
-  if (dayCount >= DAILY_CAP) return false;
-  dayCount++;
-  return true;
+  return Math.floor(n);
 }
+
+/**
+ * 「每实例每天最多打多少次上游」的闸门工厂。
+ *
+ * 抽成工厂而不是一个全局计数器，是因为两类上游的额度是分开的：
+ * DeepSeek 按 token 计费，和风按调用次数计配额，一方触顶不该把另一方也拖下水。
+ */
+function makeDailyGate(envName: string, fallback: number): () => boolean {
+  const cap = capFrom(envName, fallback);
+  let dayKey = "";
+  let count = 0;
+  return () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== dayKey) {
+      dayKey = today;
+      count = 0;
+    }
+    if (count >= cap) return false;
+    count++;
+    return true;
+  };
+}
+
+export const withinDailyBudget = makeDailyGate("LLM_DAILY_CAP", 3000);
+
+/**
+ * 天气这条路此前**没有**日闸门——三条代理付费上游的路由里，只有它漏了。
+ *
+ * 它还是最容易被放大的一条：坐标按 0.01 步进就能保证每次都 miss 网格缓存，
+ * 而一次 miss 要打两次和风（反查城市名 + 取实况）。单客户端 20 次/60 秒的口径，
+ * 折算下来是每分钟 40 次上游调用，且没有任何一天的封顶。
+ * 额度耗尽之后全站天气退化成 weather_unavailable——实时天气是这个产品的核心输入。
+ *
+ * 与 LLM 那道一样，诚实说明它的局限：Vercel 多实例时这是「每实例」上限，不是全局上限。
+ * 它是纵深防御的一层，真正的硬保险是在和风控制台给账户设配额告警与上限。
+ */
+export const withinWeatherBudget = makeDailyGate("WEATHER_DAILY_CAP", 5000);
 
 // 客户端标识（IP）的信任模型：
 // - Vercel 部署（默认场景）：平台会覆写 x-forwarded-for / x-real-ip / x-vercel-forwarded-for，

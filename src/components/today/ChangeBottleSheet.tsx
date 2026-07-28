@@ -9,12 +9,23 @@ export function ChangeBottleSheet({
   perfumes,
   currentId,
   onSelect,
+  tierById,
 }: {
   open: boolean;
   onClose: () => void;
   perfumes: Perfume[];
   currentId: number | null;
   onSelect: (id: number) => void;
+  /**
+   * 情境校正之后的社交距离档（来自今天这一轮 recommend 的 ScoredPick）。
+   *
+   * 这一格此前直接读 p.sillageTier，而同一屏下方的「也可以考虑」读的是
+   * usage.socialDistance——封闭场合会把档位收一到两级，于是同一瓶香在
+   * 上下两个列表里拿到两个不同的叫法，而 format.ts 的注释正自称
+   *「保证换瓶弹层、备选列表、香柜卡与推荐卡……叫法一致」。
+   * 复用已经算好的那批，既对得上、也不多算一遍。
+   */
+  tierById?: Map<number, 1 | 2 | 3 | 4>;
 }) {
   const panelRef = useDialogA11y(open, onClose);
   if (!open) return null;
@@ -72,7 +83,7 @@ export function ChangeBottleSheet({
                 })()}
               </div>
               <span className="disp ml-3 shrink-0 text-[0.72rem] text-ink-soft">
-                {SILLAGE_WORD[p.sillageTier]}
+                {SILLAGE_WORD[tierById?.get(p.id) ?? p.sillageTier]}
               </span>
             </button>
           ))}

@@ -102,6 +102,13 @@ export default function TodayPage() {
     }
   };
 
+  // 换瓶弹层与「也可以考虑」必须给同一瓶报同一个社交距离档。
+  // rec.ranked 已经为柜里每一瓶算过 ScoredPick，直接复用，不再多算一遍、也不会算出第二个答案。
+  const tierById = useMemo(
+    () => new Map(rec?.ranked.map((r) => [r.perfume.id, r.usage.socialDistance] as const) ?? []),
+    [rec]
+  );
+
   const explain = useExplain(activePick, ctx);
   const nudges = useNudges(ctx, rec);
 
@@ -204,6 +211,7 @@ export default function TodayPage() {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         perfumes={lib}
+        tierById={tierById}
         currentId={activePick?.perfume.id ?? null}
         onSelect={(id) => {
           // 从"换一瓶"里选定 = 今天采纳这瓶 → 记一笔用香（解耦"记录用香"与"留反馈"，修正吃灰误判）

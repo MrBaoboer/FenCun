@@ -66,6 +66,30 @@ test("无香场合取并集：LLM 漏判时关键词判定必须仍然作数", (
   assert.deepEqual(normal, { fragranceFree: false, label: "前任婚礼·得体克制" });
 });
 
+test("日闸门的环境变量不许有静默方向：留空得 0、写错得 NaN，两边都要被挡住", async () => {
+  // 裸 Number() 有两个不会有人发现的失败形态：
+  //   LLM_DAILY_CAP=       → 0     → 全站解读永久降级成模板，而 source 字段看不出区别；
+  //   LLM_DAILY_CAP=3000次 → NaN   → `count >= NaN` 恒为 false，闸门被彻底关掉。
+  const { capFrom } = await import("@/lib/ratelimit");
+  const KEY = "FENCUN_CAP_PROBE";
+  const cases: [string | undefined, number][] = [
+    [undefined, 3000], // 没配
+    ["", 3000], // 配了空串
+    ["3000次", 3000], // 写错格式
+    ["0", 3000], // 显式零：这是"关掉功能"，不该由一个额度变量表达
+    ["-1", 3000],
+    ["abc", 3000],
+    ["500", 500], // 正常值照旧生效
+    ["500.9", 500], // 取整
+  ];
+  for (const [raw, want] of cases) {
+    if (raw === undefined) delete process.env[KEY];
+    else process.env[KEY] = raw;
+    assert.equal(capFrom(KEY, 3000), want, `${JSON.stringify(raw)} 应解析为 ${want}`);
+  }
+  delete process.env[KEY];
+});
+
 // ---------- explain · 降级模板 ----------
 
 function mkInput(over: Partial<ExplainInput> = {}): ExplainInput {

@@ -1,6 +1,6 @@
 // 情境感知：服务端代理和风天气（保护 key），带 30 分钟网格缓存，失败优雅降级
 import { NextRequest, NextResponse } from "next/server";
-import { allow, clientKey } from "@/lib/ratelimit";
+import { allow, clientKey, withinWeatherBudget } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -102,6 +102,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "weather_unconfigured" }, { status: 200 });
   }
   // 限流：单客户端 60 秒最多 20 次（切城市/定位）
+  // 日闸门与 allow() 分工不同：allow 挡单客户端狂刷，它挡换 IP 的分布式刷量。
+  // 触顶后走既有的降级契约（200 + body 里的 error），客户端 AppProvider 只看 error 字段。
+  if (!withinWeatherBudget()) {
+    return NextResponse.json({ error: "weather_unavailable" }, { status: 200 });
+  }
   if (!allow(`ctx:${clientKey(req)}`, 20, 60_000)) {
     // 语义上该回 429，但客户端（AppProvider）只解析 body 判 d.error，
     // 返回 429 对它没有增益、反而可能把其他消费方打进降级链，
