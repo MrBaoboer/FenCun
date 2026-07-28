@@ -197,7 +197,12 @@ html.theme-switching, html.theme-switching *, html.theme-switching *::before, ht
 .bar-grow { transform-origin: left center; animation: fc-grow 0.7s var(--ease-out-soft) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-up, .animate-fade-in, .bar-grow { animation: none; }
+  /* 自家那三个是一次性入场动画，关掉即可。
+     animate-pulse 是 Tailwind 的**无限循环**骨架屏——恰恰是这类持续动效最需要被关掉，
+     却是唯一漏在外面的一个：目录加载慢时它会一直闪，而首屏四页全在用它。
+     保留一点静态底色，让骨架仍然看得出是占位。 */
+  .animate-fade-up, .animate-fade-in, .bar-grow, .animate-pulse { animation: none; }
+  .animate-pulse { opacity: 0.6; }
 }
 
 /* iOS Safari 会在聚焦字号 <16px 的输入框时强制放大整页，而且**不会自动缩回**——

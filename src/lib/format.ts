@@ -126,7 +126,11 @@ export function nameParts(p: { name: string; nameZh: string | null }): {
   primaryIsZh: boolean;
 } {
   if (p.nameZh && p.nameZh.trim()) {
-    return { primary: p.nameZh, secondary: p.name, primaryIsZh: true };
+    // 中文名与英文原名相同时不要再印一遍：手动记一瓶的中文香水必中这一条
+    //（ManualAdd 把用户填的那个名字同时写进 name 与 nameZh），
+    // 屏上就会出现「昆仑煮雪 昆仑煮雪」，后一个还套着英文斜体。
+    const same = p.nameZh.trim() === p.name.trim();
+    return { primary: p.nameZh, secondary: same ? null : p.name, primaryIsZh: true };
   }
   return { primary: p.name, secondary: null, primaryIsZh: false };
 }

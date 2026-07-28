@@ -101,7 +101,11 @@ export default function JournalPage() {
                 disabled={future}
                 aria-pressed={isSelected}
                 aria-label={`${view.m + 1}月${day}日${e ? ` · ${e.name}` : ""}`}
-                className={`mx-auto flex h-11 w-11 flex-col items-center justify-center rounded-md transition-colors ${
+                // 固定 44×44 塞进 7 列网格：375px 视口下每列只有约 41px，320px 下只有 33px，
+                // 相邻两格互相压盖，色点与日期也跟星期头对不齐。
+                // 改成按列宽自适应、用 aspect-square 保住方形，并以 min-h 守住
+                // WCAG 2.5.8 的 24px 触控下限（不是 44px——那是 AAA 的 2.5.5）。
+                className={`mx-auto flex aspect-square w-full min-h-6 max-w-11 flex-col items-center justify-center rounded-md transition-colors ${
                   isSelected ? "bg-sunken" : "hover:bg-sunken/60"
                 } ${future ? "opacity-30" : ""}`}
               >

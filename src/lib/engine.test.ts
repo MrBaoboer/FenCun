@@ -1192,3 +1192,26 @@ test("留印提示的成因必须与文案同源：烟草不许被说成树脂�
   const b = buildPick(balsam, work).risks.find((r) => r.includes("喷衣物")) ?? "";
   assert.ok(b.includes("树脂与浸膏"), `树脂香膏仍要说树脂：${b}`);
 });
+
+test("nameParts：中英文同名时不再把同一个名字当副名再印一遍", async () => {
+  const { nameParts } = await import("./format");
+  // 手动记一瓶必中：ManualAdd 把用户填的那个名字同时写进 name 与 nameZh，
+  // 屏上就会出现「昆仑煮雪 昆仑煮雪」，后一个还套着英文斜体
+  assert.deepEqual(nameParts({ name: "昆仑煮雪", nameZh: "昆仑煮雪" }), {
+    primary: "昆仑煮雪",
+    secondary: null,
+    primaryIsZh: true,
+  });
+  // 真的有英文原名时照旧两行都给
+  assert.deepEqual(nameParts({ name: "Sauvage", nameZh: "旷野" }), {
+    primary: "旷野",
+    secondary: "Sauvage",
+    primaryIsZh: true,
+  });
+  // 没有中文名就只给英文
+  assert.deepEqual(nameParts({ name: "Aventus", nameZh: null }), {
+    primary: "Aventus",
+    secondary: null,
+    primaryIsZh: false,
+  });
+});

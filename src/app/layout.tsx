@@ -85,6 +85,13 @@ export default function RootLayout({
       className={`${fraunces.variable} ${notoSerifSC.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* 主目录 JSON（gzip 约 266KB）是首屏推荐的必要输入，而它此前要等 CSS + JS +
+            hydration 全跑完、AppProvider 挂载之后才被发现，白白串在关键路径末尾。
+            放进服务端渲染的 <head> 里，浏览器一读到就能与 JS 并行开始下载。
+            四页共用同一个 AppProvider，所以四页都需要它。 */}
+        <link rel="preload" as="fetch" href="/data/perfumes.min.json" crossOrigin="anonymous" />
+      </head>
       <body className="min-h-full">
         <script
           dangerouslySetInnerHTML={{

@@ -104,10 +104,12 @@ export default function ProfilePage() {
       else if (b.perceivedStrength <= -0.4) weakN++;
     }
     const lines: string[] = [];
+    // 只有一瓶时说「它们」，画像的第一句就在告诉用户这段话不是为他写的
+    const it = (n: number) => (n > 1 ? "它们" : "它");
     if (strongN > 0)
-      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐它们时，喷量与扩散都会各自收一点。`);
+      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐${it(strongN)}时，喷量与扩散都会各自收一点。`);
     if (weakN > 0)
-      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐它们时，会建议略增喷量。`);
+      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐${it(weakN)}时，会建议略增喷量。`);
     if (lines.length === 0)
       lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
     return lines;
