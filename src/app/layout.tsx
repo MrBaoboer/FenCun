@@ -45,7 +45,12 @@ export const metadata: Metadata = {
   // manifest 里配了三张自制图标，但 iOS 较老的系统在「添加到主屏幕」时只找
   // /apple-touch-icon.png 这个固定名字（新版 WebKit 已经会读 manifest）。
   // 图由 npm run og 生成，与 icon-192/512 同源同版式。
-  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
+  //
+  // ⚠️ 这里**不要**再写 icon: "/favicon.ico"。src/app/favicon.ico 是 Next 的文件约定，
+  // 框架已经自动发一条带内容 hash 的 <link rel="icon" href="/favicon.ico?favicon.xxx.ico">；
+  // 在这里重复声明只会多出一条**不带 hash** 的同名链接，而 /favicon.ico 恰恰是浏览器
+  // 缓存最凶的一个路径——换了图标也照旧显示旧的。留框架那条，换图即换 URL。
+  icons: { apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "氛寸", statusBarStyle: "default" },
   openGraph: {
     type: "website",
@@ -85,6 +90,13 @@ export default function RootLayout({
       className={`${fraunces.variable} ${notoSerifSC.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* 主目录 JSON（gzip 约 266KB）是首屏推荐的必要输入，而它此前要等 CSS + JS +
+            hydration 全跑完、AppProvider 挂载之后才被发现，白白串在关键路径末尾。
+            放进服务端渲染的 <head> 里，浏览器一读到就能与 JS 并行开始下载。
+            四页共用同一个 AppProvider，所以四页都需要它。 */}
+        <link rel="preload" as="fetch" href="/data/perfumes.min.json" crossOrigin="anonymous" />
+      </head>
       <body className="min-h-full">
         <script
           dangerouslySetInnerHTML={{

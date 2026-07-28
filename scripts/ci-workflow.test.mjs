@@ -78,3 +78,31 @@ test("新增的测试文件不许静默不跑：npm test 的清单必须覆盖�
   const missing = found.filter((f) => !script.includes(f));
   assert.deepEqual(missing, [], `这些测试文件不在 npm test 的清单里，永远不会被执行：${missing.join(", ")}`);
 });
+
+test("源码里不许出现裸控制字符——否则 git 把整个文件判成二进制，评审里就看不见它了", async () => {
+  // 实锤过一次：src/app/api/context/route.ts 把 /[\x00-\x1f]/ 写成了两个裸字节，
+  // 于是 `git show` 与 PR 页面对它只输出「Binary files differ」（一行 diff 都没有）、
+  // grep 与 git grep 只回「Binary file matches」。而那正是全站唯一既校验不可信入参
+  // （lon / lat / city）、又持有和风密钥的文件——最需要被逐行看见的那一个。
+  // gitleaks 走的也是 git patch 通道，对二进制文件基本是盲区。
+  //
+  // 允许的只有 \t(09) \n(0a) \r(0d)。其余 C0 控制字符与 DEL 一律不许直接写进源码，
+  // 要表达它们就用转义形态（/[\x00-\x1f]/）——语义完全等价，而且人看得见。
+  const { execSync } = await import("node:child_process");
+  const root = new URL("../", import.meta.url);
+  const list = execSync("git ls-files -z", { cwd: root, encoding: "buffer" })
+    .toString("utf8")
+    .split("\0")
+    .filter((f) => /\.(ts|tsx|mjs|cjs|js|json|md|yml|yaml|css)$/.test(f));
+  assert.ok(list.length > 50, "取不到文件清单时应当直接失败，而不是空跑一遍报绿");
+
+  const offenders = [];
+  for (const rel of list) {
+    const buf = await readFile(new URL(rel, root));
+    for (const byte of buf) {
+      if (byte === 9 || byte === 10 || byte === 13) continue;
+      if (byte < 0x20 || byte === 0x7f) { offenders.push(rel); break; }
+    }
+  }
+  assert.deepEqual(offenders, [], `这些源码里有裸控制字符，git 会把它们当二进制：${offenders.join(", ")}`);
+});

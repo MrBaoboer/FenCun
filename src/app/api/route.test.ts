@@ -6,9 +6,9 @@
 // 只写在注释里、没有任何东西守着。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { heuristic } from "./parse-intent/route";
-import { template, type ExplainInput } from "./explain/route";
-import { extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
+import { heuristic, PatchSchema, unionFragranceFree } from "./parse-intent/route";
+import { template, NEGATIVE_VERDICT_RE, type ExplainInput } from "./explain/route";
+import { carriesNumber, extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
 
 // ---------- parse-intent · 无香场合红线 ----------
 
@@ -42,6 +42,54 @@ test("启发式兜底：普通场合仍各归各位，无香判定不误伤", ()
   }
 });
 
+test("无香场合取并集：LLM 漏判时关键词判定必须仍然作数", () => {
+  // 这条守卫此前只写在启发式那条路上，而启发式**只在 LLM 不可用时才跑**——
+  // 也就是说平时它一次都不生效，红线的可靠性全押在模型这一次记不记得给 fragranceFree。
+  const fb = heuristic("下班后去医院看我妈"); // 关键词判定：true
+  assert.equal(fb.fragranceFree, true);
+
+  // ① 模型漏判 → 并集救回来，眉标也跟着兜底那句走，不留「探病·从容」配「今天不用香」的错位
+  const missed = unionFragranceFree({ label: "探望家人·从容" }, fb);
+  assert.equal(missed.fragranceFree, true, "模型漏判时关键词判定必须作数");
+  assert.equal(missed.label, "就医探病·今天不用香");
+
+  // ② 模型判对 → 用模型自己的 label（它读得懂上下文，比十三个关键词细）
+  const hit = unionFragranceFree({ fragranceFree: true, label: "陪诊·今天不用香" }, fb);
+  assert.deepEqual(hit, { fragranceFree: true, label: "陪诊·今天不用香" });
+
+  // ③ 只有模型看出来的场合（关键词表里没有的说法）同样成立——并集只能加不能减
+  const onlyLlm = unionFragranceFree({ fragranceFree: true, label: "术后探望·不用香" }, heuristic("去看刚做完手术的同事"));
+  assert.equal(onlyLlm.fragranceFree, true);
+
+  // ④ 普通场合不许被误伤
+  const normal = unionFragranceFree({ label: "前任婚礼·得体克制" }, heuristic("去前任的婚礼"));
+  assert.deepEqual(normal, { fragranceFree: false, label: "前任婚礼·得体克制" });
+});
+
+test("日闸门的环境变量不许有静默方向：留空得 0、写错得 NaN，两边都要被挡住", async () => {
+  // 裸 Number() 有两个不会有人发现的失败形态：
+  //   LLM_DAILY_CAP=       → 0     → 全站解读永久降级成模板，而 source 字段看不出区别；
+  //   LLM_DAILY_CAP=3000次 → NaN   → `count >= NaN` 恒为 false，闸门被彻底关掉。
+  const { capFrom } = await import("@/lib/ratelimit");
+  const KEY = "FENCUN_CAP_PROBE";
+  const cases: [string | undefined, number][] = [
+    [undefined, 3000], // 没配
+    ["", 3000], // 配了空串
+    ["3000次", 3000], // 写错格式
+    ["0", 3000], // 显式零：这是"关掉功能"，不该由一个额度变量表达
+    ["-1", 3000],
+    ["abc", 3000],
+    ["500", 500], // 正常值照旧生效
+    ["500.9", 500], // 取整
+  ];
+  for (const [raw, want] of cases) {
+    if (raw === undefined) delete process.env[KEY];
+    else process.env[KEY] = raw;
+    assert.equal(capFrom(KEY, 3000), want, `${JSON.stringify(raw)} 应解析为 ${want}`);
+  }
+  delete process.env[KEY];
+});
+
 // ---------- explain · 降级模板 ----------
 
 function mkInput(over: Partial<ExplainInput> = {}): ExplainInput {
@@ -69,8 +117,9 @@ function mkInput(over: Partial<ExplainInput> = {}): ExplainInput {
 test("降级模板：avoid 必须先把「不建议」说出口，不得圆成可用", () => {
   // 这正是路由里 avoid 语义防线（正则）判定 LLM 输出是否合格的那条标准——
   // 模板自己必须无条件满足它，否则回退之后仍然说不出那句话。
+  // 用路由导出的那个符号，不再抄第四份——三份字面量此前已经漂移过一次（good 那份少了两个分支）
   const t = template(mkInput({ verdict: "avoid", risks: ["大家更多在冬季用它，今天用会有点反季。"] }));
-  assert.match(t, /不建议|不太建议|不太合适|不合适|不宜|慎|其实不/);
+  assert.match(t, NEGATIVE_VERDICT_RE);
   assert.ok(t.includes("烟草香草"), "没点名是哪一瓶");
   assert.ok(t.includes("1 下"), "没给出降到最低的具体用法");
 });
@@ -126,4 +175,73 @@ test("数字白名单：全角与中文数字同样是伪精确，不许绕过",
   assert.deepEqual(findPseudoPreciseCN("用两次你就知道它在你身上能走多久", facts), []);
   // ⑥ 非计数的体感表达不在其列（它们本来就是我们自己的措辞）
   assert.deepEqual(findPseudoPreciseCN("撑得住大半个白天，一臂之内闻得到", facts), []);
+});
+
+test("数字白名单：「半」是数字，量词要盖住时间 · 剂量 · 距离三件事", () => {
+  // 上一版漏掉的两类，实测都能原样上屏（invented 为空、source 标 deepseek）：
+  //   ① 「半」不在数字表里 → 「六个半小时」「一个半小时」「半小时」全放行，
+  //      而这比「六到八个小时」更像中文里的自然说法；
+  //   ② 量词表没有「钟头」「秒」「泵」，距离侧更是一个长度单位都没有——
+  //      而社交距离正是产品只给四档的三件事之一。
+  const facts = "喷 1–2 下；撑得住大半个白天；用两次你就知道它在你身上能走多久";
+  for (const s of [
+    "大概能撑六个半小时",
+    "差不多一个半小时就淡了",
+    "大概能撑半小时",
+    "大概六个钟头",
+    "间隔三十秒再喷",
+    "扩散半径一米五",
+    "喷三泵就够",
+  ]) {
+    assert.ok(findPseudoPreciseCN(s, facts).length > 0, `该拦没拦：${s}`);
+  }
+  // 「大半」是我们自己的模糊措辞，不是伪精确——拦下它等于让防线吃掉自家的话
+  assert.deepEqual(findPseudoPreciseCN("大半天都在，晚上多半还在", facts), []);
+  assert.deepEqual(findPseudoPreciseCN("过几个小时你自己可能先闻不到", facts), []);
+});
+
+test("riskNote 带数字必须在源头丢掉——否则用户自己的输入会把白名单撑开", () => {
+  // 链路：用户原话 → parse-intent 的 LLM → riskNote → computeRiskNotes 逐字进 risks[]
+  //     → /api/explain 的 factsOnly → allowedNumbers。
+  // 实测（修复前）：场景写「会议约 6.2 小时」，LLM 随后输出「留香 6.2 小时」时 invented = []。
+  assert.equal(carriesNumber("会议约 6.2 小时，别太浓"), true);
+  assert.equal(carriesNumber("会议室密闭，浓香会被放大"), false);
+  assert.equal(carriesNumber("大概能撑六个半小时"), true);
+  // 我们自己的模糊措辞不算"带数"，否则正常的 riskNote 会被误丢
+  assert.equal(carriesNumber("婚礼焦点是新人，不宜喧宾夺主"), false);
+  assert.equal(carriesNumber("大半天都在人多的地方"), false);
+
+  // schema 层：带数字的整条丢掉，其余字段照常放行
+  const dirty = PatchSchema.safeParse({ occasion: "formal", label: "会议", riskNote: "会议约 6.2 小时" });
+  assert.equal(dirty.success, true);
+  assert.equal(dirty.success && dirty.data.riskNote, undefined);
+  const clean = PatchSchema.safeParse({ occasion: "formal", label: "会议", riskNote: "会议室密闭，浓香会被放大" });
+  assert.equal(clean.success && clean.data.riskNote, "会议室密闭，浓香会被放大");
+});
+
+test("启发式兜底：也要给出在场时长档位，且没读懂时不许拿原话回显冒充理解", () => {
+  // ① duration 此前这条路一个都不给，于是「在外时间不短，带上分装中途补 1 下更稳」
+  //    在无 key / 限流 / 上游超时时整条消失——降级路径恰恰是最需要它的时候。
+  const cases: [string, 2 | 4 | 6 | 9][] = [
+    ["明天去参加婚礼", 4],
+    ["第一次见投资人", 2],
+    ["晚上和喜欢的人看展", 4],
+    ["朋友生日局", 4],
+    ["周末去健身房", 2],
+    ["明天上班", 9],
+  ];
+  for (const [text, want] of cases) {
+    assert.equal(heuristic(text).duration, want, `「${text}」的时长档位不对`);
+  }
+
+  // ② 一条规则都没命中时 matched=false。此前它照样返回 occasion="casual" + 原话回显的 label，
+  //    屏上写着「氛寸读到 · <原话>」，而推荐其实是按 casual 算的——回显不是理解。
+  const blank = heuristic("嗯嗯嗯");
+  assert.equal(blank.matched, false, "什么都没命中却自称读懂了");
+  assert.equal(blank.label, "嗯嗯嗯", "label 仍是原话回显（由前端按 matched 决定不采信）");
+
+  // ③ 命中任意一条（含横切信号）就算读懂了一部分
+  assert.equal(heuristic("明天上班").matched, true);
+  assert.equal(heuristic("下午去医院").matched, true, "无香场合是横切信号，必须算命中");
+  assert.equal(heuristic("和前任吃饭").matched, true, "张力与饭桌也是横切信号");
 });

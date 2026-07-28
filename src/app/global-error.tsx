@@ -5,9 +5,21 @@
 // 而那句话恰恰是根级崩溃时最该出现的一句。
 //
 // global-error 必须自带 <html>/<body>：它替换的是整个文档。
-// 这里不引 globals.css（根 layout 已经不参与渲染了），改用内联样式，
-// 同时把两套主题的底色都照顾到，免得深色系统下穿帮。
+// 这里不引 globals.css（根 layout 已经不参与渲染了），改用内联样式。
+//
+// 「两套主题都照顾到」此前只是注释：底色写死了明韵那一套，暗香用户崩一次就被闪一脸白。
+// 补法必须与全站一致——主题由 localStorage 的 fencun-theme 决定，**不跟系统深浅色走**
+//（见根 layout 的同一段说明），所以这里复用同一个内联脚本 + 一组 CSS 变量，
+// 而不是图省事写 prefers-color-scheme。
 import { useEffect } from "react";
+
+const THEME_CSS = `
+:root { --paper: #f1eee7; --ink: #1c1a17; }
+:root[data-theme="night"] { --paper: #131315; --ink: #ece7dc; }
+`;
+
+// 与根 layout 的首帧脚本同源：在渲染前把主题定死，避免先闪一下另一套配色
+const THEME_BOOT = `(function(){try{document.documentElement.dataset.theme=localStorage.getItem('fencun-theme')==='night'?'night':'day';}catch(e){}})();`;
 
 export default function GlobalError({
   error,
@@ -21,7 +33,10 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: THEME_CSS }} />
+      </head>
       <body
         style={{
           margin: 0,
@@ -29,11 +44,12 @@ export default function GlobalError({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#f1eee7",
-          color: "#1c1a17",
+          background: "var(--paper)",
+          color: "var(--ink)",
           fontFamily: '"Noto Serif SC", "Songti SC", serif',
         }}
       >
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <div style={{ maxWidth: "26rem", padding: "3rem 1.5rem", textAlign: "center" }}>
           <p style={{ fontSize: "0.7rem", letterSpacing: "0.18em", opacity: 0.55, margin: 0 }}>
             小插曲 · Hiccup
@@ -51,8 +67,8 @@ export default function GlobalError({
               padding: "0.75rem 1.5rem",
               fontSize: "0.9rem",
               fontFamily: "inherit",
-              color: "#f1eee7",
-              background: "#1c1a17",
+              color: "var(--paper)",
+              background: "var(--ink)",
               border: "none",
               borderRadius: "0.5rem",
               cursor: "pointer",

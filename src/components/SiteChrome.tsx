@@ -22,7 +22,17 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-2xl items-center justify-between px-6 pb-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)]">
           <Link href="/" className="group flex items-baseline gap-2.5">
             <span className="serif text-[1.4rem] font-bold tracking-[0.12em] text-ink">氛寸</span>
-            <span className="disp text-[0.6rem] uppercase tracking-[0.34em] text-accent">Fēn&nbsp;Cùn</span>
+            {/* 报头这一处**不带声调**，原因实测过：
+                  · Fraunces 以 subsets:["latin"] 引入，只发 Latin-1 那一片；
+                  · uppercase 后「ē」是预组合的「Ē」(U+0112)，属 Latin Extended-A，
+                    不在那一片里——`document.fonts.check(Fraunces,"Ē")` 为 false，
+                    而且把它写进 DOM 也**不会**触发任何新的 woff2 请求：那片压根不发。
+                  于是「Ē」永久落回 Georgia，与旁边真·Fraunces 的字母不同源。
+                  「Ù」(U+00D9) 在 Latin-1 里、有字形，所以出问题的只有 fen 上面那一横。
+                裸字母全部落在 Latin-1，任何时刻都同源。
+                （分享卡片与 metadata 里保留带声调的写法：前者由 og.mjs 单独排版、
+                字号大且不经 uppercase，后者根本不由我们渲染。） */}
+            <span className="disp text-[0.6rem] uppercase tracking-[0.34em] text-accent">Fen&nbsp;Cun</span>
           </Link>
           <div className="flex items-center gap-7">
             <nav className="hidden items-center gap-9 md:flex">

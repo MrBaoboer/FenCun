@@ -66,10 +66,12 @@ export default function LibraryPage() {
           <div className="h-32 animate-pulse bg-sunken/50" />
           <div className="h-32 animate-pulse bg-sunken/50" />
         </div>
-      ) : catalogError && userPerfumes.length > 0 ? (
+      ) : catalogError && lib.length < userPerfumes.length ? (
+        // 与今日页同一条判据：看的是「有几瓶因此拿不出来」，不是「柜里有没有瓶」。
+        // 扩展集与手动记录的香整条存在本机，目录挂了也一瓶不少。
         <div className="card px-6 py-12 text-center">
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
-            香水目录没加载出来（可能是网络波动）。你收藏的 {userPerfumes.length} 瓶都还在，没有丢。
+            香水目录没加载出来（可能是网络波动），有 {userPerfumes.length - lib.length} 瓶暂时取不出来。它们都还在，没有丢。
           </p>
           <button onClick={retryCatalog} className="btn-primary mt-4 px-6 py-3 text-[0.9rem]">
             重新加载

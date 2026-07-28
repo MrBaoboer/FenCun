@@ -1,11 +1,12 @@
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
 import type { Perfume, Context, ScoredPick, Verdict, AvoidCause, Bias, Feedback, Occasion, SuccessConfig } from "./types";
-import { score, sweetDominates, stainProneDominates, dataConfidence, type ScoreParts } from "./scoring";
+import { score, sweetDominates, stainProneDominates, dataConfidence, WEATHER_CAUTION, type ScoreParts } from "./scoring";
 
 /** 单个 accord 强度（留印风险判定用） */
 const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
-import { computeUsage, computeRiskNotes, buildReasons } from "./usage";
+import { computeUsage, computeRiskNotes, buildReasons, isBottleRisk } from "./usage";
 import { tempBand } from "./season";
+import { isClosedOccasion } from "./occasion-priors";
 
 export type { Bias } from "./types";
 
@@ -56,8 +57,7 @@ function computeVerdict(
   // 更根本的问题是：avoid 是输出最强、最不可逆的一档，却由三五十票的噪声分布驱动。
   const seasonKnown = !p.custom && !p.lowVotes && dataConfidence(p) >= 0.75;
   const seasonMiss = seasonKnown && best[0] !== ctx.season && best[1] - p.seasonPct[ctx.season] >= 0.22;
-  const closed = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
-  const tooLoudClosed = p.sillageTier === 4 && closed;
+  const tooLoudClosed = p.sillageTier === 4 && isClosedOccasion(ctx.occasion);
   // 成因随裁决一起带出来，顺序即优先级：天气最强、其次反季、最后场地。
   // 下游只认这个字段，不许再从 parts 的数值反推——数值说得出"扣了分"，说不出"因为什么"。
   // 「今天太热，这瓶今天别用」由**温度与归因**说了算，不由乘子数值反推。
@@ -68,11 +68,26 @@ function computeVerdict(
   // 用户能看到的只有 season 与 venue 两种成因。而 34.0℃ 那一点的结论还由浮点尾数决定。
   // 换成落在有语义的量上：这瓶由厚重族主导（tone 已经这么判了），且热负荷接近饱和
   //（H≥0.9 ⇔ 约 33.7℃ 以上）。成因与 tone 天然同源，也不再有浮点边界。
+  // ⚠️ 已知未修：这条固定线是一处**断崖**。实测 33℃ 时天气成因 0 款、34℃ 时 577 款
+  // （主目录 38%）同时翻，34→38℃ 再无变化；同一瓶香在 33.9℃ 与 34.0℃ 两次刷新之间
+  // 会从「今天还行」跳到「今天不建议」。
+  //
+  // 试过让门槛随厚重主导度滑动来摊开这一刀，实测**不成立**：主导度在真实数据里聚在 1.0
+  // （厚重族本来就常是这瓶的首位 accord），断崖只是从 33.7℃ 挪到 31.75℃（0 → 398 款），
+  // 同时把 32–33.7℃ 这一段的触发面从 0 扩到 398–545——那是"让它更早生效"，
+  // 是另一个产品决定，不是"只去断崖"。
+  //
+  // 二元裁决对连续输入必然有台阶，真正要选的是：保持严格（接受台阶）还是降低阈值
+  // （扩大劝退面）。这属于产品取舍，留给下一轮显式决定，不在这里悄悄改掉——
+  // avoid 是输出最强、最不可逆的一档。
   if (parts.weatherTone === "heavy_in_heat" && parts.heatLoad >= 0.9)
     return { verdict: "avoid", avoidCause: "weather" };
   if (seasonMiss) return { verdict: "avoid", avoidCause: "season" };
   if (tooLoudClosed) return { verdict: "avoid", avoidCause: "venue" };
-  if (risks.length > 0 || parts.weather < 0.95) return { verdict: "caution", avoidCause: null };
+  // 第二个触发源与 computeRiskNotes 共用同一个常量：天气压到这条线以下就判 caution，
+  // 而同一条线也是那边"必须说得出一句话"的门槛。两边各写一个 0.95，就会重演
+  // 「数字收了、话没说」——这次是反过来的形态：「判了、说不出为什么」。
+  if (risks.length > 0 || parts.weather < WEATHER_CAUTION) return { verdict: "caution", avoidCause: null };
   return { verdict: "good", avoidCause: null };
 }
 
@@ -81,10 +96,14 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   const notes = computeRiskNotes(p, ctx);
   const risks = notes.map((n) => n.text);
   const usage = computeUsage(p, ctx, bias);
-  // ⚠️ 裁决必须在追加织物提示**之前**算完。
-  // computeVerdict 的规则是 risks.length > 0 → caution，而织物留印是**提示**不是"这瓶今天要留意"——
-  // 若先追加再判，所有封闭场合（通勤/上班/正式，恰恰是最常见的那几个）都会被无端降级成 caution。
-  const { verdict, avoidCause } = computeVerdict(p, ctx, parts, risks);
+  // ⚠️ 裁决只吃**本瓶风险**，且必须在追加织物提示**之前**算完。
+  //
+  // 两件事同一个道理：computeVerdict 的规则是 risks.length > 0 → caution，而它要回答的是
+  //「这一瓶今天要不要留意」。凡是对柜里每一瓶都成立的句子，都没有资格进这个入口——
+  //   · 织物留印是**提示**：先追加再判，所有封闭场合（通勤/上班/正式，最常见的那几个）会被无端降级；
+  //   · 场景提示是**场合级**：一旦进来，全柜同时 caution，good 归零（见 usage.ts:isBottleRisk）。
+  // 上一次靠调用顺序绕开了第一件，这一次把第二件变成带类型的判据，两条都不再依赖"记得别写错"。
+  const { verdict, avoidCause } = computeVerdict(p, ctx, parts, notes.filter(isBottleRisk).map((n) => n.text));
   // 触发这次 avoid 的**那一条**风险，与成因同源取出（见 usage.ts:computeRiskNotes）。
   // 预警卡的正文要它：眉标按成因分岔，正文就不能再猜 risks[0]。
   // 取不到时下游退到按成因写死的兜底句，仍然对得上眉标。
@@ -112,9 +131,18 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   // 同一处代价），所以留印这条按机制**宁可漏报**：把 amber 排除在留印族之外，
   // 只认真正有色的树脂/香膏/沉香/蜂蜡，甜那一族照旧（香草醛与焦糖是实打实的油渍源）。
   // tobacco 单列且仍用绝对阈值：烟草的焦油质地本身就会在织物上留色，不问它占多重。
-  const stainRisk = sweetDominates(p, 40) || stainProneDominates(p, 40) || accordAt(p, "tobacco") >= 40;
-  if (stainRisk && usage.placement.some((x) => x.includes("衣物"))) {
-    risks.push("喷衣物请选内衬，避开真丝、醋酸和浅色外层——它的树脂与浸膏可能留印子。");
+  //
+  // 成因不同，话就得分开说。此前三条判据共用一句「它的树脂与浸膏可能留印子」，
+  // 于是 26 款靠 tobacco 触发、而柑橘/辛香当家的香被扣上一个它自己不成立的机制——
+  // 与本文件反复在修的「归因必须与结论同源」是同一件事，只是藏在一句文案里。
+  const stainByResin = sweetDominates(p, 40) || stainProneDominates(p, 40);
+  const stainByTobacco = accordAt(p, "tobacco") >= 40;
+  if ((stainByResin || stainByTobacco) && usage.placement.some((x) => x.includes("衣物"))) {
+    risks.push(
+      stainByResin
+        ? "喷衣物请选内衬，避开真丝、醋酸和浅色外层——它的树脂与浸膏可能留印子。"
+        : "喷衣物请选内衬，避开真丝、醋酸和浅色外层——烟草这类原料的质地容易在织物上留色。"
+    );
   }
   const reasons = buildReasons(p, ctx, {
     season: parts.season,
@@ -282,8 +310,20 @@ export function aggregateBias(feedbacks: Feedback[], now = Date.now()): Map<numb
         }
       } else if (f.rating === "scene_mismatch") {
         like -= 0.15 * w;
-        mismatch[f.context.occasion] = (mismatch[f.context.occasion] ?? 0) + 1;
+        // 与同一循环里的 like / strength 一样乘 w：注释（scoring.ts:mismatchMul）写着
+        // 「反向反馈可抵消」，而这里此前是纯计数、既不衰减也不可抵消——半年前的一次
+        // 「不合场合」和昨天的一次话语权相同，且永远抵不掉。
+        mismatch[f.context.occasion] = (mismatch[f.context.occasion] ?? 0) + w;
       }
+      // 同一场合后来又说过「刚好」，就是那句「反向反馈」本身：把它抵掉，下限 0。
+      if (f.rating === "perfect") {
+        const occ = f.context.occasion;
+        if (mismatch[occ] != null) mismatch[occ] = Math.max(0, mismatch[occ]! - w);
+      }
+    }
+    // 被抵干净或衰减到接近零的场合直接丢掉，别留一个恒等于 1 的乘子占位
+    for (const k of Object.keys(mismatch) as Occasion[]) {
+      if ((mismatch[k] ?? 0) < 0.05) delete mismatch[k];
     }
     map.set(id, {
       likeScore: Math.max(-1, Math.min(1, like)),

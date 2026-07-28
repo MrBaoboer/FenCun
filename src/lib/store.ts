@@ -70,8 +70,8 @@ interface State {
   markWorn: (id: number) => void;
   /** 采纳前留一份现场（见 AdoptSnapshot），交给 UI 拿去做 8 秒撤销 */
   snapshotAdopt: (id: number, day: string) => AdoptSnapshot;
-  /** 把 snapshotAdopt 那一刻的现场原样放回 */
-  undoAdopt: (s: AdoptSnapshot) => void;
+  /** 把 snapshotAdopt 那一刻的现场原样放回。传一串则整串回滚到**第一张**之前 */
+  undoAdopt: (s: AdoptSnapshot | AdoptSnapshot[]) => void;
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
   setOccasion: (o: Occasion) => void;
@@ -106,7 +106,8 @@ const UserPerfumeSchema = z.object({
   addedAt: z.number(),
   lastWornAt: z.number().optional(),
   wornCount: z.number().int().min(0).optional(),
-  bias: z.object({ likeScore: z.number(), perceivedStrength: z.number() }).optional(),
+  // 不再校验 bias：那个字段从来没被写过（偏置是 aggregateBias 每次现算的）。
+  // 老备份里若带着它，zod 默认剥掉未声明的键，导入照常成功。
 });
 const FeedbackSchema = z.object({
   perfumeId: z.number().int(),
@@ -186,8 +187,31 @@ export const PERSIST_VERSION = 1;
  */
 export const EXPORT_VERSION = 2;
 
+/** 持久化的键。listener 要按它过滤 storage 事件，所以不能只写在 persist 配置里 */
+export const STORE_KEY = "fencun-store";
+
 /** 读盘失败时另存原始字节的键 */
 const BACKUP_KEY = "fencun-store.bak";
+
+/**
+ * 另一个标签页写盘之后，这一页要不要跟着重读。
+ *
+ * 不重读的代价是**整包覆盖**：两个标签页各自持有一份内存态，persist 是全量写、没有 merge，
+ * 于是旧标签页的下一次点击会把另一页刚写下的香柜、香历与手记一起盖掉，
+ * 连「演示香柜已退场」这个标记也会被盖回去、六瓶示例复活。
+ * 而这些数据只有本机一份、没有云端，覆盖不可逆。
+ *
+ * 两个边界：
+ * · `key === null` 是 `localStorage.clear()`，同样要认——那时我们这一页的内存态是唯一的幸存者，
+ *   但盘上已经空了，继续按旧状态写回去只会造出一份半新半旧的数据；
+ * · 读盘出过错时写入已经被冻结（见 onRehydrateStorage），这时一切自动动作都要停手。
+ *
+ * 抽成纯函数是为了可测：浏览器事件本身在 node --test 下造不出来，判据可以。
+ */
+export function shouldRehydrateOnStorage(key: string | null, hydrateError: string | null): boolean {
+  if (hydrateError) return false;
+  return key === null || key === STORE_KEY;
+}
 
 /**
  * 用户在示例态下添加自己的第一瓶香水 → 示例香柜整体退场（「我的 · 数据」那一栏也是这么写的）。
@@ -195,8 +219,14 @@ const BACKUP_KEY = "fencun-store.bak";
  * 推荐、香历、画像会同时基于"别人的六瓶"和"你的一瓶"作答，而用户无从分辨哪句是关于自己的。
  * 返回 null 表示当前不在示例态，调用方按原逻辑走。
  */
-function demoExitPatch(s: { demo: boolean }) {
-  return s.demo ? { ...DEMO_CLEARED, demo: false, demoDismissed: true } : null;
+function demoExitPatch(s: { demo: boolean; wearLog: WearEntry[] }) {
+  if (!s.demo) return null;
+  // 演示的六瓶、那一个月的穿香记录、示例反馈全都该走干净——但**用户亲手打的手记不是演示数据**。
+  // 香历页对演示条目和真实条目一视同仁地可写（这是对的，不写字的日历没人会用），
+  // 于是有人会在示例的某一天里写下一句真话，然后加进自己的第一瓶香，那句话就无声消失了。
+  // 只保留带 note 的那几条，其余照旧清空。
+  const kept = s.wearLog.filter((e) => e.note && e.note.trim().length > 0);
+  return { ...DEMO_CLEARED, wearLog: dedupeSortWear(kept), demo: false, demoDismissed: true };
 }
 
 /**
@@ -437,20 +467,33 @@ export const useStore = create<State>()(
           swapAways: s.swapAways,
         };
       },
-      undoAdopt: (snap) =>
-        set((s) => ({
-          userPerfumes: s.userPerfumes.map((u) =>
-            u.perfumeId === snap.perfumeId && snap.userPerfume ? snap.userPerfume : u
-          ),
-          // 当天那条要么恢复成被覆盖前的样子，要么根本不该存在（这次采纳才建的）
-          wearLog: dedupeSortWear([
-            ...s.wearLog.filter((e) => e.d !== snap.day),
-            ...(snap.wearEntry ? [snap.wearEntry] : []),
-          ]),
-          swapCount: snap.swapCount,
-          dustyAdoptCount: snap.dustyAdoptCount,
-          swapAways: snap.swapAways,
-        })),
+      // 接受**一串**快照，而不是一个。
+      //
+      // 这条撤销存在的理由就是「想比三瓶用法」：点开三瓶看看怎么喷，三瓶就全被记成今天穿过。
+      // 而此前 UI 只留最后一次的快照，撤销只回滚最后那一瓶——前两瓶的 wornCount、
+      // lastWornAt 与隐式差评照样留着，轮换新鲜度与吃灰的 21 天计时也照样被重置。
+      // 撤销掉一部分比不撤销更难解释。
+      //
+      // 全局项（香历当天那条、两个计数器、swapAways）取**最早**那张快照——它才是这一串
+      // 浏览动作开始之前的现场；逐瓶项各自按 id 还原。
+      undoAdopt: (snaps) =>
+        set((s) => {
+          const list = Array.isArray(snaps) ? snaps : [snaps];
+          if (list.length === 0) return {};
+          const first = list[0];
+          const byId = new Map(list.map((x) => [x.perfumeId, x] as const));
+          return {
+            userPerfumes: s.userPerfumes.map((u) => byId.get(u.perfumeId)?.userPerfume ?? u),
+            // 当天那条要么恢复成被覆盖前的样子，要么根本不该存在（这一串采纳才建的）
+            wearLog: dedupeSortWear([
+              ...s.wearLog.filter((e) => e.d !== first.day),
+              ...(first.wearEntry ? [first.wearEntry] : []),
+            ]),
+            swapCount: first.swapCount,
+            dustyAdoptCount: first.dustyAdoptCount,
+            swapAways: first.swapAways,
+          };
+        }),
       // 同瓶同日重复反馈 → 以最新一条为准（刷新页面重复提交不再重复计入偏置）；
       // 窗口按瓶分桶（各 60 条）+ 全局 400 条，对 A 瓶狂点不再把 B 瓶的历史挤出窗口
       addFeedback: (fb) =>
@@ -624,7 +667,7 @@ export const useStore = create<State>()(
       },
     }),
     {
-      name: "fencun-store",
+      name: STORE_KEY,
       // 服务端无 localStorage → 返回 undefined，persist 自动跳过；客户端正常持久化。
       //
       // ⚠️ setItem 必须自己接住异常，原因有两层：
@@ -693,7 +736,7 @@ export const useStore = create<State>()(
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
           try {
-            const raw = safeLocalStorage()?.getItem("fencun-store");
+            const raw = safeLocalStorage()?.getItem(STORE_KEY);
             if (raw) safeLocalStorage()?.setItem(BACKUP_KEY, raw);
           } catch {
             // 备份本身失败（存储被禁/配额满）也不能让流程卡住，错误标志仍要立起来

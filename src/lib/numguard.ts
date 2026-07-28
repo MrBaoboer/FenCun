@@ -28,13 +28,26 @@ export function extractDigits(s: string): Set<string> {
 }
 
 /**
- * 中文数字 + 量词 = 伪精确。量词限定在时间与剂量上——这是"留香多久、喷几下、几毫升"
- * 三件我们只给档位与区间、绝不给点值的事。「大半个白天」「一臂」「三分之一」这类
- * 非计数表达不在其列，因为它们本来就是我们自己的措辞。
+ * 中文数字 + 量词 = 伪精确。量词限定在时间、剂量与**距离**上——这是"留香多久、喷几下、
+ * 隔多远闻得到"三件我们只给档位与区间、绝不给点值的事。「大半个白天」「一臂」「三分之一」
+ * 这类非计数表达不在其列，因为它们本来就是我们自己的措辞。
+ *
+ * ⚠️ 第一版漏了两类，实测都能原样上屏（`invented = []`、source 标 deepseek）：
+ *   ① **「半」不是数字**。于是「六个半小时」「一个半小时」「半小时」全部放行——
+ *      而这恰恰比文件头举例的「六到八个小时」更像中文里的自然说法。
+ *      根因是 CN_NUM 里没有「半」，且「个半」这种插入形态没被表达。
+ *   ② **量词清单太窄**。「钟头」「秒」「泵」不在其中；距离侧更彻底——
+ *      一个长度量词都没有，而社交距离正是产品只给四档的三件事之一，
+ *      「扩散半径一米五」畅通无阻。
+ *
+ * 「大半」刻意排除在外（负向环视）：「大半天」「大半个白天」是我们自己的模糊措辞，
+ * 本来就不构成伪精确，把它拦下只会让防线静默地把自家的话吃掉。
  */
 const CN_NUM = "[〇零一二两三四五六七八九十百千]";
-const CN_UNIT = "(?:小时|分钟|个小时|毫升|滴|下|喷|天|周|年)";
-const CN_PSEUDO = new RegExp(`${CN_NUM}+(?:点${CN_NUM}+)?\\s*${CN_UNIT}`, "g");
+/** 数量部分：六 / 六个 / 六个半 / 一个半 / 半 */
+const CN_QTY = `(?:${CN_NUM}+个?半?|半)`;
+const CN_UNIT = "(?:小时|分钟|钟头|秒|毫升|滴|下|喷|泵|米|厘米|公分|步|天|周|年)";
+const CN_PSEUDO = new RegExp(`(?<!大)${CN_QTY}(?:点${CN_NUM}+)?\\s*个?\\s*${CN_UNIT}`, "g");
 
 export function findInventedNumbers(text: string, allowed: Set<string>): string[] {
   const t = normalize(text);
@@ -59,4 +72,22 @@ export function findPseudoPreciseCN(text: string, facts: string): string[] {
     if (!f.includes(m[0])) bad.push(m[0]);
   }
   return bad;
+}
+
+/**
+ * 这段文本里带不带"数"——**给白名单的入口把关用**，与上面两个出口方向相反。
+ *
+ * 白名单的口径是「事实里出现过的数字可以说」，它的前提是事实全部由规则引擎算出。
+ * 但有一条事实是用户自己写的：场景解析返回的 riskNote 由 LLM 从用户原话生成，
+ * 经 computeRiskNotes 逐字下推进 risks[]，再被 explain 收进 allowedNumbers。
+ * 于是用户在场景里写一句「会议约 6.2 小时」，6.2 就成了"我们给过的数"——
+ * 实测 LLM 随后输出「留香 6.2 小时」时 `invented = []`，原样上屏且 source 标 deepseek。
+ * explain 路由里那句「刻意排除用户自由文本」的注释，被这条路径从背后绕开了。
+ *
+ * 修在源头：riskNote 是一句社交常识（"婚礼焦点是新人，不宜喧宾夺主"），
+ * 本来就没有携带数字的理由——带了就整条丢掉，它是 optional 字段，丢掉不影响其余补丁。
+ */
+export function carriesNumber(text: string): boolean {
+  const t = normalize(text);
+  return /\d/.test(t) || new RegExp(CN_PSEUDO.source).test(t);
 }

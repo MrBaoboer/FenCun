@@ -227,13 +227,27 @@ test("排序不变式：任何后位候选的排名分不得高出前位超过 E
     mk({ id: i + 1, brand: "B", rating: null, accords: acc([["sweet", 80 - i * 2]]) })
   );
   const c = C({ season: "spring", feel: "mild", tempC: 20, occasion: "date" });
+  // ⚠️ 用例名说的是**排名分**，而 recommend 只把内容分挂在 pick.score 上，
+  // rank = score × freshness × swapPenalty 从返回值里看不见。此前断言取的是 score，
+  // 只在 freshness = swapPenalty = 1 的退化配置下才等价——也就是说
+  // 「轮换因子参与排序之后这条不变式还成不成立」从来没被测过。
+  // 这里在测试内按同一公式重算一遍 rank，并且**真的注入**两个因子，让名实相符。
+  const NOW = Date.UTC(2026, 6, 28);
+  const DAY = 86400000;
+  const lastWornAt = new Map(lib.map((p, i) => [p.id, NOW - (i % 5) * DAY]));
+  const swapAways = new Map([[lib[2].id, [NOW - DAY, NOW - 2 * DAY]]]);
+  const rankOf = (id: number, score: number) =>
+    score * freshness(lastWornAt.get(id), NOW) * swapPenalty(swapAways.get(id), NOW);
+
   for (let seed = 0; seed < 40; seed++) {
-    const { ranked } = recommend(lib, c, undefined, { daySeed: seed });
+    const { ranked } = recommend(lib, c, undefined, { daySeed: seed, lastWornAt, swapAways, now: NOW });
     for (let i = 0; i < ranked.length; i++) {
       for (let j = i + 1; j < ranked.length; j++) {
+        const a = rankOf(ranked[i].perfume.id, ranked[i].score);
+        const b = rankOf(ranked[j].perfume.id, ranked[j].score);
         assert.ok(
-          ranked[j].score <= ranked[i].score + 0.012 + 1e-9,
-          `seed=${seed}: 位次 ${j}(${ranked[j].score.toFixed(4)}) 比位次 ${i}(${ranked[i].score.toFixed(4)}) 高出超过 EPS`
+          b <= a + 0.012 + 1e-9,
+          `seed=${seed}: 位次 ${j}(rank ${b.toFixed(4)}) 比位次 ${i}(rank ${a.toFixed(4)}) 高出超过 EPS`
         );
       }
     }
@@ -544,6 +558,25 @@ test("成功配置不得越过安全阀：「上次刚好」覆盖不了今天�
   assert.ok(u.note?.includes("更收着"), "被压低时要说明白为什么，不能默默改数");
 });
 
+test("成功配置是基准不是终点：更近的反馈与场景必须还能推动它", () => {
+  // 它此前写在偏好**之后**、且是无条件覆盖，于是只夹住了安全阀：
+  // 一条旧的「刚好 4 下」会盖过随后两次「太冲了」，也盖过场景解析出的「今晚想贴身」。
+  // 反馈闭环是这个产品唯一的真壁垒，让最新的反馈失效比不做这个功能更糟。
+  const p = mk({ people: 2000, sillage: 2.5, sillageTier: 2, accords: acc([["woody", 80]]) });
+  const cfg = { occasion: "home" as const, tempBand: "mild" as const, sprays: 4 };
+  const at = (bias: Parameters<typeof computeUsage>[2], patch: Partial<Context> = {}) =>
+    computeUsage(p, C({ occasion: "home", feel: "mild", tempC: 20, ...patch }), bias);
+
+  const base = at({ likeScore: 0.5, perceivedStrength: 0, successConfigs: [cfg] });
+  const afterTooStrong = at({ likeScore: 0.2, perceivedStrength: 0.8, successConfigs: [cfg] });
+  const wantClose = at({ likeScore: 0.5, perceivedStrength: 0, successConfigs: [cfg] }, { intimacy: "close" });
+
+  assert.ok(afterTooStrong.sprays[1] < base.sprays[1], `两次「太冲了」之后必须更少：${afterTooStrong.spraysLabel}`);
+  assert.ok(wantClose.sprays[1] < base.sprays[1], `场景说「想贴身」也要能推动它：${wantClose.spraysLabel}`);
+  // 回执必须跟着最终这个数走，不能停在「就按那次的量来」
+  assert.ok(afterTooStrong.note?.includes("偏冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
+});
+
 test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给提示(P0-7)", () => {
   const loud = mk({ people: 20000, sillage: 2.8, sillageTier: 3, accords: acc([["sweet", 60]]) });
   const base = C({ occasion: "social", feel: "mild", tempC: 20 });
@@ -848,10 +881,13 @@ test("厚重只准有一条判据：喷量、风险文案与打分归因不得�
   // 主目录实测 111 款卡片自相矛盾、226 款拿到与分数相反的断言，其中包括旷野、信仰之水、
   // 探索家、邂逅柔情这些公认的清爽香。这条测试锁的不是某一款香，是"同一个概念只准有一处判据"。
   const fs = await import("node:fs");
-  const { sweetDominates, balsamicDominates, richDominates } = await import("./scoring");
+  const { sweetDominates, balsamicDominates, richDominates, heavyDominates } = await import("./scoring");
   const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
   const hot = C({ occasion: "casual", feel: "hot_dry", tempC: 33, humidity: 45, season: "summer" });
-  const HEAVY_LINE = (s: string) => s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚");
+  // 三支都要数进来。此前这个谓词只认前两支，于是「厚重感在高温里会放大」那一支
+  // ——烟草与动物性主导的那批——在断言里根本不存在，而减量恰恰就漏在它身上。
+  const HEAVY_LINE = (s: string) =>
+    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感在高温里会放大");
 
   const contradictory: string[] = [];
   const mismatched: string[] = [];
@@ -860,13 +896,22 @@ test("厚重只准有一条判据：喷量、风险文案与打分归因不得�
     // ① 同一张卡不许既说清爽又说厚/腻
     if (pick.reasons.some((r) => r.includes("清爽通透")) && pick.risks.some(HEAVY_LINE))
       contradictory.push(`${p.nameZh || p.name}`);
-    // ② 风险文案必须与高温减量走同一条判据（usage.ts 的第二条触发用的就是 richDominates）
-    if (pick.risks.some(HEAVY_LINE) !== richDominates(p, 55)) mismatched.push(`${p.nameZh || p.name}`);
+    // ② 风险文案必须与高温减量走**同一个符号**：两边现在都是 heavyDominates(50)
+    if (pick.risks.some(HEAVY_LINE) !== heavyDominates(p, 50)) mismatched.push(`${p.nameZh || p.name}`);
     // ③ 两族互斥且穷尽：并集的最大值必落在其中一族里
     assert.equal(richDominates(p, 55), sweetDominates(p, 55) || balsamicDominates(p, 55));
   }
   assert.deepEqual(contradictory.slice(0, 5), [], `卡片自相矛盾（共 ${contradictory.length} 款）`);
   assert.deepEqual(mismatched.slice(0, 5), [], `文案与减量判据脱节（共 ${mismatched.length} 款）`);
+
+  // ④ 说了「收着些」，数字就得真的收——烟草主导的那一类正是此前只说不做的那批
+  const mild = C({ occasion: "casual", feel: "mild", tempC: 20, humidity: 50, season: "autumn" });
+  const tobaccoLed = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["tobacco", 100], ["leather", 62]]) });
+  assert.ok(computeRisks(tobaccoLed, hot).some(HEAVY_LINE), "烟草主导在高温下必须说得出厚重");
+  assert.ok(
+    computeUsage(tobaccoLed, hot).sprays[1] < computeUsage(tobaccoLed, mild).sprays[1],
+    "说了「喷得收着些更稳」，高温下的喷量上限就必须真的比温和天低"
+  );
 
   // 具体回归：清爽当家的三款不许拿到厚重断言，真厚重的照旧要被抓住
   const clean: [string, [string, number][]][] = [
@@ -965,6 +1010,27 @@ test("季节错配文案同样要过票数门槛：三票的噪声不得说「�
   assert.ok(computeRisks(solid, summer).some((r) => r.includes("大家更多在冬季")));
 });
 
+test("社交距离的归因也要过票数这道门：没票就不许署名「多数评价者的感受」", async () => {
+  // 同一排三格里的对照此前很刺眼：「留香」诚实写「因人而异」，「社交距离」却拿一份
+  // 从未存在过的投票给出「日常安全」——三格里唯一带安全含义的恰恰是这一格。
+  // 实测扩展集 35990 条里 444 条 sillage 为 null（几乎全是国货白名单，people 常年个位数）。
+  const { sillageAttrib, sillageSub, DISTANCE_ATTRIB } = await import("./format");
+
+  const solid = mk({ people: 20000, sillage: 2.5, sillageTier: 2 });
+  assert.equal(sillageAttrib(solid), DISTANCE_ATTRIB, "有票的照旧署名社区");
+  assert.equal(sillageSub(solid, 2), "日常安全");
+
+  // 手动记一瓶：那一档是用户在 ManualAdd 里自己勾的
+  const custom = mk({ id: -3, custom: true, people: 0, sillage: 2.7, sillageTier: 2 });
+  assert.ok(!sillageAttrib(custom).includes("评价者"), `手动记录不该署名社区：${sillageAttrib(custom)}`);
+  assert.ok(!sillageSub(custom, 2).includes("安全"), `手动记录不该给安全断言：${sillageSub(custom, 2)}`);
+
+  // 国货白名单：有记录但一票都没有，sillage 为 null 时 derive.mjs 统一落到 tier 2
+  const thin = mk({ id: 9, lowVotes: true, people: 1, sillage: null as unknown as number, sillageTier: 2 });
+  assert.ok(!sillageAttrib(thin).includes("评价者"), `零票不该署名社区：${sillageAttrib(thin)}`);
+  assert.ok(!sillageSub(thin, 2).includes("安全"), `零票不该给安全断言：${sillageSub(thin, 2)}`);
+});
+
 test("安全阀不许被个人偏好顶开：说了「压到 1 下」就必须真的是 1 下", () => {
   // 原实现在个人偏好**之后**才取 safetyCap，于是偏好把闸抬起来之后，
   // 抬起来的那个值反过来成了"安全上限"。触发门槛极低：场景里写一句「想让人注意到」，
@@ -1050,4 +1116,116 @@ test("riskNote：场景解析的社交风险以受控字段进入风险列表", 
   const p = mk({ accords: acc([["citrus", 60]]) });
   const risks = computeRisks(p, C({ occasion: "formal", feel: "mild", tempC: 20, riskNote: "婚礼焦点是新人，不宜喧宾夺主" }));
   assert.ok(risks.some((r) => r.includes("喧宾夺主")));
+});
+
+test("不变式：判了 caution 就必须说得出为什么——扫遍温湿度 × 场合，不许有一例空清单", () => {
+  // 裁决有两个触发源：risks 非空，以及天气压到 WEATHER_CAUTION 以下。第二个此前没有
+  // 任何文案与之配对，实测 12.6% 的 caution 配的是一张空清单——卡上「有一点要留意」，
+  // 下面一条都没有。冷侧从来就没写过文案；热侧那批落在 22–28℃，
+  // 因为 weatherFit 的热负荷从 22℃ 起算而 ctx.feel 要更高才算 hot，两条线本来就不齐。
+  const bottles = [
+    mk({ id: 1, sillage: 1.8, sillageTier: 1, accords: acc([["citrus", 100], ["aquatic", 70]]) }), // 冷天最薄的那类
+    mk({ id: 2, sillageTier: 3, accords: acc([["vanilla", 100], ["sweet", 88]]) }),
+    mk({ id: 3, sillageTier: 2, accords: acc([["amber", 100], ["balsamic", 80]]) }),
+    mk({ id: 4, sillageTier: 2, accords: acc([["tobacco", 100], ["leather", 70]]) }),
+    mk({ id: 5, sillageTier: 2, accords: acc([["woody", 100], ["green", 50]]) }),
+  ];
+  let checked = 0;
+  for (const tempC of [-8, 0, 2, 8, 15, 20, 23, 25, 28, 31, 35]) {
+    for (const humidity of [30, 60, 85]) {
+      for (const occasion of ["commute", "work", "date", "casual", "home"] as const) {
+        const ctx = C({ occasion, tempC, humidity, feel: feelFromWeather(tempC, humidity) });
+        for (const b of bottles) {
+          const pk = buildPick(b, ctx);
+          if (pk.verdict !== "caution") continue;
+          checked++;
+          assert.ok(
+            pk.risks.length > 0,
+            `${b.id} 在 ${tempC}℃/${humidity}%/${occasion} 判了 caution 却一条风险都说不出`
+          );
+        }
+      }
+    }
+  }
+  assert.ok(checked > 100, `样本里 caution 太少（${checked}），这条不变式等于没测`);
+});
+
+test("场景提示照常上屏，但一个字都不许动裁决——它对柜里每一瓶都成立，没有区分力", () => {
+  // 一句 riskNote 曾经就能让全目录的 good 归零（实测 caution 1209 / avoid 291 / good 0），
+  // 连带吃灰卡与预警卡的「换成 X」一起哑火——两者的准入闸都是 verdict === "good"。
+  const bottles = [
+    mk({ id: 1, accords: acc([["citrus", 100]]) }),
+    mk({ id: 2, sillageTier: 3, accords: acc([["vanilla", 100], ["sweet", 90]]) }),
+    mk({ id: 3, accords: acc([["woody", 100], ["green", 40]]) }),
+  ];
+  const plain = C({ occasion: "date", feel: "mild", tempC: 20 });
+  const scened = C({ occasion: "date", feel: "mild", tempC: 20, riskNote: "初次见家长，别太张扬" });
+  for (const b of bottles) {
+    const a = buildPick(b, plain);
+    const s = buildPick(b, scened);
+    assert.equal(s.verdict, a.verdict, `${b.id}：场景提示不该改变裁决`);
+    assert.equal(s.usage.suitable, a.usage.suitable, `${b.id}：场景提示不该改变 suitable`);
+    // 但它必须仍然被说出来——不进裁决不等于不告诉用户
+    assert.ok(s.risks.some((r) => r.includes("别太张扬")), `${b.id}：场景提示仍要上屏`);
+  }
+  // 无香场合是另一回事：它本来就该让每一瓶都 avoid，不能被这条豁免顺手放行
+  const ff = buildPick(bottles[0], C({ occasion: "date", feel: "mild", tempC: 20, fragranceFree: true }));
+  assert.equal(ff.verdict, "avoid");
+  assert.equal(ff.avoidCause, "fragrance_free");
+});
+
+test("「不合场合」会随时间衰减，同场合后来的「刚好」能把它抵掉", () => {
+  // scoring.ts:mismatchMul 的注释写着「反向反馈可抵消」，而聚合处此前是纯计数：
+  // 半年前的一次「不合场合」和昨天的一次话语权相同，且永远抵不掉。
+  const NOW = Date.UTC(2026, 6, 28);
+  const DAY = 86400000;
+  const at = (daysAgo: number) => NOW - daysAgo * DAY;
+  const fb = (rating: Feedback["rating"], daysAgo: number): Feedback =>
+    ({ perfumeId: 1, at: at(daysAgo), rating, context: C({ occasion: "work", feel: "mild", tempC: 20 }) }) as Feedback;
+
+  const fresh = aggregateBias([fb("scene_mismatch", 1)], NOW).get(1)!;
+  const stale = aggregateBias([fb("scene_mismatch", 300)], NOW).get(1)!;
+  assert.ok(
+    (stale.sceneMismatch?.work ?? 0) < (fresh.sceneMismatch?.work ?? 0),
+    "十个月前的「不合场合」不该和昨天的一样重"
+  );
+
+  // 同场合后来又说「刚好」→ 抵掉；抵干净就不该留一个恒等于 1 的乘子占位
+  const offset = aggregateBias([fb("scene_mismatch", 30), fb("perfect", 1)], NOW).get(1)!;
+  assert.equal(offset.sceneMismatch, undefined, `应被抵干净：${JSON.stringify(offset.sceneMismatch)}`);
+});
+
+test("留印提示的成因必须与文案同源：烟草不许被说成树脂与浸膏", () => {
+  const work = C({ occasion: "work", feel: "mild", tempC: 20 });
+  const tobacco = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["tobacco", 100], ["woody", 60]]) });
+  const t = buildPick(tobacco, work).risks.find((r) => r.includes("喷衣物")) ?? "";
+  assert.ok(t.includes("烟草"), `烟草触发的提示要说烟草：${t}`);
+  assert.ok(!t.includes("树脂与浸膏"), `不该扣上一个它自己不成立的机制：${t}`);
+  // 真正的树脂/香膏照旧说树脂
+  const balsam = mk({ people: 20000, sillage: 2.0, sillageTier: 2, accords: acc([["balsamic", 100], ["oud", 70]]) });
+  const b = buildPick(balsam, work).risks.find((r) => r.includes("喷衣物")) ?? "";
+  assert.ok(b.includes("树脂与浸膏"), `树脂香膏仍要说树脂：${b}`);
+});
+
+test("nameParts：中英文同名时不再把同一个名字当副名再印一遍", async () => {
+  const { nameParts } = await import("./format");
+  // 手动记一瓶必中：ManualAdd 把用户填的那个名字同时写进 name 与 nameZh，
+  // 屏上就会出现「昆仑煮雪 昆仑煮雪」，后一个还套着英文斜体
+  assert.deepEqual(nameParts({ name: "昆仑煮雪", nameZh: "昆仑煮雪" }), {
+    primary: "昆仑煮雪",
+    secondary: null,
+    primaryIsZh: true,
+  });
+  // 真的有英文原名时照旧两行都给
+  assert.deepEqual(nameParts({ name: "Sauvage", nameZh: "旷野" }), {
+    primary: "旷野",
+    secondary: "Sauvage",
+    primaryIsZh: true,
+  });
+  // 没有中文名就只给英文
+  assert.deepEqual(nameParts({ name: "Aventus", nameZh: null }), {
+    primary: "Aventus",
+    secondary: null,
+    primaryIsZh: false,
+  });
 });

@@ -165,8 +165,10 @@ export interface UserPerfume {
   addedAt: number;
   lastWornAt?: number;
   wornCount?: number; // 累计采纳次数（换香/吃灰采纳/反馈提交，同一天只计一次）——定义"常喷"的真实穿戴信号
-  // 个人偏置（由 Feedback 聚合；早期全 0）
-  bias?: { likeScore: number; perceivedStrength: number };
+  // 这里曾有一个 bias 字段：类型里声明、导入 schema 里校验，全仓零写零读。
+  // 真正在用的是 recommend.ts:aggregateBias——每次从 feedbacks 现算，不落盘（口味会变，
+  // 缓存一份偏置就要额外维护它的失效）。留着一个从没被赋值的同名字段，只会让下一个人
+  // 以为偏置是存在瓶上的。删掉。
 }
 
 /** 由反馈聚合出的个人偏置（aggregateBias 的产物，score/computeUsage 的输入） */

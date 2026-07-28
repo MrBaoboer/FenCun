@@ -33,7 +33,11 @@ export function SceneInput() {
         body: JSON.stringify({ text: t }),
       });
       const d = await r.json();
-      if (d?.occasion && d?.label) {
+      // matched === false 只可能来自启发式兜底、且一条规则都没命中。
+      // 那时它返回的 label 是**用户原话的回显**、occasion 被静默定成 casual——
+      // 屏上却写着「氛寸读到 · <原话>」，把"我把你的话原样念了一遍"演成了"我读懂了"，
+      // 而下面的推荐其实是按 casual 算的。回显不是理解，这种时候要照实说没读懂。
+      if (d?.occasion && d?.label && d?.matched !== false) {
         setScene({
           occasion: d.occasion,
           formality: d.formality,

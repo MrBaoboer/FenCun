@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 本项目自己的暂存目录。它在 .gitignore 里，所以 `git status` 永远干净，
+    // 而 eslint **不读** .gitignore——于是随手往 .scratch 放一个临时 .ts 排查脚本，
+    // `npm run lint` 就会红，而且红的是一个 git 看不见的文件。
+    // 实测过一次：干净工作树上 npm run lint 报 8 个 error，全部来自这里。
+    // 项目自己的 README 与截图流程都在往 .scratch 写东西，这不是意外用法。
+    ".scratch/**",
   ]),
   {
     // eslint-plugin-react-hooks v6 随 React Compiler 引入的两条严格规则。本项目未启用

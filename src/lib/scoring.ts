@@ -93,6 +93,7 @@ export function familyDominance(p: Perfume, names: readonly string[]): number {
 /** 「这一族代表了这瓶的气质」的统一门槛 */
 export const DOMINANT = 0.75;
 
+
 /** 甜（美食调）主导这瓶——「发腻」这句话的唯一资格判据 */
 export function sweetDominates(p: Perfume, absMin: number): boolean {
   return maxStrength(p, F.sweet) >= absMin && familyDominance(p, F.sweet) >= DOMINANT;
@@ -137,10 +138,12 @@ export function stainProneDominates(p: Perfume, absMin: number): boolean {
  * 抽出来是为了让打分层与风险文案层共用同一次判定：weatherFit 判了 heavy_in_heat，
  * computeRiskNotes 就必须说得出一句对应的话，否则会出现"判了却说不出为什么"。
  */
+const HEAVY_KEYS = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
+
 export function heavyDominates(p: Perfume, absMin: number): boolean {
-  const keys = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
-  return maxStrength(p, keys) >= absMin && familyDominance(p, keys) >= DOMINANT;
+  return maxStrength(p, HEAVY_KEYS) >= absMin && familyDominance(p, HEAVY_KEYS) >= DOMINANT;
 }
+
 
 // 「不知道」不等于「满分」。
 // 原公式 当前季占比 ÷ 最高季占比 有一个致命性质：**分布越平坦，得分越高**。
@@ -301,6 +304,19 @@ export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: nu
   return { w, tone: dominant?.tone ?? "neutral", heat: H };
 }
 
+/**
+ * 「天气已经把这瓶压到要留意那一档」的统一门槛。
+ *
+ * 这个数原本只写在 recommend.ts 的 computeVerdict 里（`parts.weather < 0.95`），
+ * 于是它成了裁决的**第二个**触发源，却没有任何一句文案与之对应：
+ * 全目录 × 温湿度 × 场合扫一遍，12.6% 的 caution 是「有一点要留意」配一张空的风险清单
+ * （冷侧 thin_in_cold 占绝大多数，热侧还有一批落在 22–28℃ 这段"不算热"的区间里）。
+ * 那正是 usage.ts 自己点名过的「判了却说不出为什么」。
+ *
+ * 导出成常量，是为了让裁决与文案共用同一条线——同一个概念只准有一条判据。
+ */
+export const WEATHER_CAUTION = 0.95;
+
 // 天气乘性修正系数 W ∈ [0.7, 1.3]（只要数值时的薄封装）
 export function weatherMultiplier(p: Perfume, feel: Feel, tempC?: number, humidity?: number): number {
   return weatherFit(p, feel, tempC, humidity).w;
@@ -414,8 +430,13 @@ export function avoidPenalty(p: Perfume, avoid?: string[]): number {
   const has = (t: string) => avoid.includes(t);
   // 「别太甜」只该罚真正的甜——琥珀不在其列。混进 amber 会让用户说一句"别太甜"，
   // 就把蔚蓝浓香精(sweet=0)、旷野这些一点也不甜的香罚掉 32%。
+  // 拆完桶还有第二层：这一族得**主导**这瓶，才配代表它的气质。
+  // 只看绝对线的代价与 amber 混进甜桶是同一类——实测主目录 672 款过 ≥50 的绝对线，
+  // 其中 225 款的甜只是第 N 位的尾调：信仰之水(fruity=100, sweet=55)、
+  // 爱神烈焰(citrus=100, sweet=58)、温暖壁炉(woody=100, sweet=69)。
+  // 用户说一句「别太甜」，这 225 款一起被罚掉 32%，而它们本来就不甜。
   if (has("too_sweet") || has("cloying")) {
-    if (sweetness(p) >= 50) m *= 0.68;
+    if (sweetDominates(p, 50)) m *= 0.68;
   }
   if (has("too_strong")) {
     if (p.sillageTier >= 4) m *= 0.6;
@@ -434,15 +455,20 @@ export function avoidPenalty(p: Perfume, avoid?: string[]): number {
 //   哪怕 occasion 落在 social，也要能收得住。
 export function socialToneMultiplier(p: Perfume, ctx: Context): number {
   let m = 1;
-  const gourmand = maxStrength(p, ["sweet", "vanilla", "caramel", "honey", "chocolate", "gourmand"]);
+  // 这里原本把 F.sweet 的六个键**又抄了一份**，然后拿绝对线判。两处毛病同根：
+  // 抄一份意味着 F.sweet 下次调整时这里不会跟着动（cacao/coffee 那轮排除就差点漏在这儿）；
+  // 绝对线意味着 187 款甜只是尾调的香——信仰之水、爱神烈焰、黑兰花——
+  // 在高张力场合与正式场合被当作"甜美食调"再罚 15%。
+  // 判据只留一处：sweetDominates。
+  const sweetLeads = sweetDominates(p, 55);
   if (ctx.tension === "high") {
     if (p.sillageTier >= 4) m *= 0.7;
     else if (p.sillageTier === 3) m *= 0.85;
-    if (gourmand >= 55) m *= 0.85;
+    if (sweetLeads) m *= 0.85;
   }
   if ((ctx.formality ?? 0) >= 0.7) {
     if (p.sillageTier >= 4) m *= 0.8;
-    if (gourmand >= 55) m *= 0.85;
+    if (sweetLeads) m *= 0.85;
   }
   return m;
 }

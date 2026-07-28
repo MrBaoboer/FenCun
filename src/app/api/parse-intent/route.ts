@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
+import { carriesNumber } from "@/lib/numguard";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,9 @@ const KEY = process.env.DEEPSEEK_API_KEY;
 const BASE = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
 const MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
-const PatchSchema = z.object({
+// 导出是为了可测：riskNote 的「带数字整条丢掉」是反伪精确的源头闸门，
+// 它必须有东西守着——纯 schema、零副作用，导出不改变任何运行时行为。
+export const PatchSchema = z.object({
   occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
   formality: z.number().min(0).max(1).optional(),
   intimacy: z.enum(["close", "neutral", "broadcast"]).optional(),
@@ -21,7 +24,17 @@ const PatchSchema = z.object({
   duration: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(9)]).optional(),
   meal: z.boolean().optional(), // 餐桌场合：压制浓香的关键开关（气味干扰味觉）
   fragranceFree: z.boolean().optional(), // 就医/探病等无香场合：命中即建议今天不用香
-  riskNote: z.string().max(40).optional(), // 一句话社交风险，以受控字段进入风险提示，不许自由发挥进正文
+  // 一句话社交风险，以受控字段进入风险提示，不许自由发挥进正文。
+  // **带数字的一律丢掉**：这一句是用户原话经 LLM 转写来的，是全链路里唯一一段
+  // 混在"规则算出来的事实"中间、却源自用户自由输入的文本。它会被 computeRiskNotes
+  // 逐字下推进 risks[]，再被 /api/explain 收进数字白名单——用户写一句「会议约 6.2 小时」，
+  // 反伪精确这道防线就被他自己的输入从内部打开了（见 numguard.ts:carriesNumber）。
+  // 社交风险本来就不需要数字，丢掉整条比试图清洗它更干净。
+  riskNote: z
+    .string()
+    .max(40)
+    .optional()
+    .transform((s) => (s && carriesNumber(s) ? undefined : s)),
   label: z.string().min(1).max(24),
 });
 
@@ -55,14 +68,21 @@ export function heuristic(text: string) {
   let occasion = "casual", formality = 0.4, intimacy: "close" | "neutral" | "broadcast" = "neutral";
   const avoid: string[] = [];
   let meal: boolean | undefined;
+  // 在场时长档位。此前这条路一个都不给，于是「在外时间不短，带上分装中途补 1 下更稳」
+  // 这条已上线的能力在无 key / 限流 / 上游超时时整条消失——而降级路径恰恰是最需要它的时候。
+  // 档位取值与 SYSTEM 提示词里给 LLM 的那四档同源：快事≈2、饭局婚礼看展≈4、长活动≈6、上班全天≈9。
+  let duration: 2 | 4 | 6 | 9 | undefined;
   let label = text.length <= 12 ? text : text.slice(0, 11) + "…";
-  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; label = "婚礼场合·得体克制"; }
-  else if (has("投资人", "面试", "客户", "领导", "见家长", "正式", "商务", "会议")) { occasion = "formal"; formality = 0.8; avoid.push("too_strong"); label = "正式场合·稳重不抢戏"; }
-  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; label = "约会·宜近距离"; }
-  else if (has("聚会", "派对", "生日", "朋友", "局", "夜店", "酒吧")) { occasion = "social"; label = "聚会·自在"; }
-  else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; label = "运动·清爽"; }
+  // 有没有真的读懂：任何一条规则命中才算。全都没中时不许拿原话回显冒充理解（见下方 matched）
+  let hit = true;
+  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; duration = 4; label = "婚礼场合·得体克制"; }
+  else if (has("投资人", "面试", "客户", "领导", "见家长", "正式", "商务", "会议")) { occasion = "formal"; formality = 0.8; avoid.push("too_strong"); duration = 2; label = "正式场合·稳重不抢戏"; }
+  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; duration = 4; label = "约会·宜近距离"; }
+  else if (has("聚会", "派对", "生日", "朋友", "局", "夜店", "酒吧")) { occasion = "social"; duration = 4; label = "聚会·自在"; }
+  else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; duration = 2; label = "运动·清爽"; }
   else if (has("居家", "在家", "睡前", "休息")) { occasion = "home"; formality = 0.1; label = "居家·放松"; }
-  else if (has("通勤", "上班", "地铁", "工作")) { occasion = "commute"; formality = 0.5; label = "通勤·清爽得体"; }
+  else if (has("通勤", "上班", "地铁", "工作")) { occasion = "commute"; formality = 0.5; duration = 9; label = "通勤·清爽得体"; }
+  else hit = false;
   // 横切信号（与场合正交）：关系张力、饭桌、无香场合
   const tension = has("前任", "前女友", "前男友", "谈判", "对手") ? ("high" as const) : undefined;
   if (meal === undefined && has("吃", "饭", "餐厅", "火锅", "日料", "酒局", "宴")) meal = true;
@@ -72,10 +92,43 @@ export function heuristic(text: string) {
     occasion = "casual";
     label = "就医探病·今天不用香";
   }
-  return { occasion, formality, intimacy, avoid, tension, meal, fragranceFree, label };
+  // 横切信号也算读懂了一部分
+  const matched = hit || fragranceFree || tension != null || meal === true;
+  return { occasion, formality, intimacy, avoid, tension, meal, duration, fragranceFree, label, matched };
+}
+
+/**
+ * 无香场合这条红线取**并集**：关键词判定说 true 就一定是 true，LLM 只能加不能减。
+ *
+ * 此前 LLM 一旦成功返回，上面那十三个关键词的判定就被整条丢弃——而这是全引擎
+ * 依据最好、后果最重的一条规则（就医 / 探病 → 今天不用香），它的可靠性不该
+ * 取决于模型这一次有没有想起来给 fragranceFree。启发式那条路专门为它写了守卫，
+ * 却只在 LLM 不可用时才跑，也就是说**平时它一次都不生效**。
+ *
+ * 方向本来就是不对称的：用户句子里出现「病房」而模型漏判，代价是推荐一个人
+ * 喷着香水进病房；反过来模型多判一次，代价只是今天少喷一瓶香。
+ * 不对称的代价，就不该用对称的规则去处理。
+ *
+ * 纯函数、零副作用，导出是为了可测。
+ */
+export function unionFragranceFree(
+  llm: { fragranceFree?: boolean; label: string },
+  heuristic: { fragranceFree: boolean; label: string }
+): { fragranceFree: boolean; label: string } {
+  const fragranceFree = Boolean(llm.fragranceFree) || heuristic.fragranceFree;
+  // 模型漏判时它的 label 多半也没提这件事，跟着兜底那句走——
+  // 否则会出现眉标写「探病·从容」、结论写「今天不用香」的错位。
+  const label = fragranceFree && !llm.fragranceFree ? heuristic.label : llm.label;
+  return { fragranceFree, label };
 }
 
 export async function POST(req: NextRequest) {
+  // 与 explain 同理：限流挡的是「打不打 DeepSeek」，挡不住「读不读这个 body」。
+  // 这条路由只收一个 ≤120 字的 text，1KB 之外一律不读。
+  const len = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(len) && len > 1024) {
+    return NextResponse.json({ error: "too_large" }, { status: 413 });
+  }
   let text = "";
   try {
     text = (((await req.json()) as { text?: string })?.text ?? "").trim();
@@ -119,8 +172,9 @@ export async function POST(req: NextRequest) {
     if (s < 0 || e <= s) return NextResponse.json(fallback);
     const parsed = PatchSchema.safeParse(JSON.parse(raw.slice(s, e + 1)));
     if (!parsed.success) return NextResponse.json(fallback);
+    const merged = unionFragranceFree(parsed.data, fallback);
     // label 与提示口径对齐（≤12 字），与启发式兜底一致，防超长撑版
-    return NextResponse.json({ ...parsed.data, label: parsed.data.label.slice(0, 12), source: "deepseek" });
+    return NextResponse.json({ ...parsed.data, ...merged, label: merged.label.slice(0, 12), source: "deepseek" });
   } catch {
     return NextResponse.json(fallback);
   }

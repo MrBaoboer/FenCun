@@ -345,3 +345,85 @@ test("采纳可撤销：穿戴计数、当天香历与隐式差评必须原样�
   silent(() => st().undoAdopt(snap2));
   assert.equal(st().wearLog.length, 0, "这次采纳才建的那条香历应当被撤掉");
 });
+
+test("多标签页：另一页写盘要认，读盘出过错时一切自动动作都停手", async () => {
+  // persist 是全量写、没有 merge：两个标签页各自持有一份内存态，谁后点谁覆盖。
+  // 在 A 页加的三瓶香、写的手记，连同「演示香柜已退场」这个标记，
+  // 都会被早就开着的 B 页的下一次点击整包盖掉，六瓶示例还会复活。
+  // 浏览器事件在 node --test 下造不出来，但判据可以。
+  const { shouldRehydrateOnStorage, STORE_KEY } = await import("./store");
+
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null), true, "另一页写了我们的键就要重读");
+  // localStorage.clear() 的事件 key 是 null，同样要认——那时盘上已空，
+  // 继续按旧内存态写回去只会造出一份半新半旧的数据
+  assert.equal(shouldRehydrateOnStorage(null, null), true, "整清也要认");
+  assert.equal(shouldRehydrateOnStorage("别人的键", null), false, "无关的键不理会");
+  assert.equal(shouldRehydrateOnStorage(`${STORE_KEY}.bak`, null), false, "另存的备份不是状态源");
+  // 读盘出过错时写入已被冻结（见 onRehydrateStorage），这时任何自动重读都要停手
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "boom"), false, "读盘出过错就不许再自动动");
+  assert.equal(shouldRehydrateOnStorage(null, "boom"), false);
+});
+
+test("撤销要能回滚**一串**采纳，不只是最后一瓶", async () => {
+  // 「想比三瓶用法」正是这条撤销存在的理由：点开三瓶看看怎么喷，三瓶就全被记成今天穿过。
+  // 只回滚最后一瓶，等于前两瓶的穿戴计数、香历与隐式差评照样留着——
+  // 撤销掉一部分比不撤销更难解释。
+  const st = () => useStore.getState();
+  const day = "2026-07-28";
+  silent(() =>
+    useStore.setState({
+      userPerfumes: [
+        { perfumeId: 101, addedAt: 1 },
+        { perfumeId: 102, addedAt: 1 },
+      ],
+      wearLog: [],
+      swapCount: 0,
+      dustyAdoptCount: 0,
+      swapAways: {},
+    })
+  );
+
+  const snaps = [st().snapshotAdopt(101, day), null!];
+  silent(() => st().markWorn(101));
+  silent(() => st().recordSwap(101));
+  snaps[1] = st().snapshotAdopt(102, day);
+  silent(() => st().markWorn(102));
+  silent(() => st().recordDustyAdopt());
+
+  assert.equal(st().userPerfumes.find((u) => u.perfumeId === 101)?.wornCount, 1);
+  assert.equal(st().userPerfumes.find((u) => u.perfumeId === 102)?.wornCount, 1);
+
+  silent(() => st().undoAdopt(snaps));
+
+  assert.equal(st().userPerfumes.find((u) => u.perfumeId === 101)?.wornCount, undefined, "第一瓶也要回滚");
+  assert.equal(st().userPerfumes.find((u) => u.perfumeId === 102)?.wornCount, undefined, "第二瓶也要回滚");
+  assert.equal(st().userPerfumes.find((u) => u.perfumeId === 101)?.lastWornAt, undefined);
+  assert.deepEqual(st().swapAways, {}, "隐式差评要回到这一串开始之前");
+  assert.equal(st().dustyAdoptCount, 0);
+  assert.deepEqual(st().wearLog, [], "香历当天那条不该留下");
+});
+
+test("演示香柜退场时，用户亲手写的手记不许被一起清掉", async () => {
+  const { useStore: S } = await import("./store");
+  const st = () => S.getState();
+  const entry = (d: string, note?: string) =>
+    ({ d, perfumeId: 1, name: "示例", fam: "woody", occasion: "casual", tempC: 20, weatherText: "晴", feel: "mild", note }) as never;
+  silent(() =>
+    S.setState({
+      demo: true,
+      demoDismissed: false,
+      userPerfumes: [{ perfumeId: 1, addedAt: 1 }],
+      wearLog: [entry("2026-07-01"), entry("2026-07-02", "同事问了是什么香"), entry("2026-07-03")],
+      customPerfumes: [],
+    })
+  );
+  // 加进自己的第一瓶 → 演示整体退场
+  silent(() => st().addPerfume(999));
+  assert.equal(st().demo, false, "演示应已退场");
+  assert.deepEqual(
+    st().wearLog.map((e) => e.d),
+    ["2026-07-02"],
+    `只该留下带手记的那一天：${JSON.stringify(st().wearLog.map((e) => e.d))}`
+  );
+  assert.equal(st().wearLog[0].note, "同事问了是什么香");
+});

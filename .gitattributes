@@ -1,0 +1,23 @@
+# 源码一律按文本处理。
+#
+# 起因是一次实锤：src/app/api/context/route.ts 里把 /[\x00-\x1f]/ 写成了两个**裸**控制字节，
+# git 于是把整个文件判成二进制——`git show` 与 PR 页面对它只输出「Binary files differ」，
+# grep / git grep 只回「Binary file matches」。那恰好是全站唯一既校验不可信入参、
+# 又持有天气密钥的文件，也就是最需要被逐行看见的那一个。
+#
+# 显式声明 text 后，即便再混进这类字节，diff 与 grep 依然可用。
+# 真正的防线仍在 scripts/ci-workflow.test.mjs（禁止裸控制字节），这里只是第二层。
+*.ts   text
+*.tsx  text
+*.mjs  text
+*.cjs  text
+*.js   text
+*.json text
+*.md   text
+*.yml  text
+*.css  text
+
+# 二进制资产照旧，不做行尾转换
+*.png  binary
+*.ico  binary
+*.woff2 binary

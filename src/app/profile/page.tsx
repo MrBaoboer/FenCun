@@ -26,6 +26,20 @@ export default function ProfilePage() {
   const [demoConfirm, setDemoConfirm] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  // 导入成功后城市可能被换掉了（备份里带着它），得跟着重新取一次天气——
+  // 否则情境栏会停在上一座城市的读数上，屏上的城市和天气对不上，推荐也还是按旧天气算的。
+  // 隔壁「重置到初始状态」早就这么做了（那里 `void resolveByCity(d.city)`），
+  // 导入这条路漏了：同一个后果，只有一处收拾。
+  function applyImport(raw: string): boolean {
+    const before = useStore.getState().city;
+    const ok = importData(raw);
+    if (ok) {
+      const after = useStore.getState().city;
+      if (after && after !== before) void resolveByCity(after);
+    }
+    return ok;
+  }
+
   // 导出是这个纯本机、无账号无后端的产品里**唯一**的数据保全手段，界面上还明写着
   // 「建议偶尔导出备份」。所以两件事都得做：
   //   ① 用标准写法——锚点挂进文档再点，撤销 URL 推迟到下一帧。脱离文档的锚点与
@@ -65,7 +79,7 @@ export default function ProfilePage() {
       setImportMsg(null);
       // 空柜直接导入（没有任何东西会被覆盖）；柜里有东西则必须先看清差额再确认
       if (userPerfumes.length === 0 && wearLog.length === 0) {
-        const ok = importData(raw);
+        const ok = applyImport(raw);
         setImportMsg(
           ok
             ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
@@ -90,10 +104,12 @@ export default function ProfilePage() {
       else if (b.perceivedStrength <= -0.4) weakN++;
     }
     const lines: string[] = [];
+    // 只有一瓶时说「它们」，画像的第一句就在告诉用户这段话不是为他写的
+    const it = (n: number) => (n > 1 ? "它们" : "它");
     if (strongN > 0)
-      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐它们时，喷量与扩散都会各自收一点。`);
+      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐${it(strongN)}时，喷量与扩散都会各自收一点。`);
     if (weakN > 0)
-      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐它们时，会建议略增喷量。`);
+      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐${it(weakN)}时，会建议略增喷量。`);
     if (lines.length === 0)
       lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
     return lines;
@@ -270,7 +286,7 @@ export default function ProfilePage() {
             <div className="mt-2.5 flex gap-2">
               <button
                 onClick={() => {
-                  const ok = importData(pending.raw);
+                  const ok = applyImport(pending.raw);
                   setPending(null);
                   setImportMsg(
                     ok

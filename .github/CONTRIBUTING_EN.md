@@ -52,13 +52,21 @@ npm run build   # make sure it builds
 ## Commit conventions
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:` / `fix:` / `docs:` / `refactor:` / `test:` / `polish:`, and so on. Writing commit bodies in Chinese is perfectly fine — it matches the existing history.
-- Please **sign off** your commits (DCO — lightweight, no CLA required):
+- Signing off your commits is **encouraged, not required**:
 
   ```bash
   git commit -s -m "fix: ……"
   ```
 
   `-s` adds a `Signed-off-by` line, certifying that you have the right to submit the code under the [Developer Certificate of Origin](https://developercertificate.org/).
+
+  This used to read "please sign off your commits", which sounds mandatory — while CI
+  never checked it and the repository's own history mostly lacks it. **Either enforce it
+  in CI or don't write it as a rule**; an unenforced rule only makes first-time
+  contributors anxious for nothing. This is a personal portfolio project, so a red gate
+  for a formality isn't worth it. If it ever becomes necessary (say, accepting
+  corporate-sourced contributions), it gets promoted to a requirement *and* a check at
+  the same time.
 
 ## Pull request flow
 

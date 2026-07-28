@@ -2,28 +2,20 @@
 import type { Perfume, Context, Usage, Bias } from "./types";
 import { durationHint, SEASON_NAME } from "./format";
 import { tempBand } from "./season";
+import { DENSITY, isClosedOccasion } from "./occasion-priors";
 import {
   sweetness,
   balsamicWeight,
   sweetDominates,
   balsamicDominates,
-  richDominates,
   heavyDominates,
   dataConfidence,
+  weatherFit,
+  WEATHER_CAUTION,
   type WeatherTone,
 } from "./scoring";
 
-// 场景的空间密度（影响喷量与风险）
-const DENSITY: Record<string, "dense" | "closed" | "normal" | "open"> = {
-  commute: "dense",
-  work: "closed",
-  formal: "closed",
-  date: "normal",
-  social: "normal",
-  casual: "normal",
-  home: "open",
-  sport: "open",
-};
+// 空间密度与「封闭场合」的定义只有一处：occasion-priors.ts
 
 function accStrength(p: Perfume, en: string): number {
   const a = p.accords.find((x) => x.en === en);
@@ -42,8 +34,7 @@ function accStrength(p: Perfume, en: string): number {
 function overdressedCombo(p: Perfume, ctx: Context): boolean {
   const loudSweet = sweetDominates(p, 50);
   const loudFloral = accStrength(p, "white floral") >= 50;
-  const officeish = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
-  return (loudSweet || loudFloral) && p.sillageTier >= 3 && officeish;
+  return (loudSweet || loudFloral) && p.sillageTier >= 3 && isClosedOccasion(ctx.occasion);
 }
 
 export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
@@ -96,13 +87,20 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 此前只认 sillage≥3.2，于是蔚蓝浓香精(sil=2.17, amber=86) 在 33℃ 会一边被提醒"收着些"、
   // 一边拿到 3–4 下的最高档，文案与数字互相打脸。
   //
-  // ⚠️ 这里必须与 computeRisks 用**同一个** richDominates，不能各用一条绝对线。
+  // ⚠️ 这里必须与 computeRisks 用**同一个**判据，不能各用一条绝对线。
   // 上一版两边都写 `max(sweet, balsam) >= 55`，看着一致，实则和打分层（scoring.ts 早已换成
   // 主导度判据）分了家：旷野(fresh spicy=100, balsamic=59) 在 33℃ 会被同一张卡先夸
   // "调性清爽通透"、再罚"树脂琥珀感偏厚"，喷量还跟着少一下。主目录实测 793 → 567 款，
   // 少掉的 226 款正是清爽当家的那批。同一个概念只准有一处判据。
+  //
+  // 上一版换成 richDominates(55) 之后仍然差半步：风险文案的三支合起来是
+  // sweetDominates(55) ∪ balsamicDominates(55) ∪ heavyDominates(50)，而前两者都被
+  // heavyDominates(50) 包住（族更宽、绝对线更低、主导度门槛同一条），也就是说
+  // **文案的口径其实就是 heavyDominates(50)**，减量却停在 richDominates(55)。
+  // 差出来的正是烟草与动物性主导的那一批：卡上写着「厚重感在高温里会放大，
+  // 喷得收着些更稳」，喷量却纹丝不动地给到最高档。取并集不如直接认那个更宽的口径。
   // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
-  if (hotFeel && (sil >= 3.2 || richDominates(p, 55))) {
+  if (hotFeel && (sil >= 3.2 || heavyDominates(p, 50))) {
     hi = Math.max(lo, hi - 1);
     capped = true;
   }
@@ -153,6 +151,22 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 「略微多喷一点」和「想被注意到」各自都是"略"，叠加起来不该变成两档。
   const prefCeiling = capped ? safetyCap : Math.min(safetyCap + 1, 5);
 
+  // ── 成功配置：它是**基准**，不是终点 ────────────────────────────────
+  // 同温度档 × 同场合你反馈过「刚好」→ 从那次的量起算，但只能在安全上限之内复用：
+  //「上次刚好」记的是上次的场合，覆盖不了今天更封闭的会议室、更闷的天、
+  // 或这瓶香本身的用力过猛组合。个性化不能凌驾于安全阀之上。
+  //
+  // ⚠️ 它此前写在偏好**之后**，且是 `lo = hi = applied` 的无条件覆盖，于是只夹住了安全阀、
+  // 把更近的信号一并抹掉：一条旧的「刚好 4 下」会盖过随后两次「太冲了」，
+  // 也盖过场景解析出的「今晚想贴身一点」。而反馈闭环恰恰是这个产品唯一的真壁垒——
+  // 让最新的反馈失效，比不做这个功能更糟。
+  // 顺序改成「安全阀 → 记忆的基准 → 当下的偏好 → 收口」，四层各司其职。
+  const cfg = bias?.successConfigs?.find(
+    (c) => c.occasion === ctx.occasion && c.tempBand === tempBand(ctx.tempC)
+  );
+  const remembered = cfg ? Math.max(1, Math.min(5, cfg.sprays)) : null;
+  if (remembered != null) lo = hi = Math.max(1, Math.min(remembered, safetyCap));
+
   // ── 个人偏好：可升可降，但一律不得越过 safetyCap ────────────────────
   // 自然语言场景：想贴身则收一档、想被注意到可略增
   if (ctx.intimacy === "close") hi = Math.max(1, hi - 1);
@@ -170,21 +184,18 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   hi = Math.min(hi, prefCeiling);
   lo = Math.max(1, Math.min(lo, hi));
 
-  // 成功配置复用：同温度档 × 同场合你反馈过「刚好」→ 按那次的量来。
-  // 但它只能在安全上限之内复用——"上次刚好"记的是上次的场合，覆盖不了今天更封闭的会议室、
-  // 更闷的天、或这瓶香本身的用力过猛组合。个性化不能凌驾于安全阀之上。
+  // 成功配置的回执：说的必须是**最终这个数**是怎么来的，不能停在"按那次的量来"——
+  // 上面已经允许更近的反馈与场景把它推开了，回执跟不上就又变成一句不兑现的话。
   let note: string | undefined;
-  const cfg = bias?.successConfigs?.find(
-    (c) => c.occasion === ctx.occasion && c.tempBand === tempBand(ctx.tempC)
-  );
-  if (cfg) {
-    const remembered = Math.max(1, Math.min(5, cfg.sprays));
-    const applied = Math.max(1, Math.min(remembered, safetyCap));
-    lo = hi = applied;
+  if (remembered != null) {
     note =
-      applied < remembered
-        ? "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
-        : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
+      hi < remembered
+        ? ps >= 0.4
+          ? "上次同样天气、同样场合你说「刚好」——不过你后来又说过它偏冲，这次在那个量上再收一点。"
+          : "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
+        : hi > remembered
+          ? "上次同样天气、同样场合你说「刚好」——今天在那个量上略放开一点。"
+          : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
   }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;
@@ -246,7 +257,9 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   if (ps >= 0.4) distReduce++;
   const effTier = Math.max(1, p.sillageTier - Math.min(distReduce, 2)) as 1 | 2 | 3 | 4;
 
-  const risks = computeRisks(p, ctx);
+  // suitable 问的是「这一瓶今天合不合适」，所以与 computeVerdict 同口径：只看本瓶风险。
+  // 场景提示对柜里每一瓶都成立，算进来会让全柜同时变成"不合适"（见 isBottleRisk）。
+  const bottleRisks = computeRiskNotes(p, ctx).filter(isBottleRisk);
 
   // 留香提示：在场时间不短 + 这瓶偏短效 → 提醒带分装（时长来自场景解析的档位值，不精确到小时）
   let dHint = durationHint(p.longevity);
@@ -260,7 +273,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
     placement,
     socialDistance: effTier,
     durationHint: dHint,
-    suitable: risks.length === 0,
+    suitable: bottleRisks.length === 0,
     note,
   };
 }
@@ -284,6 +297,24 @@ export interface RiskNote {
   kind: RiskKind;
   text: string;
 }
+
+/**
+ * 这一条说的是**这一瓶**，还是**今天这个场合**？
+ *
+ * scene 一档（来自 ctx.riskNote，即 LLM 从用户原话里读出的场合常识，以及无香场合那一句）
+ * 对柜里每一瓶都成立，因此它**不具备区分力**，不能参与"这瓶今天行不行"的裁决。
+ * 混进去的后果是可测的：computeVerdict 的规则是 risks.length > 0 → caution，
+ * 于是只要场景解析返回了任何一句 riskNote，全目录 1500 款的裁决实测塌成
+ * caution 1209 / avoid 291 / **good 0**——而 good 正是三处闸门的通行证：
+ * nudges 的吃灰卡（verdict==="good"）、预警卡的「换成 X」（同上）、以及 usage.suitable。
+ * 也就是说，用户一旦用起产品的旗舰能力（自然语言场景），发现型钩子就整体哑火。
+ *
+ * 这与「织物留印提示被 computeVerdict 吃掉」是同一个坑换了个门：
+ * **提示与风险必须分清，混用会污染裁决。** 上次是靠调整调用顺序绕过去的，
+ * 这次把它变成一条带类型的、任何调用方都绕不过的判据。
+ * 场景提示照常上屏（它对用户有用），只是不再参与裁决。
+ */
+export const isBottleRisk = (n: RiskNote): boolean => n.kind !== "scene";
 
 /** 只要文本的调用方走这里；需要按成因取某一条的走 computeRiskNotes */
 export function computeRisks(p: Perfume, ctx: Context): string[] {
@@ -330,8 +361,19 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   const sweet = sweetness(p);
   const balsam = balsamicWeight(p);
   const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
-  if (hot) {
-    const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : "这么热";
+  // 天气把这瓶压到「要留意」那一档时，这里就**必须**说得出为什么。
+  //
+  // 裁决有两个触发源：risks 非空，以及 parts.weather < WEATHER_CAUTION。第二个此前没有
+  // 任何文案与之配对，代价是可测的——全目录 × 温湿度 × 场合扫一遍，12.6% 的 caution
+  // 配的是一张空清单：卡上挂着「有一点要留意」，下面一条都没有。
+  // 其中冷侧（thin_in_cold）从来就没有过对应文案；热侧那批则落在 22–28℃ 这段
+  // ——weatherFit 的热负荷从 22℃ 起算，而 ctx.feel 要更高才算 hot，两条线本来就不齐。
+  //
+  // 措辞仍然只由 tone 决定（本文件既有的纪律），门槛与裁决共用同一个常量。
+  const wf = weatherFit(p, ctx.feel, ctx.tempC, ctx.humidity);
+  const weatherDrivesCaution = wf.w < WEATHER_CAUTION;
+  if (hot || (weatherDrivesCaution && wf.tone === "heavy_in_heat")) {
+    const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : hot ? "这么热" : "气温偏高";
     if (sweetDominates(p, 55)) {
       push("weather", `今天${weatherWord}，它的甜感偏重，上身久了容易发腻，可考虑换清爽些的。`);
     } else if (balsamicDominates(p, 55)) {
@@ -342,6 +384,12 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
       // 却一条风险都说不出来：正是「判了却说不出为什么」那类结构性缺陷。
       push("weather", `今天${weatherWord}，它的厚重感在高温里会放大，存在感比你以为的更强，喷得收着些更稳。`);
     }
+  }
+  // 冷侧此前一句都没有。它不是"会过头"，而是**留不住**——措辞要对得上归因，
+  // 也不能顺口许一个引擎不会兑现的动作：喷量的冷天加成只给扩散弱的那一档
+  //（见本文件上方 `ctx.feel === "cold" && sil < 2.4`），所以这里不说"多喷一点"。
+  if (weatherDrivesCaution && wf.tone === "thin_in_cold" && !risks.some((r) => r.kind === "weather")) {
+    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住——别指望它陪一整天，想要更立得住就换一瓶更暖的。");
   }
   // 餐桌场合：浓香/甜香和食物气味打架（高端餐饮甚至明示谢绝浓香）
   if (ctx.meal && (Math.max(sweet, balsam) >= 55 || p.sillageTier >= 3)) {

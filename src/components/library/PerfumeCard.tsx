@@ -116,8 +116,17 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
           <Tiers notes={p.notes} />
         </div>
 
+        {/* 归因随「这一档背后有没有票」变。手动记的那瓶是用户自己勾的档，
+            国货白名单里 sillage 为 null 的那 444 条则一票都没有——
+            对这两类说「来自社区投票」是凭空造了一份不存在的数据 */}
         <p className="mt-5 text-[0.72rem] leading-relaxed text-ink-faint">
-          社交距离「{DISTANCE_LABEL[p.sillageTier]}」来自社区投票，是多数评价者的感受；浓度等未标注项以官方为准。
+          社交距离「{DISTANCE_LABEL[p.sillageTier]}」
+          {p.custom
+            ? "是你自己填的扩散档"
+            : p.lowVotes || p.sillage == null
+              ? "这瓶社区数据还少，先按中庸档估"
+              : "来自社区投票，是多数评价者的感受"}
+          ；浓度等未标注项以官方为准。
         </p>
       </div>
     </div>

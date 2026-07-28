@@ -47,7 +47,11 @@ function CityForm({ onDone }: { onDone: () => void }) {
           value={cityInput}
           onChange={(e) => setCityInput(e.target.value)}
           placeholder="例如：上海、杭州、成都"
-          className="serif flex-1 border-b border-line-strong bg-transparent px-1 py-2 text-sm text-ink outline-none focus:border-accent"
+          // min-w-0 不能省：flex 子项的默认 min-width 是 auto，撑到内容宽度就不再收缩。
+          // 这里的 placeholder 有 11 个汉字，而 globals.css 又把 input 的字号钉在 16px
+          //（防 iOS 聚焦缩放），于是 320px 宽的手机上「确定」按钮会被挤出卡片。
+          // 定位被拒之后，这个表单是唯一的补救入口。
+          className="serif min-w-0 flex-1 border-b border-line-strong bg-transparent px-1 py-2 text-sm text-ink outline-none focus:border-accent"
         />
         <button type="submit" disabled={busy} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
           {busy ? "…" : "确定"}

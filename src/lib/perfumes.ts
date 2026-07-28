@@ -89,7 +89,11 @@ export function loadExtSearch(): Promise<MiniSearch<ExtIndexEntry> | null> {
             combineWith: "OR",
           },
         });
-        ms.addAll(entries);
+        // addAllAsync 而不是 addAll：3.6 万条同步建索引实测独占主线程约 0.5 秒，
+        // 而它恰好发生在搜索框获得焦点的那一刻——「搜名秒加」这条冷启动承诺的入口上，
+        // 用户此时正准备打字，输入却半秒没有反应。
+        // addAllAsync 分片让出事件循环，总耗时相当，但每一片之间都能响应输入。
+        await ms.addAllAsync(entries, { chunkSize: 1000 });
         return ms;
       } catch {
         extIndexPromise = null; // 失败允许下次重试

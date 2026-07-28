@@ -4,67 +4,38 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import MiniSearch from "minisearch";
-import { rankSearchHits, type RankCandidate, type ExtIndexEntry } from "./perfumes";
+import { buildSearch, loadExtSearch, rankSearchHits, type RankCandidate, type ExtIndexEntry } from "./perfumes";
 import type { Perfume } from "./types";
 
-function tokenize(text: string): string[] {
-  const tokens: string[] = [];
-  const re = /[a-zA-Z0-9]+|[一-鿿]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) tokens.push(m[0].toLowerCase());
-  return tokens;
-}
+// ⚠️ 这个文件此前**自己又建了一遍索引**：把 buildSearch / loadExtSearch 的配置
+// （字段、分词器、boost、prefix、fuzzy、combineWith）逐字抄了一份到本地函数里，
+// 于是它守的是那份副本，不是生产代码。生产侧的 boost 改一个数、fuzzy 动一位，
+// 用例照绿——而「观夏搜不到」「闻献被折叠」两次事故的根因恰恰就在这些参数上，
+// 用例名却写着「E2E 真实数据」。
+//
+// 现在直接调生产函数。loadExtSearch 走 fetch("/data/ext-index.json")，
+// 用一个只认 /data/ 前缀的桩把它接到磁盘上——这是唯一需要替换的东西，
+// 索引配置、分片逻辑、addAllAsync 全都跑的是真身。
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  const url = String(input);
+  if (!url.startsWith("/data/")) return realFetch(input, init);
+  return new Response(fs.readFileSync(`public${url}`, "utf8"), {
+    headers: { "content-type": "application/json" },
+  });
+}) as typeof fetch;
 
-// 与 src/lib/perfumes.ts buildSearch / loadExtSearch 相同的索引配置（此处独立构建以脱离 fetch）
-function buildIndexes() {
+async function buildIndexes() {
   const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
-  const main = new MiniSearch({
-    idField: "id",
-    fields: ["nameZh", "aliasText", "name", "brand", "brandZh", "notesText"],
-    storeFields: ["id"],
-    tokenize,
-    processTerm: (t) => t.toLowerCase(),
-    searchOptions: {
-      tokenize,
-      processTerm: (t) => t.toLowerCase(),
-      prefix: true,
-      fuzzy: 0.15,
-      boost: { nameZh: 4, aliasText: 4, name: 3, brandZh: 2, brand: 2 },
-      combineWith: "OR",
-    },
-  });
-  main.addAll(
-    catalog.map((p) => ({
-      ...p,
-      nameZh: p.nameZh ?? "",
-      aliasText: (p.aliases ?? []).join(" "),
-      notesText: p.notesFlat.join(" "),
-    })) as unknown as Perfume[]
-  );
-  const ext = JSON.parse(fs.readFileSync("public/data/ext-index.json", "utf8")) as ExtIndexEntry[];
-  const extMs = new MiniSearch<ExtIndexEntry>({
-    idField: "i",
-    fields: ["n", "b", "z"],
-    storeFields: ["i", "n", "b", "z", "p"],
-    tokenize,
-    processTerm: (t) => t.toLowerCase(),
-    searchOptions: {
-      tokenize,
-      processTerm: (t) => t.toLowerCase(),
-      prefix: true,
-      fuzzy: 0.15,
-      boost: { n: 3, z: 2, b: 2 },
-      combineWith: "OR",
-    },
-  });
-  extMs.addAll(ext);
+  const main = buildSearch(catalog);
+  const extMs = await loadExtSearch();
+  assert.ok(extMs, "扩展索引没建起来——桩没接上或产物缺失，后面的断言会变成空跑");
   const byId = new Map(catalog.map((p) => [p.id, p]));
   return { main, extMs, byId };
 }
 
 // 复刻 SearchAdd 的合并逻辑（候选规模与字段拼串保持一致）
-function searchMerged(idx: ReturnType<typeof buildIndexes>, query: string): { label: string; source: string }[] {
+function searchMerged(idx: Awaited<ReturnType<typeof buildIndexes>>, query: string): { label: string; source: string }[] {
   const mainCands: RankCandidate<{ label: string; source: string }>[] = idx.main
     .search(query)
     .slice(0, 12)
@@ -90,8 +61,8 @@ function searchMerged(idx: ReturnType<typeof buildIndexes>, query: string): { la
   return rankSearchHits(query, [...mainCands, ...extCands]);
 }
 
-test("E2E 真实数据：国货与长尾在统一榜单头部，主流版本优先", () => {
-  const idx = buildIndexes();
+test("E2E 真实数据：国货与长尾在统一榜单头部，主流版本优先", async () => {
+  const idx = await buildIndexes();
 
   // 观夏：品牌命中必须占据榜首（此前被 7 条单字垃圾命中压到看不见）
   const gx = searchMerged(idx, "观夏");
