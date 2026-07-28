@@ -38,9 +38,13 @@ export default function TodayPage() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 一串快照，不是一张：「想比三瓶用法」正是这条撤销存在的理由，
+  // 而连续采纳时只留最后一张，撤销就只回滚最后那一瓶——前两瓶的穿戴计数、
+  // 香历与隐式差评照样留着。撤销掉一部分比不撤销更难解释。
   const [undoAdoptItem, setUndoAdoptItem] = useState<{
     name: string;
-    snap: AdoptSnapshot;
+    count: number;
+    snaps: AdoptSnapshot[];
     prevSelectedId: number | null;
   } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,7 +100,13 @@ export default function TodayPage() {
     else if (kind === "swap" && rec?.primary && id !== rec.primary.perfume.id)
       recordSwap(rec.primary.perfume.id);
     if (snap && p) {
-      setUndoAdoptItem({ name: nameParts(p).primary, snap, prevSelectedId: selectedId });
+      setUndoAdoptItem((prev) => ({
+        name: nameParts(p).primary,
+        count: (prev?.count ?? 0) + 1,
+        // 追加而不是覆盖；prevSelectedId 保留这一串开始之前的那个
+        snaps: [...(prev?.snaps ?? []), snap],
+        prevSelectedId: prev?.prevSelectedId ?? selectedId,
+      }));
       if (undoTimer.current) clearTimeout(undoTimer.current);
       undoTimer.current = setTimeout(() => setUndoAdoptItem(null), 8000);
     }
@@ -134,8 +144,12 @@ export default function TodayPage() {
 
       {!hydrated ? (
         <div className="h-56 animate-pulse bg-sunken/50" />
-      ) : catalogError && userPerfumes.length > 0 ? (
-        <CatalogError count={userPerfumes.length} onRetry={retryCatalog} />
+      ) : catalogError && lib.length < userPerfumes.length ? (
+        // 判据是「**有几瓶因此拿不出来**」，不是「柜里有没有瓶」。
+        // 扩展集与手动记录的香整条存在本机，目录挂了它们照样在——按旧判据，
+        // 一个全部由国货/手动记录组成的香柜会被整块拦在一张"没加载出来"的卡后面，
+        // 而它其实一瓶都不缺。
+        <CatalogError count={userPerfumes.length - lib.length} onRetry={retryCatalog} />
       ) : catalog === null && !catalogError ? (
         // 目录还在加载：继续骨架屏——满柜用户在这个窗口期不该看到"空柜"（那句话对他们是假的）
         <div className="h-56 animate-pulse bg-sunken/50" />
@@ -191,11 +205,13 @@ export default function TodayPage() {
           className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
         >
           <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
-            已把「{undoAdoptItem.name}」记进今天的香历
+            {undoAdoptItem.count > 1
+              ? `已把「${undoAdoptItem.name}」等 ${undoAdoptItem.count} 瓶记进今天的香历`
+              : `已把「${undoAdoptItem.name}」记进今天的香历`}
           </span>
           <button
             onClick={() => {
-              undoAdopt(undoAdoptItem.snap);
+              undoAdopt(undoAdoptItem.snaps);
               setSelectedId(undoAdoptItem.prevSelectedId);
               if (undoTimer.current) clearTimeout(undoTimer.current);
               setUndoAdoptItem(null);
@@ -222,14 +238,14 @@ export default function TodayPage() {
   );
 }
 
-// 目录（1.6MB JSON）加载失败但本地有香柜 → 明确告知"数据没丢 + 重试"，绝不把满柜误显示成空柜
+// 目录（1.6MB JSON）加载失败、且确有瓶子因此拿不出来 → 明确告知"数据没丢 + 重试"，绝不把满柜误显示成空柜
 function CatalogError({ count, onRetry }: { count: number; onRetry: () => void }) {
   return (
     <div className="card animate-fade-up flex flex-col items-center gap-5 px-6 py-12 text-center">
       <div>
         <h3 className="serif text-[1.3rem] font-bold text-ink">香水目录没加载出来</h3>
         <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
-          可能是网络波动。你香柜里的 {count} 瓶香水都还在，没有丢——
+          可能是网络波动，有 {count} 瓶暂时取不出来。它们都还在，没有丢——
           点下面重试就能恢复今日推荐。
         </p>
       </div>

@@ -70,8 +70,8 @@ interface State {
   markWorn: (id: number) => void;
   /** 采纳前留一份现场（见 AdoptSnapshot），交给 UI 拿去做 8 秒撤销 */
   snapshotAdopt: (id: number, day: string) => AdoptSnapshot;
-  /** 把 snapshotAdopt 那一刻的现场原样放回 */
-  undoAdopt: (s: AdoptSnapshot) => void;
+  /** 把 snapshotAdopt 那一刻的现场原样放回。传一串则整串回滚到**第一张**之前 */
+  undoAdopt: (s: AdoptSnapshot | AdoptSnapshot[]) => void;
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
   setOccasion: (o: Occasion) => void;
@@ -219,8 +219,14 @@ export function shouldRehydrateOnStorage(key: string | null, hydrateError: strin
  * 推荐、香历、画像会同时基于"别人的六瓶"和"你的一瓶"作答，而用户无从分辨哪句是关于自己的。
  * 返回 null 表示当前不在示例态，调用方按原逻辑走。
  */
-function demoExitPatch(s: { demo: boolean }) {
-  return s.demo ? { ...DEMO_CLEARED, demo: false, demoDismissed: true } : null;
+function demoExitPatch(s: { demo: boolean; wearLog: WearEntry[] }) {
+  if (!s.demo) return null;
+  // 演示的六瓶、那一个月的穿香记录、示例反馈全都该走干净——但**用户亲手打的手记不是演示数据**。
+  // 香历页对演示条目和真实条目一视同仁地可写（这是对的，不写字的日历没人会用），
+  // 于是有人会在示例的某一天里写下一句真话，然后加进自己的第一瓶香，那句话就无声消失了。
+  // 只保留带 note 的那几条，其余照旧清空。
+  const kept = s.wearLog.filter((e) => e.note && e.note.trim().length > 0);
+  return { ...DEMO_CLEARED, wearLog: dedupeSortWear(kept), demo: false, demoDismissed: true };
 }
 
 /**
@@ -461,20 +467,33 @@ export const useStore = create<State>()(
           swapAways: s.swapAways,
         };
       },
-      undoAdopt: (snap) =>
-        set((s) => ({
-          userPerfumes: s.userPerfumes.map((u) =>
-            u.perfumeId === snap.perfumeId && snap.userPerfume ? snap.userPerfume : u
-          ),
-          // 当天那条要么恢复成被覆盖前的样子，要么根本不该存在（这次采纳才建的）
-          wearLog: dedupeSortWear([
-            ...s.wearLog.filter((e) => e.d !== snap.day),
-            ...(snap.wearEntry ? [snap.wearEntry] : []),
-          ]),
-          swapCount: snap.swapCount,
-          dustyAdoptCount: snap.dustyAdoptCount,
-          swapAways: snap.swapAways,
-        })),
+      // 接受**一串**快照，而不是一个。
+      //
+      // 这条撤销存在的理由就是「想比三瓶用法」：点开三瓶看看怎么喷，三瓶就全被记成今天穿过。
+      // 而此前 UI 只留最后一次的快照，撤销只回滚最后那一瓶——前两瓶的 wornCount、
+      // lastWornAt 与隐式差评照样留着，轮换新鲜度与吃灰的 21 天计时也照样被重置。
+      // 撤销掉一部分比不撤销更难解释。
+      //
+      // 全局项（香历当天那条、两个计数器、swapAways）取**最早**那张快照——它才是这一串
+      // 浏览动作开始之前的现场；逐瓶项各自按 id 还原。
+      undoAdopt: (snaps) =>
+        set((s) => {
+          const list = Array.isArray(snaps) ? snaps : [snaps];
+          if (list.length === 0) return {};
+          const first = list[0];
+          const byId = new Map(list.map((x) => [x.perfumeId, x] as const));
+          return {
+            userPerfumes: s.userPerfumes.map((u) => byId.get(u.perfumeId)?.userPerfume ?? u),
+            // 当天那条要么恢复成被覆盖前的样子，要么根本不该存在（这一串采纳才建的）
+            wearLog: dedupeSortWear([
+              ...s.wearLog.filter((e) => e.d !== first.day),
+              ...(first.wearEntry ? [first.wearEntry] : []),
+            ]),
+            swapCount: first.swapCount,
+            dustyAdoptCount: first.dustyAdoptCount,
+            swapAways: first.swapAways,
+          };
+        }),
       // 同瓶同日重复反馈 → 以最新一条为准（刷新页面重复提交不再重复计入偏置）；
       // 窗口按瓶分桶（各 60 条）+ 全局 400 条，对 A 瓶狂点不再把 B 瓶的历史挤出窗口
       addFeedback: (fb) =>
