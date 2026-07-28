@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
+import { carriesNumber } from "@/lib/numguard";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,9 @@ const KEY = process.env.DEEPSEEK_API_KEY;
 const BASE = process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com";
 const MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 
-const PatchSchema = z.object({
+// 导出是为了可测：riskNote 的「带数字整条丢掉」是反伪精确的源头闸门，
+// 它必须有东西守着——纯 schema、零副作用，导出不改变任何运行时行为。
+export const PatchSchema = z.object({
   occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
   formality: z.number().min(0).max(1).optional(),
   intimacy: z.enum(["close", "neutral", "broadcast"]).optional(),
@@ -21,7 +24,17 @@ const PatchSchema = z.object({
   duration: z.union([z.literal(2), z.literal(4), z.literal(6), z.literal(9)]).optional(),
   meal: z.boolean().optional(), // 餐桌场合：压制浓香的关键开关（气味干扰味觉）
   fragranceFree: z.boolean().optional(), // 就医/探病等无香场合：命中即建议今天不用香
-  riskNote: z.string().max(40).optional(), // 一句话社交风险，以受控字段进入风险提示，不许自由发挥进正文
+  // 一句话社交风险，以受控字段进入风险提示，不许自由发挥进正文。
+  // **带数字的一律丢掉**：这一句是用户原话经 LLM 转写来的，是全链路里唯一一段
+  // 混在"规则算出来的事实"中间、却源自用户自由输入的文本。它会被 computeRiskNotes
+  // 逐字下推进 risks[]，再被 /api/explain 收进数字白名单——用户写一句「会议约 6.2 小时」，
+  // 反伪精确这道防线就被他自己的输入从内部打开了（见 numguard.ts:carriesNumber）。
+  // 社交风险本来就不需要数字，丢掉整条比试图清洗它更干净。
+  riskNote: z
+    .string()
+    .max(40)
+    .optional()
+    .transform((s) => (s && carriesNumber(s) ? undefined : s)),
   label: z.string().min(1).max(24),
 });
 

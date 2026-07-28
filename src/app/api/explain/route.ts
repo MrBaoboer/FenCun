@@ -130,6 +130,13 @@ export async function POST(req: NextRequest) {
   // 白名单只取"我们自己算出来的事实"里的数字，刻意排除用户自由文本（场景原话）。
   // 否则用户在场景里写一句「留香6.2小时」就把 6.2 加进了白名单，
   // 反伪精确这道防线会被用户自己的输入从内部打开。宁可多退几次模板，也不放行。
+  //
+  // ⚠️ 这句话曾经只对 scene.rawText 成立，而 risks 里藏着第二条路：场景解析的 riskNote
+  // 同样源自用户原话，经 computeRiskNotes 逐字下推进 risks[]，再从这里进白名单。
+  // 现在的保证来自**源头**——parse-intent 对带数字的 riskNote 整条丢弃
+  //（见 numguard.ts:carriesNumber）。不在这里再加一层过滤是有意的：risks 里我们自己的
+  // 文案本来就带数字（「建议只喷 1 下」「压到 1 下」），按内容筛只会误伤自己，
+  // 而按来源筛需要把 RiskKind 一路透传到 HTTP 层——手段应当和理由一样窄。
   const factsOnly = JSON.stringify({
     香水: `${input.brandZh} ${input.name}`,
     此刻: input.context,

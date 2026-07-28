@@ -6,9 +6,9 @@
 // 只写在注释里、没有任何东西守着。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { heuristic } from "./parse-intent/route";
+import { heuristic, PatchSchema } from "./parse-intent/route";
 import { template, type ExplainInput } from "./explain/route";
-import { extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
+import { carriesNumber, extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
 
 // ---------- parse-intent · 无香场合红线 ----------
 
@@ -126,4 +126,46 @@ test("数字白名单：全角与中文数字同样是伪精确，不许绕过",
   assert.deepEqual(findPseudoPreciseCN("用两次你就知道它在你身上能走多久", facts), []);
   // ⑥ 非计数的体感表达不在其列（它们本来就是我们自己的措辞）
   assert.deepEqual(findPseudoPreciseCN("撑得住大半个白天，一臂之内闻得到", facts), []);
+});
+
+test("数字白名单：「半」是数字，量词要盖住时间 · 剂量 · 距离三件事", () => {
+  // 上一版漏掉的两类，实测都能原样上屏（invented 为空、source 标 deepseek）：
+  //   ① 「半」不在数字表里 → 「六个半小时」「一个半小时」「半小时」全放行，
+  //      而这比「六到八个小时」更像中文里的自然说法；
+  //   ② 量词表没有「钟头」「秒」「泵」，距离侧更是一个长度单位都没有——
+  //      而社交距离正是产品只给四档的三件事之一。
+  const facts = "喷 1–2 下；撑得住大半个白天；用两次你就知道它在你身上能走多久";
+  for (const s of [
+    "大概能撑六个半小时",
+    "差不多一个半小时就淡了",
+    "大概能撑半小时",
+    "大概六个钟头",
+    "间隔三十秒再喷",
+    "扩散半径一米五",
+    "喷三泵就够",
+  ]) {
+    assert.ok(findPseudoPreciseCN(s, facts).length > 0, `该拦没拦：${s}`);
+  }
+  // 「大半」是我们自己的模糊措辞，不是伪精确——拦下它等于让防线吃掉自家的话
+  assert.deepEqual(findPseudoPreciseCN("大半天都在，晚上多半还在", facts), []);
+  assert.deepEqual(findPseudoPreciseCN("过几个小时你自己可能先闻不到", facts), []);
+});
+
+test("riskNote 带数字必须在源头丢掉——否则用户自己的输入会把白名单撑开", () => {
+  // 链路：用户原话 → parse-intent 的 LLM → riskNote → computeRiskNotes 逐字进 risks[]
+  //     → /api/explain 的 factsOnly → allowedNumbers。
+  // 实测（修复前）：场景写「会议约 6.2 小时」，LLM 随后输出「留香 6.2 小时」时 invented = []。
+  assert.equal(carriesNumber("会议约 6.2 小时，别太浓"), true);
+  assert.equal(carriesNumber("会议室密闭，浓香会被放大"), false);
+  assert.equal(carriesNumber("大概能撑六个半小时"), true);
+  // 我们自己的模糊措辞不算"带数"，否则正常的 riskNote 会被误丢
+  assert.equal(carriesNumber("婚礼焦点是新人，不宜喧宾夺主"), false);
+  assert.equal(carriesNumber("大半天都在人多的地方"), false);
+
+  // schema 层：带数字的整条丢掉，其余字段照常放行
+  const dirty = PatchSchema.safeParse({ occasion: "formal", label: "会议", riskNote: "会议约 6.2 小时" });
+  assert.equal(dirty.success, true);
+  assert.equal(dirty.success && dirty.data.riskNote, undefined);
+  const clean = PatchSchema.safeParse({ occasion: "formal", label: "会议", riskNote: "会议室密闭，浓香会被放大" });
+  assert.equal(clean.success && clean.data.riskNote, "会议室密闭，浓香会被放大");
 });
