@@ -1,6 +1,6 @@
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
 import type { Perfume, Context, ScoredPick, Verdict, AvoidCause, Bias, Feedback, Occasion, SuccessConfig } from "./types";
-import { score, sweetDominates, stainProneDominates, dataConfidence, type ScoreParts } from "./scoring";
+import { score, sweetDominates, stainProneDominates, dataConfidence, WEATHER_CAUTION, type ScoreParts } from "./scoring";
 
 /** 单个 accord 强度（留印风险判定用） */
 const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
@@ -72,7 +72,10 @@ function computeVerdict(
     return { verdict: "avoid", avoidCause: "weather" };
   if (seasonMiss) return { verdict: "avoid", avoidCause: "season" };
   if (tooLoudClosed) return { verdict: "avoid", avoidCause: "venue" };
-  if (risks.length > 0 || parts.weather < 0.95) return { verdict: "caution", avoidCause: null };
+  // 第二个触发源与 computeRiskNotes 共用同一个常量：天气压到这条线以下就判 caution，
+  // 而同一条线也是那边"必须说得出一句话"的门槛。两边各写一个 0.95，就会重演
+  // 「数字收了、话没说」——这次是反过来的形态：「判了、说不出为什么」。
+  if (risks.length > 0 || parts.weather < WEATHER_CAUTION) return { verdict: "caution", avoidCause: null };
   return { verdict: "good", avoidCause: null };
 }
 

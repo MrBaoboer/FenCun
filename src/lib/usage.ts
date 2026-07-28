@@ -10,6 +10,8 @@ import {
   richDominates,
   heavyDominates,
   dataConfidence,
+  weatherFit,
+  WEATHER_CAUTION,
   type WeatherTone,
 } from "./scoring";
 
@@ -350,8 +352,19 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   const sweet = sweetness(p);
   const balsam = balsamicWeight(p);
   const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
-  if (hot) {
-    const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : "这么热";
+  // 天气把这瓶压到「要留意」那一档时，这里就**必须**说得出为什么。
+  //
+  // 裁决有两个触发源：risks 非空，以及 parts.weather < WEATHER_CAUTION。第二个此前没有
+  // 任何文案与之配对，代价是可测的——全目录 × 温湿度 × 场合扫一遍，12.6% 的 caution
+  // 配的是一张空清单：卡上挂着「有一点要留意」，下面一条都没有。
+  // 其中冷侧（thin_in_cold）从来就没有过对应文案；热侧那批则落在 22–28℃ 这段
+  // ——weatherFit 的热负荷从 22℃ 起算，而 ctx.feel 要更高才算 hot，两条线本来就不齐。
+  //
+  // 措辞仍然只由 tone 决定（本文件既有的纪律），门槛与裁决共用同一个常量。
+  const wf = weatherFit(p, ctx.feel, ctx.tempC, ctx.humidity);
+  const weatherDrivesCaution = wf.w < WEATHER_CAUTION;
+  if (hot || (weatherDrivesCaution && wf.tone === "heavy_in_heat")) {
+    const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : hot ? "这么热" : "气温偏高";
     if (sweetDominates(p, 55)) {
       push("weather", `今天${weatherWord}，它的甜感偏重，上身久了容易发腻，可考虑换清爽些的。`);
     } else if (balsamicDominates(p, 55)) {
@@ -362,6 +375,12 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
       // 却一条风险都说不出来：正是「判了却说不出为什么」那类结构性缺陷。
       push("weather", `今天${weatherWord}，它的厚重感在高温里会放大，存在感比你以为的更强，喷得收着些更稳。`);
     }
+  }
+  // 冷侧此前一句都没有。它不是"会过头"，而是**留不住**——措辞要对得上归因，
+  // 也不能顺口许一个引擎不会兑现的动作：喷量的冷天加成只给扩散弱的那一档
+  //（见本文件上方 `ctx.feel === "cold" && sil < 2.4`），所以这里不说"多喷一点"。
+  if (weatherDrivesCaution && wf.tone === "thin_in_cold" && !risks.some((r) => r.kind === "weather")) {
+    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住——别指望它陪一整天，想要更立得住就换一瓶更暖的。");
   }
   // 餐桌场合：浓香/甜香和食物气味打架（高端餐饮甚至明示谢绝浓香）
   if (ctx.meal && (Math.max(sweet, balsam) >= 55 || p.sillageTier >= 3)) {

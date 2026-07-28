@@ -1052,6 +1052,38 @@ test("riskNote：场景解析的社交风险以受控字段进入风险列表", 
   assert.ok(risks.some((r) => r.includes("喧宾夺主")));
 });
 
+test("不变式：判了 caution 就必须说得出为什么——扫遍温湿度 × 场合，不许有一例空清单", () => {
+  // 裁决有两个触发源：risks 非空，以及天气压到 WEATHER_CAUTION 以下。第二个此前没有
+  // 任何文案与之配对，实测 12.6% 的 caution 配的是一张空清单——卡上「有一点要留意」，
+  // 下面一条都没有。冷侧从来就没写过文案；热侧那批落在 22–28℃，
+  // 因为 weatherFit 的热负荷从 22℃ 起算而 ctx.feel 要更高才算 hot，两条线本来就不齐。
+  const bottles = [
+    mk({ id: 1, sillage: 1.8, sillageTier: 1, accords: acc([["citrus", 100], ["aquatic", 70]]) }), // 冷天最薄的那类
+    mk({ id: 2, sillageTier: 3, accords: acc([["vanilla", 100], ["sweet", 88]]) }),
+    mk({ id: 3, sillageTier: 2, accords: acc([["amber", 100], ["balsamic", 80]]) }),
+    mk({ id: 4, sillageTier: 2, accords: acc([["tobacco", 100], ["leather", 70]]) }),
+    mk({ id: 5, sillageTier: 2, accords: acc([["woody", 100], ["green", 50]]) }),
+  ];
+  let checked = 0;
+  for (const tempC of [-8, 0, 2, 8, 15, 20, 23, 25, 28, 31, 35]) {
+    for (const humidity of [30, 60, 85]) {
+      for (const occasion of ["commute", "work", "date", "casual", "home"] as const) {
+        const ctx = C({ occasion, tempC, humidity, feel: feelFromWeather(tempC, humidity) });
+        for (const b of bottles) {
+          const pk = buildPick(b, ctx);
+          if (pk.verdict !== "caution") continue;
+          checked++;
+          assert.ok(
+            pk.risks.length > 0,
+            `${b.id} 在 ${tempC}℃/${humidity}%/${occasion} 判了 caution 却一条风险都说不出`
+          );
+        }
+      }
+    }
+  }
+  assert.ok(checked > 100, `样本里 caution 太少（${checked}），这条不变式等于没测`);
+});
+
 test("场景提示照常上屏，但一个字都不许动裁决——它对柜里每一瓶都成立，没有区分力", () => {
   // 一句 riskNote 曾经就能让全目录的 good 归零（实测 caution 1209 / avoid 291 / good 0），
   // 连带吃灰卡与预警卡的「换成 X」一起哑火——两者的准入闸都是 verdict === "good"。

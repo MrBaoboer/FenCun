@@ -301,6 +301,19 @@ export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: nu
   return { w, tone: dominant?.tone ?? "neutral", heat: H };
 }
 
+/**
+ * 「天气已经把这瓶压到要留意那一档」的统一门槛。
+ *
+ * 这个数原本只写在 recommend.ts 的 computeVerdict 里（`parts.weather < 0.95`），
+ * 于是它成了裁决的**第二个**触发源，却没有任何一句文案与之对应：
+ * 全目录 × 温湿度 × 场合扫一遍，12.6% 的 caution 是「有一点要留意」配一张空的风险清单
+ * （冷侧 thin_in_cold 占绝大多数，热侧还有一批落在 22–28℃ 这段"不算热"的区间里）。
+ * 那正是 usage.ts 自己点名过的「判了却说不出为什么」。
+ *
+ * 导出成常量，是为了让裁决与文案共用同一条线——同一个概念只准有一条判据。
+ */
+export const WEATHER_CAUTION = 0.95;
+
 // 天气乘性修正系数 W ∈ [0.7, 1.3]（只要数值时的薄封装）
 export function weatherMultiplier(p: Perfume, feel: Feel, tempC?: number, humidity?: number): number {
   return weatherFit(p, feel, tempC, humidity).w;
