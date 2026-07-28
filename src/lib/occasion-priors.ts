@@ -26,14 +26,6 @@
 // 报告对香味制品有不良反应，CDC / CCOHS / CDPH / 美国肺脏协会均有正式无香政策。
 // 「强扩散香在封闭场合扣分」「密闭场合减喷量」属于 A 类，理直气壮，不要挪进来。
 
-/** 一组场合共享的风格倾向。全部为 [文化惯例]，无实证标定。 */
-export interface OccasionPrior {
-  /** 加分项：从这几族里取最强的一个，按权重加分 */
-  favor: { of: readonly ("fresh" | "sweet" | "amberWoody" | "floral" | "spicy" | "earthyDark")[]; weight: number };
-  /** 扣分项，同上 */
-  against?: { of: readonly ("fresh" | "sweet" | "amberWoody" | "floral" | "spicy" | "earthyDark")[]; weight: number }[];
-}
-
 /** 各家族在加/扣分时的相对折扣（例：正式场合看重"干净木质"但不希望它太张扬 → 0.8） */
 export const FAMILY_DISCOUNT = {
   formalAmberWoody: 0.8,
@@ -56,7 +48,6 @@ export const OCCASION_WEIGHTS = {
     favorWarmWood: 0.1,
     againstEarthyDark: 0.3,
     penaltyTooFresh: 0.2, // 极清冽且无甜无花
-    penaltyLoudOnDate: 0.2, // tier 4 在约会
   },
   /** 正式 / 上班 / 通勤：干净木质柑橘草本；反甜、反花、反脏气 */
   proper: {
@@ -69,12 +60,19 @@ export const OCCASION_WEIGHTS = {
   sport: {
     favorFresh: 0.4,
     againstHeavy: 0.5,
-    penaltyLoud: 0.1, // tier ≥3
   },
-  /** 居家 / 休闲：柔和舒适皆可，只反强扩散 */
+  /**
+   * 居家 / 休闲：柔和舒适皆可，只反强扩散。
+   *
+   * ⚠️ 如实记一笔：occasionFit 在这一支上取的是「甜 ∪ 琥珀木质 ∪ 清冽 ∪ 花」的最大值，
+   * 而这四族的并集几乎覆盖每瓶香的首位 accord——实测 77% 的库存在这里恒得同一个数。
+   * 也就是说**这个场合我们没有风格判断**：这一项对全部候选弃权，不改变任何排序。
+   * 那正是上面那句"柔和舒适皆可"的字面意思，不是缺陷；写在这里是为了让下一个人
+   * 不必重新测一遍才知道。要造一条区分力出来，得先有依据（见文件头的两条纪律）。
+   * 同理 home 与 casual 在全引擎逐字节等价——八个 chip 里有两个切了没区别。
+   */
   relaxed: {
     favorAny: 0.2,
-    penaltyLoud: 0.2, // tier 4
   },
 } as const;
 

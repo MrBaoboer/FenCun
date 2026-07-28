@@ -45,7 +45,10 @@ function Tiers({ notes }: { notes: Perfume["notes"] }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col items-center gap-1.5 text-center">
-      <span className="eyebrow eyebrow-mute !text-[0.56rem]">{label}</span>
+      {/* 0.56rem 折合 8.96px，比 globals.css 里被判定为「中文读不动」的 9.28px 还小，
+          还叠着 0.24em 字距——322df67 那轮只改了 ui.tsx 那份 Stat，漏了这份局部副本。
+          回到 .eyebrow 自己的字号。 */}
+      <span className="eyebrow eyebrow-mute">{label}</span>
       <span className="serif text-[0.98rem] font-bold text-ink">{value}</span>
     </div>
   );

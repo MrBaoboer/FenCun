@@ -138,9 +138,14 @@ export function RecommendationCard({
 
       {/* AI 解读 —— 金边引文 */}
       <div className="mt-5 border-l-2 pl-4" style={{ borderColor: "var(--color-accent)" }}>
+        {/* 加载态的透明度到 55% 时，明韵下这段 16px/500 正文实测只有 4.18:1，
+            低于 WCAG AA 的 4.5（它不属于大字：需要 18.66px 粗体或 24px）。
+            而"在斟酌"这件事下面那行眉标已经说清了，正文没必要为此变得读不清。
+            解读措辞落定时补播一次——这一整块是换场合/换瓶后唯一会变的正文。 */}
         <p
+          aria-live="polite"
           className={`serif text-[1rem] font-medium leading-[1.85] text-ink-soft transition-opacity duration-300 ${
-            explainLoading ? "opacity-55" : "opacity-100"
+            explainLoading ? "opacity-70" : "opacity-100"
           }`}
         >
           {explainText || pick.reasons[0]}

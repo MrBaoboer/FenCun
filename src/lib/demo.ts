@@ -9,7 +9,8 @@
 //      没有一个编造的数字——这与「反伪精确」是同一条纪律，不因为是演示就松口；
 //   ② 时间全部相对于打开的那一刻生成（而非写死时间戳），所以无论谁在哪一天打开，
 //      「搁置 34 天」「上次是三天前」都是当天算出来的真话，香历也永远落在最近这几周；
-//   ③ 演示态在界面上始终自报身份，且一键可清空（见 DemoBanner）。
+//   ③ 演示态的身份与一键清空放在「我的 · 数据」那一栏（见 app/profile/page.tsx）。
+//      刻意**不**做全站常驻横幅——那对初次到访的人是打扰，理由写在 SiteNotice.tsx 顶部。
 import type { Perfume, UserPerfume, Feedback, WearEntry, Season, Feel, Occasion } from "./types";
 import { dateKey, dominantFamily } from "./journal";
 import { seasonFromDateTemp } from "./season";
@@ -83,13 +84,26 @@ const SEASON_SAMPLE: Record<Season, { temps: number[]; texts: string[]; feel: Fe
   winter: { temps: [3, -1, 6, 1], texts: ["晴", "阴", "多云", "小雪"], feel: "cold" },
 };
 
-function sampleFor(date: Date, i: number): { tempC: number; text: string; feel: Feel; season: Season } {
-  const season = seasonFromDateTemp(date, null);
+/**
+ * 取样必须由**日期**决定，不能由数组下标决定。
+ *
+ * wearLog 与 feedbacks 是两个独立数组、各自 map，此前各拿自己的下标去取样本：
+ * 同一天、同一瓶、同一场合的那一件事，在香历里是「通勤 · 31℃ · 晴」，
+ * 切到「我的 · 用香记录」却写着 28℃——同一份门面数据给出两个互相矛盾的读数，
+ * 而其中一个已经印进 README 引用的截图。26↔28、31↔26 还都跨了 tempBand 边界，
+ * 于是「成功配置复用」这个卖点在演示态里的命中键也和香历对不上。
+ *
+ * 用 at/DAY_MS 做索引：同一个 at 必得同一个样本，两个数组自然对齐；
+ * 而 at = now − daysAgo×DAY_MS，整除关系保证它仍然只由 now 决定（纯函数不变）。
+ */
+function sampleFor(at: number): { tempC: number; text: string; feel: Feel; season: Season } {
+  const season = seasonFromDateTemp(new Date(at), null);
   const s = SEASON_SAMPLE[season];
-  const tempC = s.temps[i % s.temps.length];
+  const i = Math.floor(at / DAY_MS);
+  const tempC = s.temps[((i % s.temps.length) + s.temps.length) % s.temps.length];
   return {
     tempC,
-    text: s.texts[i % s.texts.length],
+    text: s.texts[((i % s.texts.length) + s.texts.length) % s.texts.length],
     // feel 由代表温度真实推出，而不是照抄季节默认——否则 26℃ 的夏日会被标成干热
     feel: tempC >= 28 ? "hot_dry" : tempC <= 10 ? "cold" : "mild",
     season,
@@ -138,10 +152,10 @@ export function buildDemoState(catalog: Perfume[] | null, now: number): DemoStat
     };
   });
 
-  const wearLog: WearEntry[] = WEAR_SCHEDULE.map((w, i) => {
+  const wearLog: WearEntry[] = WEAR_SCHEDULE.map((w) => {
     const p = byName.get(w.name)!;
     const at = now - w.daysAgo * DAY_MS;
-    const s = sampleFor(new Date(at), i);
+    const s = sampleFor(at);
     return {
       d: dateKey(at),
       perfumeId: p.id,
@@ -155,10 +169,10 @@ export function buildDemoState(catalog: Perfume[] | null, now: number): DemoStat
     };
   }).sort((a, b) => a.d.localeCompare(b.d));
 
-  const feedbacks: Feedback[] = FEEDBACK_SCHEDULE.map((f, i) => {
+  const feedbacks: Feedback[] = FEEDBACK_SCHEDULE.map((f) => {
     const p = byName.get(f.name)!;
     const at = now - f.daysAgo * DAY_MS;
-    const s = sampleFor(new Date(at), i);
+    const s = sampleFor(at);
     return {
       perfumeId: p.id,
       at,

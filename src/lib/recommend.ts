@@ -1,10 +1,10 @@
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
 import type { Perfume, Context, ScoredPick, Verdict, AvoidCause, Bias, Feedback, Occasion, SuccessConfig } from "./types";
-import { score, richDominates, dataConfidence, type ScoreParts } from "./scoring";
+import { score, sweetDominates, stainProneDominates, dataConfidence, type ScoreParts } from "./scoring";
 
 /** 单个 accord 强度（留印风险判定用） */
 const accordAt = (p: Perfume, en: string) => p.accords.find((a) => a.en === en)?.strength ?? 0;
-import { computeUsage, computeRisks, buildReasons } from "./usage";
+import { computeUsage, computeRiskNotes, buildReasons } from "./usage";
 import { tempBand } from "./season";
 
 export type { Bias } from "./types";
@@ -60,7 +60,16 @@ function computeVerdict(
   const tooLoudClosed = p.sillageTier === 4 && closed;
   // 成因随裁决一起带出来，顺序即优先级：天气最强、其次反季、最后场地。
   // 下游只认这个字段，不许再从 parts 的数值反推——数值说得出"扣了分"，说不出"因为什么"。
-  if (parts.weather <= 0.82) return { verdict: "avoid", avoidCause: "weather" };
+  // 「今天太热，这瓶今天别用」由**温度与归因**说了算，不由乘子数值反推。
+  // 旧写法是 `parts.weather <= 0.82`，而 weatherFit 的下界就是 0.81——阈值落在曲线
+  // 最后一个百分点里，实测要求露点 ≥32℃（中国最高露点纪录 29℃ 上下），
+  // 也就是说 avoidCause="weather" 在真实气象下基本不可达：为它专门写的眉标
+  //「今天的体感」与那句兜底几乎永不渲染，「天气突变预警」这个名字底下
+  // 用户能看到的只有 season 与 venue 两种成因。而 34.0℃ 那一点的结论还由浮点尾数决定。
+  // 换成落在有语义的量上：这瓶由厚重族主导（tone 已经这么判了），且热负荷接近饱和
+  //（H≥0.9 ⇔ 约 33.7℃ 以上）。成因与 tone 天然同源，也不再有浮点边界。
+  if (parts.weatherTone === "heavy_in_heat" && parts.heatLoad >= 0.9)
+    return { verdict: "avoid", avoidCause: "weather" };
   if (seasonMiss) return { verdict: "avoid", avoidCause: "season" };
   if (tooLoudClosed) return { verdict: "avoid", avoidCause: "venue" };
   if (risks.length > 0 || parts.weather < 0.95) return { verdict: "caution", avoidCause: null };
@@ -69,12 +78,20 @@ function computeVerdict(
 
 export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   const parts = score(p, ctx, bias);
-  const risks = computeRisks(p, ctx);
+  const notes = computeRiskNotes(p, ctx);
+  const risks = notes.map((n) => n.text);
   const usage = computeUsage(p, ctx, bias);
   // ⚠️ 裁决必须在追加织物提示**之前**算完。
   // computeVerdict 的规则是 risks.length > 0 → caution，而织物留印是**提示**不是"这瓶今天要留意"——
   // 若先追加再判，所有封闭场合（通勤/上班/正式，恰恰是最常见的那几个）都会被无端降级成 caution。
   const { verdict, avoidCause } = computeVerdict(p, ctx, parts, risks);
+  // 触发这次 avoid 的**那一条**风险，与成因同源取出（见 usage.ts:computeRiskNotes）。
+  // 预警卡的正文要它：眉标按成因分岔，正文就不能再猜 risks[0]。
+  // 取不到时下游退到按成因写死的兜底句，仍然对得上眉标。
+  const avoidRisk =
+    avoidCause && avoidCause !== "fragrance_free"
+      ? notes.find((n) => n.kind === avoidCause)?.text ?? null
+      : null;
   // 建议喷衣物时，把真实存在的那个代价一并说了：高浓度乙醇 + 香精油脂 + 有色浸膏的光氧化黄变，
   // 对真丝、醋酸纤维和浅色外层是实打实的留印风险【行业惯例】。
   // 放在这里而不是 computeRisks 里，是为了避免把 placement 的判定逻辑抄第二份——
@@ -85,10 +102,17 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
   //
   // 只用绝对阈值收得**不够**：实测主目录 1500 款里 967 款（64.5%）过线，
   // 连蓝风铃（sweet 是第五位的 54）和旷野（Ambroxan 干琥珀 59）都在内——
-  // 那句"永远出现的提示"其实一直在出现。所以判据换成"甜/树脂香膏是否主导这瓶"
-  // （richDominates，见 scoring.ts:familyDominance），过线降到 590 款（39.3%）。
+  // 那句"永远出现的提示"其实一直在出现。所以判据换成主导度。
+  //
+  // 但留印这条不能直接复用 richDominates：它的机制是**有色浸膏与香精油脂的油渍
+  // 及光氧化黄变**，而 familyDominance 的分母是"这瓶最强的 accord"，于是 amber
+  // 只要与首位同量级就算主导——蔚蓝浓香精（首位 citrus=100、amber=86、sweet=0）
+  // 这类以 Ambroxan 干琥珀当骨架的清冽香照样中招，实测 26 款。Ambroxan 是无色合成体，
+  // 恰在上面那段自陈的机制之外。数据层区分不了干琥珀与甜东方琥珀（见 scoring.ts 的
+  // 同一处代价），所以留印这条按机制**宁可漏报**：把 amber 排除在留印族之外，
+  // 只认真正有色的树脂/香膏/沉香/蜂蜡，甜那一族照旧（香草醛与焦糖是实打实的油渍源）。
   // tobacco 单列且仍用绝对阈值：烟草的焦油质地本身就会在织物上留色，不问它占多重。
-  const stainRisk = richDominates(p, 40) || accordAt(p, "tobacco") >= 40;
+  const stainRisk = sweetDominates(p, 40) || stainProneDominates(p, 40) || accordAt(p, "tobacco") >= 40;
   if (stainRisk && usage.placement.some((x) => x.includes("衣物"))) {
     risks.push("喷衣物请选内衬，避开真丝、醋酸和浅色外层——它的树脂与浸膏可能留印子。");
   }
@@ -116,6 +140,7 @@ export function buildPick(p: Perfume, ctx: Context, bias?: Bias): ScoredPick {
     reasons,
     verdict,
     avoidCause,
+    avoidRisk,
   };
 }
 

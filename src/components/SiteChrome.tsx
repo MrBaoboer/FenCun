@@ -59,9 +59,15 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* 移动端 —— 悬浮胶囊分段导航 */}
-      <nav className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] z-30 flex justify-center px-6 md:hidden">
-        <div className="flex items-center gap-1 rounded-pill border border-line bg-surface/95 p-1.5 shadow-float backdrop-blur-md">
+      {/* 移动端 —— 悬浮胶囊分段导航。
+          ⚠️ 外层 nav 用 inset-x-0 铺满整行只是为了把胶囊居中，可见的只有中间那一段；
+          但它照样是一条 52px 高的全宽命中区，会把底下的东西整条盖住。实测后果不是
+          「点了没反应」而是更糟的一种：点搜索结果里靠底的那一条「+ 入柜」，命中的是
+          导航链接，用户会被直接送去另一个页面。而搜索结果列表的底边永远落在这条带子里，
+          钉在末尾的「都不是它？手动记一瓶」那条兜底出口因此在满列表下始终点不到。
+          所以透明区一律放行，只让胶囊本身接收指针事件——视觉零变化。 */}
+      <nav className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] z-30 flex justify-center px-6 md:hidden">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-pill border border-line bg-surface/95 p-1.5 shadow-float backdrop-blur-md">
           {NAV.map((n) => {
             const active = isActive(n.href);
             return (

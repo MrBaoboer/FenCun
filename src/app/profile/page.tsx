@@ -20,21 +20,34 @@ export default function ProfilePage() {
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   // 待确认的导入：文件已读、已校验，但还没落盘——覆盖必须由用户在看到差额后亲手点下
   const [pending, setPending] = useState<{ raw: string; preview: ImportPreview } | null>(null);
-  // 示例香柜：既是"柜里现在是什么"的唯一说明处，也是回到初次打开那副样子的入口
+  // 回到初次打开那副样子的入口（示例态不在界面上自报身份——那对初次到访的人是打扰）
   const { catalog, resolveByCity } = useApp();
-  const demo = useStore((s) => s.demo);
   const resetToDemo = useStore((s) => s.resetToDemo);
   const [demoConfirm, setDemoConfirm] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  // 导出是这个纯本机、无账号无后端的产品里**唯一**的数据保全手段，界面上还明写着
+  // 「建议偶尔导出备份」。所以两件事都得做：
+  //   ① 用标准写法——锚点挂进文档再点，撤销 URL 推迟到下一帧。脱离文档的锚点与
+  //      同步 revoke 在非 Chromium 内核上是有名的不可靠组合（本机无法跨浏览器验证，
+  //      但这么写无论如何都只有好处、零风险）；
+  //   ② 给一次成功回执。此前整个流程没有任何反馈，点了没反应的用户会以为已经备份好了，
+  //      直到换设备才发现什么都没有——复用本页已有的 importMsg 播报位即可。
   function doExport() {
+    const name = `氛寸香柜-${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([exportData()], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `氛寸香柜-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = name;
+    a.style.display = "none";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    requestAnimationFrame(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+    setImportMsg({ kind: "ok", text: `已生成 ${name}——请确认它真的下载到了本机。` });
   }
   function doImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -170,7 +183,7 @@ export default function ProfilePage() {
 
       {/* 数据 · 本机存储与备份 */}
       <div className="card px-5 py-4">
-        <Eyebrow>数据 · 存在你的浏览器里</Eyebrow>
+        <Eyebrow>数据</Eyebrow>
         <p className="serif mt-2.5 text-[0.84rem] leading-relaxed text-ink-soft">
           你的香柜与全部反馈只存在本机浏览器（暂无账号云同步）。换设备或清缓存会清空，建议偶尔导出备份。
         </p>
@@ -199,20 +212,9 @@ export default function ProfilePage() {
           />
         </div>
 
-        {/* 示例香柜的自报身份 + 回到初次打开那副样子的入口。
-            刻意只放在这里，不做全站常驻横幅——那对初次到访的人是打扰，
-            而这一栏本来就是"这台机器上存了什么"的所在。 */}
-        <div className="mt-4 border-t border-line pt-3.5">
-          <p className="serif text-[0.84rem] leading-relaxed text-ink-soft">
-            {demo ? (
-              <>
-                柜里现在是<span className="font-semibold text-ink">示例香柜</span>
-                ：六瓶示例香水和一段用香记录，用来展示氛寸怎么工作。加入你自己的第一瓶，它就会退场。
-              </>
-            ) : (
-              <>清空本机的香柜、反馈与香历，换回那六瓶示例——也就是第一次打开氛寸时的样子。</>
-            )}
-          </p>
+        {/* 回到初次打开那副样子的入口。按钮自己说清了要干什么，代价放在二次确认里说，
+            不在动作之前先铺一段说明——那属于"解释产品在演示自己"，与撤掉的那几处同一类。 */}
+        <div className="mt-1">
           {demoConfirm ? (
             <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">
               <p className="serif text-[0.84rem] leading-relaxed text-ink">

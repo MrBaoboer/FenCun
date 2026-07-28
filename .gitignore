@@ -45,6 +45,12 @@ next-env.d.ts
 
 # scratch
 /.scratch/
+# 临时探针脚本（排查引擎行为时用 node --import tsx 直接跑纯函数最可靠，收工即删）。
+# 它们不该进仓库：eslint 会照扫根目录，一个临时 .ts 里的 no-explicit-any 就是 error，
+# 一次 `git add -A` 足以把 CI 的 lint 门禁打红。
+/*-probe.*
+/.*-probe.*
+/probe-*.*
 
 .vercel
 .env*

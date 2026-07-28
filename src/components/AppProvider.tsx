@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import type { Perfume, Weather } from "@/lib/types";
 import { loadCatalog } from "@/lib/perfumes";
 import { feelFromWeather } from "@/lib/season";
-import { useStore } from "@/lib/store";
+import { useStore, hasOwnData } from "@/lib/store";
 import { buildDemoState } from "@/lib/demo";
 
 type LocState = "idle" | "locating" | "ok" | "denied" | "error";
@@ -37,9 +37,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const hydrated = useStore((s) => s.hydrated);
   const setStoredCity = useStore((s) => s.setCity);
 
-  // 客户端手动 rehydrate 持久化状态（配合 store 的 skipHydration）
+  // 客户端手动 rehydrate 持久化状态（配合 store 的 skipHydration）。
+  //
+  // ⚠️ `useStore.persist` 可能根本不存在：storage 句柄拿不到时（Chrome「阻止所有 Cookie」、
+  // 跨源沙箱 iframe、Firefox 关掉 dom.storage），zustand 走的是 `if (!storage) return config(...)`
+  // 那条早退分支，`api.persist` 从头到尾没被赋值。裸调用会在这里抛 TypeError，
+  // 而 AppProvider 挂在**根 layout** 上、app/error.tsx 只包 page 段接不住它，
+  // 用户看到的是 Next 内置的英文 "Application error"。更糟的是 hydrated 永远为 false，
+  // 于是我们专门为存储故障造的那条告知通道（SiteNotice）恰恰在存储彻底不可用时一个字都不显示。
   useEffect(() => {
-    useStore.persist.rehydrate();
+    if (useStore.persist) {
+      useStore.persist.rehydrate();
+      return;
+    }
+    // 存储不可用：应用照常跑（这一次会话内的操作全都有效），只是什么也留不下——明说。
+    useStore.setState({
+      hydrated: true,
+      persistError: "storage_unavailable",
+    });
   }, []);
 
   // 分钟级时钟节拍（回到前台/聚焦时也补一拍）：驱动情境/主题重算与天气保鲜（超 30 分钟静默重取，见下方），
@@ -126,6 +141,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fetchByCity = useCallback(
     async (city: string): Promise<boolean> => {
+      // 这条路此前全程不置 locating：locState 从 idle 直接跳到 ok，
+      // 中间整个 /api/context 往返（实测 367–652ms）都停在 idle，
+      // 也就是情境栏的「没拿到你的位置」分支。走"记忆城市 / 演示城市"的人每次加载都中，
+      // 不只首访。坐标那条路因为同步置了 locating 才没露出来。
+      setLocState("locating");
       try {
         const r = await fetch(`/api/context?city=${encodeURIComponent(city)}`);
         const d = await r.json();
@@ -202,12 +222,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // 两件事共用一个 effect 就天然保证了顺序，也省掉一个只为排序而存在的 state。
   useEffect(() => {
     if (!hydrated || weather || locState === "locating") return;
+    // 目录没到位就整体等一等。此前这条早退嵌在演示态守卫**内部**，柜非空的返场用户
+    // 根本进不去：hydrated 翻真时跑一次直接 fetchByCity，catalog 落地后依赖变化再跑一次，
+    // 那时天气还在飞、locState 还是 idle，入口守卫拦不住，于是每次打开都对
+    // /api/context 打两次同参请求，把每分钟 20 次的预算对半砍。
+    // 天气解析晚一两百毫秒无害，两条路统一等目录到位。
+    if (!catalog && !catalogError) return;
     const s = useStore.getState();
-    // 三道守卫缺一不可：读盘没出错、柜真的是空的、从未退出过演示。
+    // 三道守卫缺一不可：读盘没出错、这台机器上没有任何属于他自己的东西、从未退出过演示。
     // 任何一条不满足就跳过，绝不能把演示数据写到用户自己的柜子上。
-    if (!s.hydrateError && !s.demo && !s.demoDismissed && s.userPerfumes.length === 0 && s.customPerfumes.length === 0) {
-      // 六瓶要按英文名到目录里查 id，所以必须等目录到位；目录彻底失败才放弃演示、照常走定位
-      if (!catalog && !catalogError) return;
+    // 第二道走 store 的 hasOwnData——它连香历与反馈一起看：柜清空了但香历还在，
+    // 是产品自己承诺过的合法状态，不是"一台全新的空机器"。
+    if (!s.hydrateError && !s.demo && !s.demoDismissed && !hasOwnData(s as unknown as Record<string, unknown>)) {
+      // 六瓶要按英文名到目录里查 id（目录彻底失败就放弃演示、照常走定位）
       const d = buildDemoState(catalog, Date.now());
       if (d) useStore.getState().enterDemo(d);
     }

@@ -1,6 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
-import { useStore } from "@/lib/store";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useStore, type AdoptSnapshot } from "@/lib/store";
 import { useApp } from "@/components/AppProvider";
 import {
   useResolvedContext,
@@ -10,7 +10,8 @@ import {
   useNudges,
 } from "@/lib/hooks";
 import { buildPick, aggregateBias } from "@/lib/recommend";
-import { wearEntryFrom } from "@/lib/journal";
+import { wearEntryFrom, dateKey } from "@/lib/journal";
+import { nameParts, DISTANCE_LABEL } from "@/lib/format";
 import type { ScoredPick } from "@/lib/types";
 import { ContextBar } from "@/components/today/ContextBar";
 import { NudgeCard } from "@/components/today/NudgeCard";
@@ -27,6 +28,8 @@ export default function TodayPage() {
   const feedbacks = useStore((s) => s.feedbacks);
   const userPerfumes = useStore((s) => s.userPerfumes);
   const markWorn = useStore((s) => s.markWorn);
+  const snapshotAdopt = useStore((s) => s.snapshotAdopt);
+  const undoAdopt = useStore((s) => s.undoAdopt);
   const logWear = useStore((s) => s.logWear);
   const recordSwap = useStore((s) => s.recordSwap);
   const recordDustyAdopt = useStore((s) => s.recordDustyAdopt);
@@ -35,6 +38,13 @@ export default function TodayPage() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [undoAdoptItem, setUndoAdoptItem] = useState<{
+    name: string;
+    snap: AdoptSnapshot;
+    prevSelectedId: number | null;
+  } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   const bias = useMemo(() => aggregateBias(feedbacks), [feedbacks]);
 
@@ -71,7 +81,13 @@ export default function TodayPage() {
 
   // 采纳一瓶（换香/翻出吃灰瓶）→ 记穿戴 + 香历落账 + 打点证伪指标；
   // 把主推换掉同时记一笔"隐式差评"（分数说它行、你说它不行——7 天内两次就让它让位）
+  //
+  // 「选定即采纳」是既定设计（解耦"记录用香"与"留反馈"，修正吃灰误判），不改。
+  // 但两个入口的文案都是浏览语义（「也可以考虑」「从你的香柜里选」），这三笔写入
+  // 此前完全无声、也不可撤销——想比三瓶用法，三瓶就全被记成今天穿过，
+  // 轮换的新鲜度与吃灰的 21 天计时一起重置。所以给一条和香柜移除同款的 8 秒后悔路。
   const adopt = (id: number, kind: "swap" | "dusty") => {
+    const snap = ctx ? snapshotAdopt(id, dateKey(Date.now())) : null;
     setSelectedId(id);
     markWorn(id);
     const p = lib.find((x) => x.id === id);
@@ -79,6 +95,11 @@ export default function TodayPage() {
     if (kind === "dusty") recordDustyAdopt();
     else if (kind === "swap" && rec?.primary && id !== rec.primary.perfume.id)
       recordSwap(rec.primary.perfume.id);
+    if (snap && p) {
+      setUndoAdoptItem({ name: nameParts(p).primary, snap, prevSelectedId: selectedId });
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndoAdoptItem(null), 8000);
+    }
   };
 
   const explain = useExplain(activePick, ctx);
@@ -146,6 +167,38 @@ export default function TodayPage() {
           )}
         </>
       ) : null}
+
+      {/* 换场合 / 换瓶 / 点备选之后，h2 香名、喷量、社交距离、留香整块换掉，
+          此前对读屏用户全程静默——而这三项正是产品的全部输出。
+          只播报规则算出来的档位与区间（不触反伪精确），不把整块包成 live region：
+          那里面有 details 折叠、证据条与香调条，任何一次重渲染都会被整段重播。 */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {activePick
+          ? `${nameParts(activePick.perfume).primary}｜${activePick.usage.spraysLabel}｜${DISTANCE_LABEL[activePick.usage.socialDistance]}`
+          : ""}
+      </p>
+
+      {undoAdoptItem && (
+        <div
+          role="status"
+          className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
+        >
+          <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
+            已把「{undoAdoptItem.name}」记进今天的香历
+          </span>
+          <button
+            onClick={() => {
+              undoAdopt(undoAdoptItem.snap);
+              setSelectedId(undoAdoptItem.prevSelectedId);
+              if (undoTimer.current) clearTimeout(undoTimer.current);
+              setUndoAdoptItem(null);
+            }}
+            className="shrink-0 text-[0.86rem] font-semibold text-accent underline-offset-4 hover:underline"
+          >
+            撤销
+          </button>
+        </div>
+      )}
 
       <ChangeBottleSheet
         open={sheetOpen}

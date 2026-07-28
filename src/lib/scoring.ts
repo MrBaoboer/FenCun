@@ -93,9 +93,52 @@ export function familyDominance(p: Perfume, names: readonly string[]): number {
 /** 「这一族代表了这瓶的气质」的统一门槛 */
 export const DOMINANT = 0.75;
 
-/** 甜/树脂香膏是否主导这瓶——高温闷重判定与衣物留印提示共用同一条口径 */
+/** 甜（美食调）主导这瓶——「发腻」这句话的唯一资格判据 */
+export function sweetDominates(p: Perfume, absMin: number): boolean {
+  return maxStrength(p, F.sweet) >= absMin && familyDominance(p, F.sweet) >= DOMINANT;
+}
+
+/** 树脂香膏主导这瓶——「闷厚」这句话的唯一资格判据 */
+export function balsamicDominates(p: Perfume, absMin: number): boolean {
+  return maxStrength(p, F.balsamic) >= absMin && familyDominance(p, F.balsamic) >= DOMINANT;
+}
+
+/**
+ * 甜/树脂香膏是否主导这瓶——高温减量与衣物留印提示共用同一条口径。
+ *
+ * 写成两族之一，而不是再对并集算一次，是为了让"减量"与"文案"在数学上锁死：
+ * 并集的最大值必然落在其中一族里，所以 `richDominates ⟺ sweetDominates || balsamicDominates`。
+ * 这个恒等式就是本次修复的全部要点——喷量收了一下，卡上就必然有一句话解释为什么收；
+ * 反过来也一样。两边各写一套判据，就会重演"数字收了、话没说"（或反过来）的失配。
+ */
 export function richDominates(p: Perfume, absMin: number): boolean {
-  const keys = [...F.sweet, ...F.balsamic];
+  return sweetDominates(p, absMin) || balsamicDominates(p, absMin);
+}
+
+/**
+ * 会在织物上留印的树脂类组分——**刻意不含 amber**。
+ *
+ * 留印的机制是有色浸膏、树脂与香草醛的油渍及光氧化黄变，而 amber 这个标签下
+ * 混着两类完全不同的东西：劳丹脂+安息香的经典甜琥珀（有色，会留印），
+ * 和 Ambroxan 主导的现代干琥珀（无色合成体，不会）。数据层区分不了它们
+ *（Fragrantica 的词表里没有 ambergris / ambroxan），所以留印这条按机制宁可漏报：
+ * 否则蔚蓝浓香精（首位 citrus=100、amber=86、sweet=0）这类清冽当家的香
+ * 会被提示「它的树脂与浸膏可能留印子」，实测 26 款——与这句话自陈的机制正相反。
+ * 与"高温发闷"那条的取舍方向刚好相反，这是有意的：闷是挥发行为，amber 确实会闷。
+ */
+export function stainProneDominates(p: Perfume, absMin: number): boolean {
+  const keys = ["balsamic", "oud", "beeswax"];
+  return maxStrength(p, keys) >= absMin && familyDominance(p, keys) >= DOMINANT;
+}
+
+/**
+ * 「厚重」在天气乘子里的完整口径：甜 ∪ 树脂香膏 ∪ 动物性 ∪ 烟草。
+ * 比 richDominates 多出后两族——它们在高温里同样会变闷，只是不甜也不树脂。
+ * 抽出来是为了让打分层与风险文案层共用同一次判定：weatherFit 判了 heavy_in_heat，
+ * computeRiskNotes 就必须说得出一句对应的话，否则会出现"判了却说不出为什么"。
+ */
+export function heavyDominates(p: Perfume, absMin: number): boolean {
+  const keys = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
   return maxStrength(p, keys) >= absMin && familyDominance(p, keys) >= DOMINANT;
 }
 
@@ -159,6 +202,12 @@ export type WeatherTone =
 export interface WeatherResult {
   w: number;
   tone: WeatherTone;
+  /**
+   * 热负荷 0..1（22℃ 起算、35℃ 饱和）。带出来是给裁决层用的：
+   * 「今天太热，这瓶今天别用」这句话该由**温度本身**说了算，
+   * 而不是去比一个落在曲线最后一个百分点里的乘子数值（见 recommend.ts:computeVerdict）。
+   */
+  heat: number;
 }
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -182,8 +231,6 @@ function fallbackClimate(feel: Feel): { t: number; h: number } {
 }
 
 export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: number): WeatherResult {
-  // 厚重 = 甜(美食) ∪ 树脂香膏 ∪ 动物性/烟草：高温下最容易变闷的几族
-  const heavy = [...F.sweet, ...F.balsamic, "animalic", "tobacco"];
   const fresh = [...F.fresh];
   // 暖木子集：不含裸 woody——「木质」是最宽家族，干冷的岩兰草/雪松并非取暖型香，
   // 用组合判定（下方 warmish）而非把整个 woody 当暖调。
@@ -229,8 +276,7 @@ export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: nu
     // 厚重要求这一族**主导**这瓶，而不只是越过绝对线（见 familyDominance）：
     // 没有这道比例判据，蓝风铃（sweet 是它第五位的 54）会和烟草香草（vanilla=100）
     // 拿到同一句「它偏厚重，今天的体感里要留意会不会闷」。
-    if (anyStrength(p, heavy, 50) && familyDominance(p, heavy) >= DOMINANT)
-      hit("heavy_in_heat", 1 - 0.13 * H - 0.06 * M);
+    if (heavyDominates(p, 50)) hit("heavy_in_heat", 1 - 0.13 * H - 0.06 * M);
     if (anyStrength(p, fresh, 45)) hit("fresh_in_heat", 1 + 0.12 * H);
   }
   // 冷侧两条**都没有物理支持**——按被引物理算，低温下低挥发材料被压制得更狠，方向甚至相反。
@@ -252,7 +298,7 @@ export function weatherFit(p: Perfume, feel: Feel, tempC?: number, humidity?: nu
   const dominant = effects.length
     ? effects.reduce((a, b) => (Math.abs(Math.log(b.f)) > Math.abs(Math.log(a.f)) ? b : a))
     : null;
-  return { w, tone: dominant?.tone ?? "neutral" };
+  return { w, tone: dominant?.tone ?? "neutral", heat: H };
 }
 
 // 天气乘性修正系数 W ∈ [0.7, 1.3]（只要数值时的薄封装）
@@ -356,6 +402,7 @@ export interface ScoreParts {
   occasion: number;
   weather: number;
   weatherTone: WeatherTone; // 天气加/扣分的归因——措辞必须由它决定，不许由 weather 数值反推
+  heatLoad: number; // 热负荷 0..1，供裁决层判「今天太热了」（同样不许由乘子数值反推）
   quality: number;
   confidence: number; // 社区数据置信度：决定我们有没有资格说"社区投票里…"
 }
@@ -426,6 +473,7 @@ export function score(p: Perfume, ctx: Context, bias?: Bias): ScoreParts {
     occasion: sOcc,
     weather: W,
     weatherTone: wf.tone,
+    heatLoad: wf.heat,
     quality: Q,
     confidence: dataConfidence(p),
   };

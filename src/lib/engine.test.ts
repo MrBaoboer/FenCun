@@ -599,10 +599,12 @@ test("构建产物里不得出现 0 分：0 是「没有票」的哨兵，不是
 // 修复前实测：扩展集 35990 条里有 3874 条正处在"判了却说不出为什么"的状态。
 test("判了「今天不建议」就必须说得出为什么：全量数据上 avoid ⇒ risks 非空", async () => {
   const fs = await import("node:fs");
-  // 两组情境覆盖四条 avoid 触发：反季（夏/冬各一次）、封闭场合（tier4）、高温（天气乘子）
+  // 三组情境覆盖四条 avoid 触发：反季（夏/冬各一次）、封闭场合（tier4）、高温（热负荷饱和）
   const contexts = [
     C({ occasion: "commute", feel: "hot_dry", tempC: 32, humidity: 45, season: "summer" }),
     C({ occasion: "formal", feel: "cold", tempC: 3, humidity: 55, season: "winter" }),
+    // 35℃：热负荷饱和，avoidCause="weather" 这条通道真正被走到的那一档
+    C({ occasion: "casual", feel: "hot_dry", tempC: 35, humidity: 40, season: "summer" }),
   ];
   const bad: string[] = [];
   const scan = (list: Perfume[], where: string) => {
@@ -736,6 +738,148 @@ test("一族要主导这瓶才算这瓶的气质：清爽香的甜尾/干琥珀�
   assert.ok(familyDominance(tobaccoV, ["sweet", "vanilla"]) >= DOMINANT);
   assert.ok(familyDominance(bluebell, ["sweet", "vanilla"]) < DOMINANT);
   assert.ok(familyDominance(sauvage, ["amber", "balsamic"]) < DOMINANT);
+});
+
+test("「天气突变预警」的天气成因必须在真实气象下够得到", async () => {
+  // 旧判据 `parts.weather <= 0.82` 落在曲线最后一个百分点里（下界就是 0.81），
+  // 实测要求露点 ≥32℃——中国最高露点纪录 29℃ 上下，也就是说这条成因在真实天气下
+  // 基本是死代码：为它专门写的眉标「今天的体感」与那句兜底几乎永不渲染，
+  // 旗舰钩子的名字底下用户只看得到 season 与 venue 两种成因。34.0℃ 那一点的结论
+  // 还由浮点尾数决定。现在改成落在有语义的量上：厚重族主导 + 热负荷接近饱和。
+  const tobaccoV = mk({
+    people: 30312, sillageTier: 3,
+    seasonPct: { winter: 0.3, spring: 0.2, summer: 0.2, autumn: 0.3 }, // 不触发反季，隔离出天气这条
+    accords: acc([["vanilla", 100], ["sweet", 92], ["tobacco", 79]]),
+  });
+  // 34℃ 干热、湿度 40%——一个北方盛夏的寻常读数，没有任何极端假设
+  const veryHot = C({ occasion: "casual", feel: "hot_dry", tempC: 34, humidity: 40, season: "summer" });
+  const pk = buildPick(tobaccoV, veryHot);
+  assert.equal(pk.verdict, "avoid", "34℃ 的厚重香必须够得到 avoid");
+  assert.equal(pk.avoidCause, "weather");
+  assert.ok(pk.avoidRisk, `天气成因必须说得出对应的那一条：${JSON.stringify(pk.risks)}`);
+  // 30℃ 还没到那一档：不能一热就劝退
+  const warm = C({ occasion: "casual", feel: "hot_dry", tempC: 30, humidity: 40, season: "summer" });
+  assert.notEqual(buildPick(tobaccoV, warm).verdict, "avoid", "30℃ 不该判 avoid");
+  // 清爽香在同样的 34℃ 下不受影响
+  const fresh = mk({ people: 20000, accords: acc([["citrus", 100], ["aquatic", 70]]) });
+  assert.notEqual(buildPick(fresh, veryHot).avoidCause, "weather");
+
+  // 烟草/动物性主导的香：打分层算它厚重，风险文案层此前只认甜与树脂，
+  // 于是会出现"判了却说不出为什么"。第三支必须接住。
+  const tobaccoOnly = mk({ people: 20000, accords: acc([["tobacco", 100], ["leather", 80]]) });
+  const risks = computeRisks(tobaccoOnly, veryHot);
+  assert.ok(risks.some((r) => r.includes("厚重感")), `烟草主导也要说得出话：${JSON.stringify(risks)}`);
+});
+
+test("眉标说什么，正文就得说什么：avoidRisk 与 avoidCause 同源", async () => {
+  // 预警卡的眉标按 avoidCause 分岔（「季节不对」/「今天的体感」/「场合偏封闭」），
+  // 正文却一直取 risks[0]，而 risks 的追加顺序与成因优先级毫无关系。
+  // 只要同时命中一条更靠前的风险，两句就说的不是同一件事——而这张卡印在 README 首屏图上。
+  const { computeRiskNotes } = await import("./usage");
+
+  // 冬香在夏天通勤：同时命中「高温甜」（risks[0]）与「反季」（真正的成因）
+  const tobaccoV = mk({
+    people: 30312, sillageTier: 3,
+    seasonPct: { winter: 0.55, spring: 0.15, summer: 0.08, autumn: 0.22 },
+    accords: acc([["vanilla", 100], ["sweet", 92], ["tobacco", 79]]),
+  });
+  const summerCommute = C({ occasion: "commute", feel: "hot_dry", tempC: 31, humidity: 45, season: "summer" });
+  const pick = buildPick(tobaccoV, summerCommute);
+  assert.equal(pick.verdict, "avoid");
+  assert.equal(pick.avoidCause, "season");
+  assert.ok(pick.risks[0].includes("甜感偏重"), "前提不成立：risks[0] 本该是那条高温风险");
+  assert.ok(pick.avoidRisk?.includes("反季"), `正文必须跟着成因走：${pick.avoidRisk}`);
+  assert.notEqual(pick.avoidRisk, pick.risks[0], "正文取 risks[0] 就是这次要修的那个错");
+
+  // 全目录不变式：avoidRisk 只能是成因对应的那一条，不许是别的
+  const fs = await import("node:fs");
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  const contexts = [
+    summerCommute,
+    C({ occasion: "formal", feel: "cold", tempC: 3, humidity: 55, season: "winter" }),
+  ];
+  let mismatched = 0;
+  for (const p of catalog) {
+    for (const ctx of contexts) {
+      const pk = buildPick(p, ctx);
+      if (pk.verdict !== "avoid" || pk.avoidCause === null || pk.avoidCause === "fragrance_free") {
+        assert.equal(pk.avoidRisk, null, "非 avoid 不该带 avoidRisk");
+        continue;
+      }
+      const expected = computeRiskNotes(p, ctx).find((n) => n.kind === pk.avoidCause)?.text ?? null;
+      if (pk.avoidRisk !== expected) mismatched++;
+    }
+  }
+  assert.equal(mismatched, 0, `avoidRisk 与成因脱节 ${mismatched} 处`);
+});
+
+test("「下次帮你略微多喷一点」必须真的多喷：安全阀没压过时偏好可升", () => {
+  // 上一版把 safetyCap 取在偏好之前、又在偏好之后无条件钳制回去，
+  // 等价于 `hi = Math.min(hi, 偏好之前的 hi)`——两条 +1 全是死代码。
+  // 于是反馈条明写「记下了，下次帮你略微多喷一点」而引擎永远不会多喷，
+  // 场景解析出的 intimacy="broadcast" 也不改变任何一个数字。
+  const gentle = mk({ people: 20000, sillage: 2.0, sillageTier: 2 });
+  const relaxed = C({ occasion: "home", feel: "mild", tempC: 20 });
+  const base = computeUsage(gentle, relaxed).sprays[1];
+
+  // ① 历史反馈「太淡了」→ 上限抬一档
+  const weaker = computeUsage(gentle, relaxed, { likeScore: 0, perceivedStrength: -1 });
+  assert.ok(weaker.sprays[1] > base, `说了会多喷就得真的多喷：${base} → ${weaker.sprays[1]}`);
+  // ② 场景说「想被注意到」→ 同样抬一档
+  const loud = computeUsage(gentle, { ...relaxed, intimacy: "broadcast" });
+  assert.ok(loud.sprays[1] > base, `broadcast 必须改变数字：${base} → ${loud.sprays[1]}`);
+  // ③ 两者叠加也只抬一档——与「天气驱动的减量总计封顶 1 下」同一条纪律
+  const both = computeUsage(gentle, { ...relaxed, intimacy: "broadcast" }, { likeScore: 0, perceivedStrength: -1 });
+  assert.equal(both.sprays[1], weaker.sprays[1], "两条偏好叠加不得抬成两档");
+  // ④ 反方向仍要生效
+  assert.ok(computeUsage(gentle, relaxed, { likeScore: 0, perceivedStrength: 1 }).sprays[1] < base);
+
+  // ⑤ 安全阀压过的场合，偏好一步都不许抬（A 类不容 B 类覆盖）
+  const closed = C({ occasion: "work", feel: "mild", tempC: 20 });
+  const closedBase = computeUsage(gentle, closed).sprays[1];
+  const closedLoud = computeUsage(gentle, { ...closed, intimacy: "broadcast" }, { likeScore: 0, perceivedStrength: -1 });
+  assert.equal(closedLoud.sprays[1], closedBase, "封闭场合压过之后，偏好不得把闸门顶开");
+});
+
+test("厚重只准有一条判据：喷量、风险文案与打分归因不得各说各的", async () => {
+  // 修复前的实际状态：打分层（scoring.ts）早就换成了主导度判据，而用户真正读到的那两处
+  // ——computeRisks 的风险文案与 computeUsage 的高温减量——还留在绝对阈值 55 上。
+  // 于是同一张卡先夸"调性清爽通透"，再罚"树脂琥珀感偏厚"，喷量还跟着少一下。
+  // 主目录实测 111 款卡片自相矛盾、226 款拿到与分数相反的断言，其中包括旷野、信仰之水、
+  // 探索家、邂逅柔情这些公认的清爽香。这条测试锁的不是某一款香，是"同一个概念只准有一处判据"。
+  const fs = await import("node:fs");
+  const { sweetDominates, balsamicDominates, richDominates } = await import("./scoring");
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  const hot = C({ occasion: "casual", feel: "hot_dry", tempC: 33, humidity: 45, season: "summer" });
+  const HEAVY_LINE = (s: string) => s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚");
+
+  const contradictory: string[] = [];
+  const mismatched: string[] = [];
+  for (const p of catalog) {
+    const pick = buildPick(p, hot);
+    // ① 同一张卡不许既说清爽又说厚/腻
+    if (pick.reasons.some((r) => r.includes("清爽通透")) && pick.risks.some(HEAVY_LINE))
+      contradictory.push(`${p.nameZh || p.name}`);
+    // ② 风险文案必须与高温减量走同一条判据（usage.ts 的第二条触发用的就是 richDominates）
+    if (pick.risks.some(HEAVY_LINE) !== richDominates(p, 55)) mismatched.push(`${p.nameZh || p.name}`);
+    // ③ 两族互斥且穷尽：并集的最大值必落在其中一族里
+    assert.equal(richDominates(p, 55), sweetDominates(p, 55) || balsamicDominates(p, 55));
+  }
+  assert.deepEqual(contradictory.slice(0, 5), [], `卡片自相矛盾（共 ${contradictory.length} 款）`);
+  assert.deepEqual(mismatched.slice(0, 5), [], `文案与减量判据脱节（共 ${mismatched.length} 款）`);
+
+  // 具体回归：清爽当家的三款不许拿到厚重断言，真厚重的照旧要被抓住
+  const clean: [string, [string, number][]][] = [
+    ["旷野", [["fresh spicy", 100], ["amber", 59], ["citrus", 56]]],
+    ["探索家", [["woody", 100], ["balsamic", 70], ["aromatic", 55]]],
+    ["信仰之水", [["fruity", 100], ["sweet", 55], ["citrus", 52]]],
+  ];
+  for (const [name, accords] of clean) {
+    const risks = computeRisks(mk({ people: 20000, accords: acc(accords) }), hot);
+    assert.ok(!risks.some(HEAVY_LINE), `${name} 不该拿到厚重断言：${JSON.stringify(risks)}`);
+  }
+  const tobaccoV = mk({ people: 30312, accords: acc([["vanilla", 100], ["sweet", 92], ["tobacco", 79]]) });
+  assert.ok(computeRisks(tobaccoV, hot).some((r) => r.includes("甜感偏重")), "真甜厚的必须仍被抓住");
 });
 
 test("琥珀不是甜：干性琥珀香不得被判「偏甜重、容易发腻」(P0-2)", () => {
@@ -875,18 +1019,31 @@ test("织物提示是提示不是风险：它不得把裁决从 good 降级成 c
   // 封闭场合（通勤/上班/正式）的部位建议里必然出现"衣物内侧"，从而触发织物留印提示。
   // 若这条提示参与裁决（computeVerdict 的规则是 risks.length > 0 → caution），
   // 最常见的那几个场合就会被无端全部降级——这是提示与风险混为一谈的典型代价。
-  // 用会留印的组分（树脂/浸膏），清爽柑橘按机制本就不触发这条提示
-  const resin = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["amber", 60], ["woody", 50]]) });
-  const pick = buildPick(resin, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  // 用真正会留印的组分：有色的树脂香膏。
+  // ⚠️ 这里**不能**再拿 amber 当正例（旧版就是这么写的，于是漏掉了整类干琥珀）——
+  // amber 标签下混着劳丹脂+安息香的有色甜琥珀与 Ambroxan 的无色干琥珀，
+  // 数据层分不开，留印这条按机制宁可漏报，见 scoring.ts:stainProneDominates。
+  const work = C({ occasion: "work", feel: "mild", tempC: 20 });
+  const resin = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["balsamic", 80], ["woody", 60]]) });
+  const pick = buildPick(resin, work);
   assert.ok(pick.usage.placement.some((x) => x.includes("衣物")), "前提：确实建议了喷衣物");
   assert.ok(pick.risks.some((r) => r.includes("留印子")), "前提：确实给了织物提示");
   assert.equal(pick.verdict, "good", "织物提示不该影响裁决");
 
-  // 反向：清爽柑橘同样建议喷衣物，但不该被这条噪音打扰
+  // 反向一：清爽柑橘同样建议喷衣物，但不该被这条噪音打扰
   const fresh = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["citrus", 100]]) });
-  const fp = buildPick(fresh, C({ occasion: "work", feel: "mild", tempC: 20 }));
+  const fp = buildPick(fresh, work);
   assert.ok(fp.usage.placement.some((x) => x.includes("衣物")), "前提：也建议了喷衣物");
   assert.ok(!fp.risks.some((r) => r.includes("留印子")), "柑橘不该触发留印提示");
+
+  // 反向二：以 Ambroxan 干琥珀当骨架的清冽香（蔚蓝浓香精真实数据：citrus=100, amber=86, sweet=0）。
+  // 它是这条判据此前漏网的那 26 款的代表——无色合成体，恰在"有色浸膏"这个机制之外。
+  const dryAmber = mk({ people: 20000, sillageTier: 3, accords: acc([["citrus", 100], ["amber", 86], ["woody", 60]]) });
+  const dp = buildPick(dryAmber, work);
+  assert.ok(!dp.risks.some((r) => r.includes("留印子")), `干琥珀不该触发留印提示：${JSON.stringify(dp.risks)}`);
+  // 而真正甜的香照旧要提示（香草醛与焦糖是实打实的油渍源）
+  const gourmandP = mk({ people: 20000, sillageTier: 2, sillage: 2.0, accords: acc([["vanilla", 100], ["sweet", 80]]) });
+  assert.ok(buildPick(gourmandP, work).risks.some((r) => r.includes("留印子")), "甜厚的香必须仍提示留印");
 });
 
 test("riskNote：场景解析的社交风险以受控字段进入风险列表", () => {

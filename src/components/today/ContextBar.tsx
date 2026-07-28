@@ -82,10 +82,15 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
 
       {ctx && !ctx.approximate ? (
         <>
+          {/* aria-label 会整体替换可访问名，把 {ctx.city} 盖掉——而全页只有这一个节点
+              显示当前是哪座城。读屏用户拿到一份「按此刻天气挑的香」，却听不到这个「此刻」
+              是哪里的天气；首次到访者默认落在北京，这恰恰是最需要能核对的一项。
+              热区：这一行只有 23.5px 高，卡在 WCAG 2.5.8 AA 的 24px 线上，用伪元素补足。 */}
           <button
             onClick={() => setEditing((v) => !v)}
-            className="group mt-3 flex items-center gap-1.5"
-            aria-label="切换城市"
+            className="group relative mt-3 flex items-center gap-1.5 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']"
+            aria-label={`当前城市 ${ctx.city}，点击切换`}
+            aria-expanded={editing}
           >
             <LocationPin />
             <span className="serif text-[0.98rem] font-semibold text-ink group-hover:text-accent">
@@ -95,7 +100,6 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
               <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" />
             </svg>
           </button>
-
           <div className="mt-3.5 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="serif truncate text-[1.55rem] font-bold leading-tight text-ink">
@@ -123,7 +127,13 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
           </div>
           {editing && <CityForm onDone={() => setEditing(false)} />}
         </>
-      ) : locState === "locating" ? (
+      ) : /* idle 是**过渡态**，不是失败：此前它没有分支接住，直接落到「没拿到你的位置」，
+             而这一帧还被烘进了静态预渲染 HTML。于是每一次冷启动，用户读到的第一句话
+             都是一句关于他自己的假话，旁边还配着一个要他手填城市的输入框——
+             对从简历或 GitHub 点进来的人，这就是门面第一屏。
+             它不会卡死：store 的 onRehydrateStorage 在成功与失败两条路上都会置
+             hydrated，AppProvider 的 effect 必然走到 fetchByCity 或 resolveByCoords 之一。 */
+      locState === "locating" || locState === "idle" ? (
         <p className="serif mt-3 text-sm text-ink-faint">正在感知此刻的天气与体感…</p>
       ) : (
         <div className="mt-2">

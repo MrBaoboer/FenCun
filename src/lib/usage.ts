@@ -2,7 +2,16 @@
 import type { Perfume, Context, Usage, Bias } from "./types";
 import { durationHint, SEASON_NAME } from "./format";
 import { tempBand } from "./season";
-import { sweetness, balsamicWeight, dataConfidence, type WeatherTone } from "./scoring";
+import {
+  sweetness,
+  balsamicWeight,
+  sweetDominates,
+  balsamicDominates,
+  richDominates,
+  heavyDominates,
+  dataConfidence,
+  type WeatherTone,
+} from "./scoring";
 
 // 场景的空间密度（影响喷量与风险）
 const DENSITY: Record<string, "dense" | "closed" | "normal" | "open"> = {
@@ -22,8 +31,16 @@ function accStrength(p: Perfume, en: string): number {
 }
 
 // 「用力过猛」组合：甜重/浓白花 × 强扩散 × 通勤会议类场合——国内语境下最容易被负面评价的搭配
+//
+// 甜这一侧走主导度判据（与高温减量、发腻文案同一条口径）：绝对线 ≥50 会把爱神烈焰
+//（citrus=100、sweet 只是第 N 位的 58）也判成"甜和扩散都偏高"，而这句话紧接着就要
+// 把喷量压到 1 下、把位置放到腰侧——对一瓶柑橘当家的香，三样都是错的。
+//
+// 白花这一侧**刻意仍用绝对线**：白花与"floral"共用一个家族，花之炸弹的首位就是 floral=100、
+// white floral=56，拿后者去除前者得到的 0.56 衡量的是"标签粒度"而不是"这瓶浓不浓白花"。
+// 同一个修法换个地方就不成立——宁可这一侧保守，也不要把一个成立的判据用到它不成立的地方。
 function overdressedCombo(p: Perfume, ctx: Context): boolean {
-  const loudSweet = sweetness(p) >= 50;
+  const loudSweet = sweetDominates(p, 50);
   const loudFloral = accStrength(p, "white floral") >= 50;
   const officeish = ctx.occasion === "commute" || ctx.occasion === "work" || ctx.occasion === "formal";
   return (loudSweet || loudFloral) && p.sillageTier >= 3 && officeish;
@@ -56,10 +73,14 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   else if (sil >= 2.4) [lo, hi] = [2, 3];
   else [lo, hi] = [3, 4];
 
+  // 安全阀是否真的压过这瓶——决定个人偏好还能不能往上抬（见下方 safetyCap 那段）
+  let capped = false;
+
   const density = DENSITY[ctx.occasion] ?? "normal";
   if (density === "dense" || density === "closed") {
     lo = Math.max(1, lo - 1);
     hi = Math.max(lo, hi - 1);
+    capped = true;
   } else if (density === "open" && ctx.occasion === "sport") {
     // 运动留香易散，但不鼓励多喷，维持
   }
@@ -70,26 +91,41 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 事实上干热下蒸发散热有效，皮温往往还低于同气温的湿热。所以两者都保护，不再厚此薄彼。
   const hotFeel = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
   if (ctx.feel === "cold" && sil < 2.4) hi = Math.min(hi + 1, 5);
-  // 高温减量有两条触发：扩散本身强，或这瓶偏甜/偏树脂（computeRisks 会为后者写出
+  // 高温减量有两条触发：扩散本身强，或这瓶**由**甜/树脂主导（computeRisks 会为后者写出
   // 「高温里存在感会比你以为的更强，喷得收着些更稳」）。第二条是为了让**已经说出口的那句话兑现**——
   // 此前只认 sillage≥3.2，于是蔚蓝浓香精(sil=2.17, amber=86) 在 33℃ 会一边被提醒"收着些"、
   // 一边拿到 3–4 下的最高档，文案与数字互相打脸。
+  //
+  // ⚠️ 这里必须与 computeRisks 用**同一个** richDominates，不能各用一条绝对线。
+  // 上一版两边都写 `max(sweet, balsam) >= 55`，看着一致，实则和打分层（scoring.ts 早已换成
+  // 主导度判据）分了家：旷野(fresh spicy=100, balsamic=59) 在 33℃ 会被同一张卡先夸
+  // "调性清爽通透"、再罚"树脂琥珀感偏厚"，喷量还跟着少一下。主目录实测 793 → 567 款，
+  // 少掉的 226 款正是清爽当家的那批。同一个概念只准有一处判据。
   // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
-  if (hotFeel && (sil >= 3.2 || Math.max(sweetness(p), balsamicWeight(p)) >= 55)) {
+  if (hotFeel && (sil >= 3.2 || richDominates(p, 55))) {
     hi = Math.max(lo, hi - 1);
+    capped = true;
   }
   // 餐桌场合：气味干扰味觉，收一档
-  if (ctx.meal) hi = Math.max(lo, hi - 1);
+  if (ctx.meal) {
+    hi = Math.max(lo, hi - 1);
+    capped = true;
+  }
   // 高张力场合（前任婚礼 / 谈判 / 见家长）：目标是"不被记住是因为香水"，一律再收一档
-  if (ctx.tension === "high") hi = Math.max(lo, hi - 1);
+  if (ctx.tension === "high") {
+    hi = Math.max(lo, hi - 1);
+    capped = true;
+  }
   if (ctx.avoid?.includes("too_strong")) {
     lo = Math.max(1, lo - 1);
     hi = Math.max(lo, hi - 1);
+    capped = true;
   }
   // 甜重/浓白花 × 强扩散 × 通勤会议：容易显得用力过猛，压到 1 下（与风险文案一致）
   if (overdressedCombo(p, ctx)) {
     lo = 1;
     hi = 1;
+    capped = true;
   }
   lo = Math.max(1, Math.min(lo, hi));
   hi = Math.max(lo, hi);
@@ -104,7 +140,18 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   //   纯净 = 1 下 · 场景写了「想被注意到」= 1–2 下 · 历史两次「淡了点」= 1–2 下 · 两者叠加 = 1–3 下
   // 同一张卡上「压到 1 下」和「1–3 下」并排出现。手册把礼仪/公共卫生取向的规则列为 A 类，
   // 个人偏好是 B 类，B 类不该覆盖 A 类。
+  //
+  // ⚠️ 但"上限"和"基准"不是同一个数。上一版把这一行的取值直接当成天花板，于是
+  // 一条安全阀都没命中时（居家、休闲、温和天气），偏好空间被压成**单向**——
+  // 下方两条 `hi + 1` 全部被 122 行的钳制无条件撤销，是死代码。
+  // 代价是两句对用户说出口的话永久落空：反馈条明写「记下了，下次帮你略微多喷一点」，
+  // 而引擎永远不会多喷；场景解析出的 intimacy="broadcast"（"今晚想被注意到"）
+  // 在全仓只有这一个消费点，于是那句话不改变任何一个数字。
+  // 四个反馈按钮里有一个是纯表演，而反馈闭环是这个产品唯一的真壁垒。
   const safetyCap = hi;
+  // 偏好总计只能抬一档——与本文件既有的【天气驱动的减量总计封顶 1 下】同一条纪律：
+  // 「略微多喷一点」和「想被注意到」各自都是"略"，叠加起来不该变成两档。
+  const prefCeiling = capped ? safetyCap : Math.min(safetyCap + 1, 5);
 
   // ── 个人偏好：可升可降，但一律不得越过 safetyCap ────────────────────
   // 自然语言场景：想贴身则收一档、想被注意到可略增
@@ -118,8 +165,9 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   } else if (ps <= -0.4) {
     hi = Math.min(hi + 1, 5);
   }
-  // 收口：偏好只能在安全上限之内活动；同时任何路径都不允许出现 "2–1 下" 这种反向区间
-  hi = Math.min(hi, safetyCap);
+  // 收口：安全阀压过就一步都不许抬，没压过也最多抬一档；
+  // 同时任何路径都不允许出现 "2–1 下" 这种反向区间
+  hi = Math.min(hi, prefCeiling);
   lo = Math.max(1, Math.min(lo, hi));
 
   // 成功配置复用：同温度档 × 同场合你反馈过「刚好」→ 按那次的量来。
@@ -217,16 +265,47 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   };
 }
 
+/**
+ * 每一条风险都带着它的成因走。
+ *
+ * 成因是**受控字段**，不是从中文里认出来的——这是 scoring.ts:WeatherTone 立下、
+ * recommend.ts:avoidCause 贯彻过一次的同一条纪律，这里把它落到最后一段：
+ * 预警卡的眉标按 avoidCause 分岔（「季节不对」/「今天的体感」/「场合偏封闭」），
+ * 正文却一直在取 risks[0]，而 risks 的追加顺序（封闭 → 高温 → 餐桌 → 用力过猛 →
+ * 反季 → 高张力 → 场景）与成因优先级（天气 > 反季 > 场地）毫无关系。
+ * 只要同时命中一条更靠前的风险，眉标与正文就说的不是同一件事——
+ * 而这张卡就印在 README 首屏那张图上。
+ *
+ * 靠中文子串去认（`r.includes("反季")`）能修好今天，但会把归因的正确性
+ * 绑死在措辞不许改上，下一次润色文案就重新错开。所以带标走。
+ */
+export type RiskKind = "venue" | "weather" | "meal" | "overdressed" | "season" | "tension" | "scene";
+export interface RiskNote {
+  kind: RiskKind;
+  text: string;
+}
+
+/** 只要文本的调用方走这里；需要按成因取某一条的走 computeRiskNotes */
 export function computeRisks(p: Perfume, ctx: Context): string[] {
-  const risks: string[] = [];
+  return computeRiskNotes(p, ctx).map((r) => r.text);
+}
+
+export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
+  const risks: RiskNote[] = [];
+  const push = (kind: RiskKind, text: string) => risks.push({ kind, text });
   // 无香场合：只说这一条，不要再堆别的风险——用户此刻只需要一个结论
   if (ctx.fragranceFree) {
-    return ["医院、诊所这类场合，很多人对气味格外敏感，而他们没有回避的余地——今天把香水留在家里最稳妥。"];
+    return [
+      {
+        kind: "scene",
+        text: "医院、诊所这类场合，很多人对气味格外敏感，而他们没有回避的余地——今天把香水留在家里最稳妥。",
+      },
+    ];
   }
   const density = DENSITY[ctx.occasion] ?? "normal";
 
   if (p.sillageTier >= 4 && (density === "closed" || density === "dense")) {
-    risks.push("空间偏封闭、人也多，这瓶气场较大——建议只喷 1 下，或换一瓶更贴肤的。");
+    push("venue", "空间偏封闭、人也多，这瓶气场较大——建议只喷 1 下，或换一瓶更贴肤的。");
   }
   // 甜与琥珀是两回事，风险也是两回事：
   // 甜（美食调）在湿热里会"发腻"；树脂香膏（琥珀/香膏/沉香）会"闷、不透气"——但它不甜。
@@ -240,24 +319,37 @@ export function computeRisks(p: Perfume, ctx: Context): string[] {
   // 代价是像 Shalimar、Ambre Nuit 这类甜味主要由 amber accord 承载、而 sweet 标签可能 <55 的经典东方香，
   // 会**漏报**发腻风险。这是刻意接受的偏向：宁可漏报，也不要对 112 款一点不甜的香误报。
   // （也不要把干琥珀说成"完全不甜"——它是矿物木质框架上的微甜，只是不产生美食调那种累积性的腻。）
+  //
+  // 拆桶之外还有第二道：**这一族得主导这瓶，才配代表它的气质**（sweetDominates / balsamicDominates）。
+  // 只看绝对线的代价与 amber 混进甜桶是同一类，只是藏在文案里：主目录实测 634 款过甜的绝对线，
+  // 其中 187 款的甜只是第 N 位的一点尾调——信仰之水(fruity=100, sweet=55)、博柏利她、
+  // 邂逅柔情都会被告知"甜感偏重、上身久了容易发腻"；树脂那侧同理，旷野(fresh spicy=100,
+  // balsamic=59)、探索家、绿爱尔兰花呢会被判"树脂琥珀感偏厚"。而同一张卡的"为什么"里，
+  // 打分层（早就用了主导度判据）正写着"调性清爽通透，正合今天的天气"。
+  // 这两句必须由同一条判据产出，否则卡片自己打自己。
   const sweet = sweetness(p);
   const balsam = balsamicWeight(p);
   const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
   if (hot) {
     const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : "这么热";
-    if (sweet >= 55) {
-      risks.push(`今天${weatherWord}，它的甜感偏重，上身久了容易发腻，可考虑换清爽些的。`);
-    } else if (balsam >= 55) {
-      risks.push(`今天${weatherWord}，它的树脂琥珀感偏厚，高温里存在感会比你以为的更强，喷得收着些更稳。`);
+    if (sweetDominates(p, 55)) {
+      push("weather", `今天${weatherWord}，它的甜感偏重，上身久了容易发腻，可考虑换清爽些的。`);
+    } else if (balsamicDominates(p, 55)) {
+      push("weather", `今天${weatherWord}，它的树脂琥珀感偏厚，高温里存在感会比你以为的更强，喷得收着些更稳。`);
+    } else if (heavyDominates(p, 50)) {
+      // 打分层的「厚重」比甜/树脂两族多出动物性与烟草——它们在高温里同样变闷，只是不甜也不树脂。
+      // 少了这一支，一瓶烟草主导的香会被打分层判 heavy_in_heat、被裁决层判「今天不建议」，
+      // 却一条风险都说不出来：正是「判了却说不出为什么」那类结构性缺陷。
+      push("weather", `今天${weatherWord}，它的厚重感在高温里会放大，存在感比你以为的更强，喷得收着些更稳。`);
     }
   }
   // 餐桌场合：浓香/甜香和食物气味打架（高端餐饮甚至明示谢绝浓香）
   if (ctx.meal && (Math.max(sweet, balsam) >= 55 || p.sillageTier >= 3)) {
-    risks.push("这顿饭是场合的一部分——它的存在感会和食物气味打架，喷得比平时更收着些。");
+    push("meal", "这顿饭是场合的一部分——它的存在感会和食物气味打架，喷得比平时更收着些。");
   }
   // 「用力过猛」组合提示（国内语境：办公室里的浓甜白花有"柜姐感"联想）
   if (overdressedCombo(p, ctx)) {
-    risks.push("甜和扩散都偏高，这类场合容易显得用力过猛——压到 1 下、放低位置会体面很多。");
+    push("overdressed", "甜和扩散都偏高，这类场合容易显得用力过猛——压到 1 下、放低位置会体面很多。");
   }
   // 季节错配：相对差，不用绝对阈值。
   // **必须过和 buildReasons 同一道票数门槛**——「大家更多在冬季用它」是一句关于社区数据的断言，
@@ -270,16 +362,16 @@ export function computeRisks(p: Perfume, ctx: Context): string[] {
     const cur = p.seasonPct[ctx.season];
     if (best[0] !== ctx.season && best[1] - cur >= 0.12) {
       const map: Record<string, string> = { winter: "冬", spring: "春", summer: "夏", autumn: "秋" };
-      risks.push(`大家更多在${map[best[0]]}季用它，今天用会有点反季。`);
+      push("season", `大家更多在${map[best[0]]}季用它，今天用会有点反季。`);
     }
   }
   // 高张力场合 × 存在感偏强：规则层自己就要说这句，不能只指望场景解析恰好返回 riskNote
   if (ctx.tension === "high" && p.sillageTier >= 3) {
-    risks.push("这种场合，最好别让香水成为被讨论的那件事——它的存在感偏强，压到最低量、只留贴身的一点更稳妥。");
+    push("tension", "这种场合，最好别让香水成为被讨论的那件事——它的存在感偏强，压到最低量、只留贴身的一点更稳妥。");
   }
   // 场景解析给出的社交风险（LLM 的场景常识以受控字段进入，不允许它自由发挥进正文）
-  if (ctx.riskNote && !risks.some((r) => r.includes(ctx.riskNote!))) {
-    risks.push(ctx.riskNote.endsWith("。") ? ctx.riskNote : ctx.riskNote + "。");
+  if (ctx.riskNote && !risks.some((r) => r.text.includes(ctx.riskNote!))) {
+    push("scene", ctx.riskNote.endsWith("。") ? ctx.riskNote : ctx.riskNote + "。");
   }
   return risks;
 }

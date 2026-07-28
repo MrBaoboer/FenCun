@@ -45,7 +45,9 @@ export function SceneInput() {
           fragranceFree: d.fragranceFree,
           riskNote: d.riskNote,
           label: d.label,
-          rawText: t,
+          // 与 parse-intent 的入参截断（120 字）、explain 的 clipped(120) 同一口径。
+          // 三处对齐之前，超长的场景描述会让解释链在该场景存续期间每次都静默 400。
+          rawText: t.slice(0, 120),
         });
         setText("");
       } else {
@@ -91,6 +93,7 @@ export function SceneInput() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="或用一句话说说今天的场合，如「第一次见投资人」"
+        maxLength={120}
         className="serif w-full bg-transparent text-[0.86rem] text-ink outline-none placeholder:text-ink-faint"
       />
       <button

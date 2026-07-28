@@ -5,7 +5,7 @@
 // 也就是说这个文件里的断言在 Node 下比在浏览器里更严格。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { useStore } from "./store";
+import { useStore, hasOwnData, guardedStorage } from "./store";
 
 // 本环境下每次 set 都会在写盘那一步抛（见文件头注释）。zustand 是**先改内存、再写盘**，
 // 所以异常之后内存状态已经是新的——吞掉它，断言照常针对内存状态成立。
@@ -112,7 +112,21 @@ test("移出香柜时 swapAways 一并清理，不在本机永久累积", () => 
   assert.equal(st().swapAways["485"], undefined, "瓶子移出了，它的换香时间戳还留在盘上");
 });
 
-test("演示态：装载有三道守卫，任何一条不满足都不许盖用户的柜子", () => {
+test("hasOwnData：只要这台机器上留下过任何一样属于他的东西，就不是新机器", () => {
+  // 这条判据被 migrate、enterDemo、AppProvider 三处共用。它必须覆盖 demoPayload 会替换掉的
+  // 每一项——此前三处各写一遍且都只看瓶子，于是"柜清空、香历还在"被判成新机器。
+  assert.equal(hasOwnData({}), false);
+  assert.equal(hasOwnData({ userPerfumes: [], customPerfumes: [], wearLog: [], feedbacks: [] }), false);
+  for (const k of ["userPerfumes", "customPerfumes", "extPerfumes", "wearLog", "feedbacks"]) {
+    assert.equal(hasOwnData({ [k]: [{}] }), true, `${k} 非空时必须判成"有他自己的东西"`);
+  }
+  assert.equal(hasOwnData({ swapCount: 1 }), true);
+  assert.equal(hasOwnData({ dustyAdoptCount: 1 }), true);
+  // 宽松形状：migrate 拿到的是未校验的原始对象，脏值不许把判据带偏
+  assert.equal(hasOwnData({ userPerfumes: "nope", wearLog: null }), false);
+});
+
+test("演示态：装载的守卫必须看全这台机器上的一切，任何一条不满足都不许盖用户的数据", () => {
   const st = () => useStore.getState();
   const demo = {
     userPerfumes: [{ perfumeId: 1825, addedAt: 1, wornCount: 9 }],
@@ -132,8 +146,34 @@ test("演示态：装载有三道守卫，任何一条不满足都不许盖用�
   assert.equal(st().demo, false, "柜非空时不得进入演示态");
   assert.notEqual(st().userPerfumes[0].perfumeId, 1825, "演示数据盖掉了用户的香柜");
 
-  // 清空后（模拟新机器）才允许装载
-  silent(() => useStore.setState({ userPerfumes: [], customPerfumes: [], demoDismissed: false }));
+  // 柜清空、但香历还在 —— 这是产品自己承诺的合法状态（瓶子移出后香历依然完整），
+  // 不是"一台全新的空机器"。此前守卫只看瓶子，于是这些人升级后第一次打开就被
+  // 示例数据把香历（含手写手记）和反馈整包换掉，且这条路径不写 .bak，不可恢复。
+  const ownHistory = [
+    { d: "2026-07-01", perfumeId: 485, name: "旷野", fam: "fresh", occasion: "commute" as const, tempC: 20, weatherText: "晴", feel: "mild" as const, note: "面试那天" },
+  ];
+  const ownFeedback = [
+    { perfumeId: 485, at: 1, context: { season: "summer" as const, daypart: "day" as const, tempC: 30, occasion: "commute" as const }, rating: "perfect" as const },
+  ];
+  silent(() =>
+    useStore.setState({ userPerfumes: [], customPerfumes: [], wearLog: ownHistory, feedbacks: ownFeedback, demoDismissed: false })
+  );
+  silent(() => st().enterDemo(demo));
+  assert.equal(st().demo, false, "柜空但香历/反馈还在时，不得进入演示态");
+  assert.deepEqual(st().wearLog, ownHistory, "用户的香历被示例数据盖掉了");
+  assert.deepEqual(st().feedbacks, ownFeedback, "用户的反馈被示例数据盖掉了");
+
+  // 换香计数同理：它也是"这台机器上发生过什么"的痕迹
+  silent(() =>
+    useStore.setState({ userPerfumes: [], customPerfumes: [], wearLog: [], feedbacks: [], swapCount: 3, demoDismissed: false })
+  );
+  silent(() => st().enterDemo(demo));
+  assert.equal(st().demo, false, "留下过换香痕迹的机器不得被当成新机器");
+
+  // 真正干净的机器才允许装载
+  silent(() =>
+    useStore.setState({ userPerfumes: [], customPerfumes: [], extPerfumes: [], wearLog: [], feedbacks: [], swapCount: 0, dustyAdoptCount: 0, demoDismissed: false })
+  );
   silent(() => st().enterDemo(demo));
   assert.equal(st().demo, true);
   assert.equal(st().userPerfumes.length, 1);
@@ -189,4 +229,119 @@ test("重置：清掉本机的一切，再把示例香柜原样装回来，城�
   // 城市也属于"初始状态"的一部分：新用户第一次打开时看到的就是北京。
   // 调用方随即会重新解析一次天气（见 profile 页），所以屏上不会出现城市与读数对不上。
   assert.equal(st().city, "北京", "重置应把城市一并复位到初始的北京");
+});
+
+test("写盘失败必须说出来：异常被吞掉、不打断调用方，但要立起标志", () => {
+  // zustand 的 persist 把 set 包成「先改内存、再写盘」，两层包装都不 try/catch。
+  // 写盘抛错时内存已经换掉 → UI 刷成"已生效"，盘上零字节，用户毫不知情；
+  // 异常还会从 onClick 里逃逸，打断事件处理器——实测两处可见后果：
+  // 「+ 入柜」永久停在「取数据…」、香柜的 8 秒撤销条根本不出现。
+  // 读盘失败早就有 hydrateError + SiteNotice 这条通道了，写盘这一半一直没接上。
+  const errs: unknown[] = [];
+  const backing: Record<string, string> = { keep: "v" };
+  const throwing = {
+    getItem: (k: string) => backing[k] ?? null,
+    removeItem: (k: string) => void delete backing[k],
+    setItem: () => {
+      throw new DOMException("quota", "QuotaExceededError");
+    },
+  } as unknown as Storage;
+
+  const g = guardedStorage(throwing, (e) => errs.push(e));
+  let after = false;
+  assert.doesNotThrow(() => {
+    g.setItem("fencun-store", "{}");
+    after = true; // 调用方的后续语句必须照常执行
+  });
+  assert.equal(after, true, "异常没被吞住，调用方的后续语句会被打断");
+  assert.equal(errs.length, 1, "写盘失败必须被上报一次");
+  // 读与删照常转发，不受影响
+  assert.equal(g.getItem("keep"), "v");
+  g.removeItem("keep");
+  assert.equal(g.getItem("keep"), null);
+});
+
+test("读盘失败另存的那份字节要能取回来：.bak 比导出文件多一层包装", () => {
+  // 此前 .bak 只写不读——字节还在，产品里却没有任何入口去用它，等于没有恢复路径。
+  // 而它存的是 persist 的包装形状 { state, version }，比导出文件多一层：
+  // 直接喂 importData 会因为顶层没有 userPerfumes 被判成"不是我们的备份"。
+  const st = () => useStore.getState();
+  const bak = {
+    version: 1,
+    state: {
+      userPerfumes: [{ perfumeId: 485, addedAt: 1 }],
+      wearLog: [
+        { d: "2026-07-01", perfumeId: 485, name: "浅蓝", fam: "citrus", occasion: "commute", tempC: 30, weatherText: "晴", feel: "hot_dry", note: "面试那天" },
+      ],
+      city: "上海",
+    },
+  };
+  const mem: Record<string, string> = { "fencun-store.bak": JSON.stringify(bak) };
+  const fake = {
+    getItem: (k: string) => mem[k] ?? null,
+    setItem: (k: string, v: string) => void (mem[k] = v),
+    removeItem: (k: string) => void delete mem[k],
+  };
+  const g = globalThis as unknown as { window?: unknown };
+  const prev = g.window;
+  g.window = { localStorage: fake };
+  try {
+    silent(() => useStore.setState({ userPerfumes: [], wearLog: [], city: null, hydrateError: "boom" }));
+    assert.equal(st().hasRescueBackup(), true, "另存的那份应当被认出来");
+    assert.equal(st().restoreFromBackup(), true, "包装形状必须被剥开后再导入");
+    assert.deepEqual(st().userPerfumes.map((u) => u.perfumeId), [485]);
+    assert.equal(st().wearLog[0].note, "面试那天", "手记必须一并回来");
+    assert.equal(st().hydrateError, null, "恢复成功后那条警告要撤掉");
+    // 没有另存文件时不许假装能恢复
+    delete mem["fencun-store.bak"];
+    assert.equal(st().hasRescueBackup(), false);
+    assert.equal(st().restoreFromBackup(), false, "没有备份时必须返回「一个字节都没动」");
+  } finally {
+    if (prev === undefined) delete g.window;
+    else g.window = prev;
+  }
+});
+
+test("采纳可撤销：穿戴计数、当天香历与隐式差评必须原样回来", () => {
+  // 「也可以考虑」「从你的香柜里选」两个入口的文案都是浏览语义，点一下却写三笔。
+  // 想比三瓶用法，三瓶就全被记成今天穿过——轮换的新鲜度与吃灰的 21 天计时一起重置，
+  // 而 wornCount 又是预警卡判「你常喷的那瓶」的唯一依据。
+  const st = () => useStore.getState();
+  const day = "2026-07-20";
+  const entry = (perfumeId: number, note?: string) => ({
+    d: day, perfumeId, name: "x", fam: "citrus", occasion: "commute" as const,
+    tempC: 20, weatherText: "晴", feel: "mild" as const, ...(note ? { note } : {}),
+  });
+  silent(() =>
+    useStore.setState({
+      userPerfumes: [{ perfumeId: 485, addedAt: 1, wornCount: 4, lastWornAt: 111 }],
+      wearLog: [entry(9, "本来是这瓶")],
+      swapAways: {}, swapCount: 2, dustyAdoptCount: 1,
+    })
+  );
+
+  const snap = st().snapshotAdopt(485, day);
+  silent(() => st().markWorn(485));
+  silent(() => st().logWear(entry(485)));
+  silent(() => st().recordSwap(9));
+  // 前提：三笔都真的落下去了
+  assert.equal(st().userPerfumes[0].wornCount, 5);
+  assert.equal(st().wearLog.find((e) => e.d === day)?.perfumeId, 485);
+  assert.equal(st().swapCount, 3);
+
+  silent(() => st().undoAdopt(snap));
+  assert.equal(st().userPerfumes[0].wornCount, 4, "穿戴计数没回滚");
+  assert.equal(st().userPerfumes[0].lastWornAt, 111, "上次穿戴时间没回滚");
+  const back = st().wearLog.find((e) => e.d === day);
+  assert.equal(back?.perfumeId, 9, "被覆盖的那条香历没回来");
+  assert.equal(back?.note, "本来是这瓶", "手记必须一并回来");
+  assert.equal(st().swapCount, 2, "隐式差评计数没回滚");
+  assert.deepEqual(st().swapAways, {}, "换香时间戳没回滚");
+
+  // 当天原本没有记录时，撤销要把这条新建的删掉，而不是留一条空壳
+  silent(() => useStore.setState({ wearLog: [], userPerfumes: [{ perfumeId: 485, addedAt: 1 }] }));
+  const snap2 = st().snapshotAdopt(485, day);
+  silent(() => st().logWear(entry(485)));
+  silent(() => st().undoAdopt(snap2));
+  assert.equal(st().wearLog.length, 0, "这次采纳才建的那条香历应当被撤掉");
 });

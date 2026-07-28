@@ -42,6 +42,11 @@ export const metadata: Metadata = {
   keywords: ["香水", "用香建议", "喷量", "留香", "香调", "氛寸", "fragrance"],
   authors: [{ name: "MrBaoboer", url: "https://github.com/MrBaoboer" }],
   alternates: { canonical: "/" },
+  // manifest 里配了三张自制图标，但 iOS 较老的系统在「添加到主屏幕」时只找
+  // /apple-touch-icon.png 这个固定名字（新版 WebKit 已经会读 manifest）。
+  // 图由 npm run og 生成，与 icon-192/512 同源同版式。
+  icons: { icon: "/favicon.ico", apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "氛寸", statusBarStyle: "default" },
   openGraph: {
     type: "website",
     locale: "zh_CN",

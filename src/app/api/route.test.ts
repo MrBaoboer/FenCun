@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { heuristic } from "./parse-intent/route";
 import { template, type ExplainInput } from "./explain/route";
-import { extractDigits, findInventedNumbers } from "@/lib/numguard";
+import { extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
 
 // ---------- parse-intent · 无香场合红线 ----------
 
@@ -103,4 +103,27 @@ test("降级模板：good 路径把喷量、部位、留香三件事都说全", 
   assert.ok(t.includes("腰侧"), "缺喷洒部位");
   assert.ok(t.includes("大半个白天"), "缺留香");
   assert.ok(t.includes("北京") && t.includes("31"), "缺此刻的情境");
+});
+
+test("数字白名单：全角与中文数字同样是伪精确，不许绕过", () => {
+  // JS 的 \d 恒等 [0-9]（与 u/v 标志无关），旧实现里全角与中文数字**根本不存在**：
+  // 命中时返回空数组、整段照原样放行、source 还标成 deepseek。
+  // 而 SYSTEM 提示词是中文的——模型写「能撑六到八个小时」比写「6.2 小时」自然得多。
+  const facts = "喷 1–2 下；撑得住大半个白天；用两次你就知道它在你身上能走多久";
+  const allowed = extractDigits(facts);
+
+  // ① 半角：原本就拦得住，回归
+  assert.deepEqual(findInventedNumbers("留香 6.2 小时", allowed), ["6.2"]);
+  // ② 全角：两侧 NFKC 归一后走同一条
+  assert.deepEqual(findInventedNumbers("留香 ６.２ 小时", allowed), ["6.2"]);
+  // ③ 事实里给过的数字，全角写法也要放行——只归一输出不归一事实，会把自己的数字拦下来
+  assert.deepEqual(findInventedNumbers("喷 １ 下", allowed), []);
+  // ④ 中文数字 + 时间/剂量量词 = 伪精确
+  assert.deepEqual(findPseudoPreciseCN("大概能撑六个小时", facts), ["六个小时"]);
+  assert.deepEqual(findPseudoPreciseCN("补喷两毫升", facts), ["两毫升"]);
+  // ⑤ 但逐字出现在事实里的中文数词必须放行，否则防线会把自己的事实吃掉——
+  //    format.ts 的「用两次你就知道…」正是这一类，一律拦下就是永远静默退模板
+  assert.deepEqual(findPseudoPreciseCN("用两次你就知道它在你身上能走多久", facts), []);
+  // ⑥ 非计数的体感表达不在其列（它们本来就是我们自己的措辞）
+  assert.deepEqual(findPseudoPreciseCN("撑得住大半个白天，一臂之内闻得到", facts), []);
 });

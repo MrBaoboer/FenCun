@@ -88,6 +88,10 @@ const targets = [
   { name: "icon-512.png", w: 512, h: 512, html: iconHtml(512, 0.78), scale: 1 },
   // 可裁切版把字再收一档（0.62），给 Android 的圆形遮罩留出余量
   { name: "icon-maskable-512.png", w: 512, h: 512, html: iconHtml(512, 0.62), scale: 1 },
+  // iOS 的「添加到主屏幕」在较老的系统上不读 manifest 的 icons，只找这张固定名字的图。
+  // 新版 WebKit 已经会读 manifest，所以这不是"全线失效"，只是"一部分设备上拿不到"——
+  // 但补一张 180×180 的成本近乎为零，没理由让自制的「氛」字在那些机器上退化成截图缩略图。
+  { name: "apple-touch-icon.png", w: 180, h: 180, html: iconHtml(180, 0.78), scale: 1 },
 ];
 
 const browser = await puppeteer.launch({

@@ -14,6 +14,27 @@ export interface RemovedBundle {
   customPerfume?: Perfume;
 }
 
+/**
+ * 一次「采纳」之前的现场快照——撤销时原样放回。
+ *
+ * 为什么需要它：「也可以考虑」「从你的香柜里选」两个入口的文案都是纯浏览语义，
+ * 点一下却立刻写三笔——markWorn 刷新 lastWornAt 并让 wornCount+1、
+ * logWear 按日后写覆盖当天香历、recordSwap 记一笔隐式差评。
+ * 想比三瓶用法，三瓶就全被记成今天穿过：轮换的新鲜度因子与吃灰的 21 天计时一起重置，
+ * 产品自称的价值重心「发现型钩子」被一次浏览动作打哑；wornCount 又是天气突变预警
+ * 判「你常喷的那瓶」的唯一依据。而右上角那个回退箭头只清选中态，看起来像撤销、
+ * 实际什么都不回滚——那比没有撤销更糟。
+ */
+export interface AdoptSnapshot {
+  perfumeId: number;
+  userPerfume: UserPerfume | null;
+  day: string;
+  wearEntry: WearEntry | null;
+  swapCount: number;
+  dustyAdoptCount: number;
+  swapAways: Record<string, number[]>;
+}
+
 interface State {
   userPerfumes: UserPerfume[];
   feedbacks: Feedback[];
@@ -28,6 +49,10 @@ interface State {
   // rehydrate 读盘失败时的原因。非空 = 盘上可能还有数据但没读出来，UI 必须停手并告知用户，
   // 绝不能表现成"新用户空香柜"然后用一次写入把仍然完整的备份覆盖掉。
   hydrateError: string | null;
+  // **写盘**失败时的原因。读盘那一半早就有告知通道了，写盘这一半一直没接上——
+  // 而在存储不可写的设备上，用户加香水、记用香、留反馈每一步都显示成功，刷新后全没：
+  // profile 页正写着「你的香柜与全部反馈只存在本机浏览器」，那是这个产品唯一的数据副本。
+  persistError: string | null;
   // 演示态：初次到访时自动装载的黄金集香柜（见 lib/demo.ts）。
   // demo=true 期间界面始终自报身份；dismissed 一旦为真就永不再自动装载——
   // 用户清空过一次之后，这台机器上的香柜就只属于他自己。
@@ -43,6 +68,10 @@ interface State {
   removePerfume: (id: number) => RemovedBundle;
   restorePerfume: (b: RemovedBundle) => void;
   markWorn: (id: number) => void;
+  /** 采纳前留一份现场（见 AdoptSnapshot），交给 UI 拿去做 8 秒撤销 */
+  snapshotAdopt: (id: number, day: string) => AdoptSnapshot;
+  /** 把 snapshotAdopt 那一刻的现场原样放回 */
+  undoAdopt: (s: AdoptSnapshot) => void;
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
   setOccasion: (o: Occasion) => void;
@@ -57,6 +86,10 @@ interface State {
   exportData: () => string;
   previewImport: (raw: string) => ImportPreview | null;
   importData: (raw: string) => boolean;
+  /** 读盘失败时另存的那份原始字节还在不在——决定要不要给用户「试着恢复」这条路 */
+  hasRescueBackup: () => boolean;
+  /** 拿 fencun-store.bak 里的字节走一次导入。返回 false = 一个字节都没动 */
+  restoreFromBackup: () => boolean;
 }
 
 /** 导入前的体检报告：让用户在覆盖发生**之前**看到自己要付出什么代价 */
@@ -147,6 +180,16 @@ const OCCASIONS: Occasion[] = ["commute", "work", "date", "social", "formal", "c
 export const PERSIST_VERSION = 1;
 
 /**
+ * 导出文件的格式版本。**与 PERSIST_VERSION 互不相干**：一个描述 localStorage 里的结构，
+ * 一个描述导出的 JSON 文件的结构，各自演进。此前两个数字散在两处、都写成字面量，
+ * 谁跟谁一致纯属巧合——今天不产生任何错误行为，但改导出格式那天就是埋雷。
+ */
+export const EXPORT_VERSION = 2;
+
+/** 读盘失败时另存原始字节的键 */
+const BACKUP_KEY = "fencun-store.bak";
+
+/**
  * 用户在示例态下添加自己的第一瓶香水 → 示例香柜整体退场（「我的 · 数据」那一栏也是这么写的）。
  * 这是唯一诚实的语义：示例数据和真实数据混在同一个柜子里之后，
  * 推荐、香历、画像会同时基于"别人的六瓶"和"你的一瓶"作答，而用户无从分辨哪句是关于自己的。
@@ -154,6 +197,83 @@ export const PERSIST_VERSION = 1;
  */
 function demoExitPatch(s: { demo: boolean }) {
   return s.demo ? { ...DEMO_CLEARED, demo: false, demoDismissed: true } : null;
+}
+
+/**
+ * 拿 localStorage 句柄。**读这个属性本身就可能抛**——Chrome 的「阻止所有 Cookie」、
+ * 跨源沙箱 iframe、Firefox 关掉 dom.storage 都是这条路径，不是罕见到可以不管的场景。
+ * 抛了就返回 null，让整个应用退到"不持久化但能用"，而不是白屏。
+ */
+function safeLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 读盘失败之后**冻结写入**，保住盘上还没读出来的那些字节。
+ *
+ * 这不是多此一举：zustand 的 setState 被 persist 包成「先改内存、再无条件写盘」，
+ * 所以 onRehydrateStorage 错误分支里那句 `setState({ hydrated, hydrateError })`
+ * 本身就会把内存里的初始空态整包写回盘——止损代码自己完成了它要阻止的那次覆盖，
+ * 而且发生在 SiteNotice 渲染之前。连锁后果：第二次打开时盘上是一份合法的空 JSON，
+ * hydrateError 归零、警告永久消失，演示香柜还会顶上来——数据和"数据出过事"的证据一起没了。
+ *
+ * 用户成功导入备份后解冻（见 importData）：那时这台机器上该有什么已经由他自己说了算。
+ */
+let writesFrozen = false;
+
+/**
+ * 把一个真实的 Storage 包成「写失败不抛、只上报」的形状。
+ * 单独抽出来是为了能对着一个会抛的桩做单测——它守的是产品唯一那份数据副本的告知义务。
+ */
+export function guardedStorage(
+  ls: Storage,
+  onWriteError: (e: unknown) => void,
+  canWrite: () => boolean = () => true
+): Storage {
+  return {
+    getItem: (k: string) => ls.getItem(k),
+    removeItem: (k: string) => ls.removeItem(k),
+    setItem: (k: string, v: string) => {
+      if (!canWrite()) return;
+      try {
+        ls.setItem(k, v);
+      } catch (e) {
+        onWriteError(e);
+      }
+    },
+  } as Storage;
+}
+
+/**
+ * 「这台机器上已经有属于他自己的东西了吗」——示例香柜能不能装载，只由这一个判据说了算。
+ *
+ * 判据必须覆盖 demoPayload 会替换掉的**每一项**，不能只看瓶子。
+ * types.ts 把「瓶子移出香柜之后，香历里的记录依然完整」写成了产品承诺，
+ * 于是「柜已清空、香历与反馈还在」是这个产品自己设计出来的合法状态——
+ * 只看 userPerfumes 就会把它判成「一台全新的空机器」，然后用示例数据把香历
+ *（含用户手写的手记）和反馈序列整包换掉。而这条路径**不写 .bak**：
+ * 与读盘失败那条不同，它没有任何可恢复的字节留下。
+ * 被抹掉的恰恰是这个产品自称的唯一壁垒（反馈序列）与唯一记录资产（香历）。
+ *
+ * 入参写成宽松形状是有意的：migrate 拿到的是尚未校验的 Record<string, unknown>，
+ * 三个调用点必须用同一个函数，否则口径迟早再次漂移——这次的教训正是"同一条判据写了三遍"。
+ */
+export function hasOwnData(s: Record<string, unknown>): boolean {
+  const len = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+  const num = (v: unknown) => (typeof v === "number" ? v : 0);
+  return (
+    len(s.userPerfumes) > 0 ||
+    len(s.customPerfumes) > 0 ||
+    len(s.extPerfumes) > 0 ||
+    len(s.wearLog) > 0 ||
+    len(s.feedbacks) > 0 ||
+    num(s.swapCount) > 0 ||
+    num(s.dustyAdoptCount) > 0
+  );
 }
 
 /** 示例香柜装进来的那几项——enterDemo 与 resetToDemo 共用一份，避免两处各写一遍再漂移 */
@@ -212,6 +332,7 @@ export const useStore = create<State>()(
       scene: null,
       hydrated: false,
       hydrateError: null,
+      persistError: null,
       demo: false,
       demoDismissed: false,
       swapCount: 0,
@@ -303,6 +424,33 @@ export const useStore = create<State>()(
             return { ...u, lastWornAt: now, wornCount: (u.wornCount ?? 0) + (sameDay ? 0 : 1) };
           }),
         })),
+      snapshotAdopt: (id, day) => {
+        const s = get();
+        const u = s.userPerfumes.find((x) => x.perfumeId === id);
+        return {
+          perfumeId: id,
+          userPerfume: u ? { ...u } : null,
+          day,
+          wearEntry: s.wearLog.find((e) => e.d === day) ?? null,
+          swapCount: s.swapCount,
+          dustyAdoptCount: s.dustyAdoptCount,
+          swapAways: s.swapAways,
+        };
+      },
+      undoAdopt: (snap) =>
+        set((s) => ({
+          userPerfumes: s.userPerfumes.map((u) =>
+            u.perfumeId === snap.perfumeId && snap.userPerfume ? snap.userPerfume : u
+          ),
+          // 当天那条要么恢复成被覆盖前的样子，要么根本不该存在（这次采纳才建的）
+          wearLog: dedupeSortWear([
+            ...s.wearLog.filter((e) => e.d !== snap.day),
+            ...(snap.wearEntry ? [snap.wearEntry] : []),
+          ]),
+          swapCount: snap.swapCount,
+          dustyAdoptCount: snap.dustyAdoptCount,
+          swapAways: snap.swapAways,
+        })),
       // 同瓶同日重复反馈 → 以最新一条为准（刷新页面重复提交不再重复计入偏置）；
       // 窗口按瓶分桶（各 60 条）+ 全局 400 条，对 A 瓶狂点不再把 B 瓶的历史挤出窗口
       addFeedback: (fb) =>
@@ -326,7 +474,7 @@ export const useStore = create<State>()(
       // 这里再自查一遍：任何时候都不能盖掉用户自己的数据。
       enterDemo: (d) =>
         set((s) =>
-          s.demoDismissed || s.userPerfumes.length > 0 || s.customPerfumes.length > 0
+          s.demoDismissed || hasOwnData(s as unknown as Record<string, unknown>)
             ? s
             : { ...demoPayload(d), city: s.city ?? d.city }
         ),
@@ -366,7 +514,7 @@ export const useStore = create<State>()(
         const s = get();
         return JSON.stringify(
           {
-            version: 2,
+            version: EXPORT_VERSION,
             exportedAt: Date.now(),
             userPerfumes: s.userPerfumes,
             feedbacks: s.feedbacks,
@@ -420,6 +568,9 @@ export const useStore = create<State>()(
         } catch {
           return false;
         }
+        // 读盘失败时写入被冻结（保住盘上没读出来的字节）。用户导入了自己的备份，
+        // 就意味着这台机器上该有什么已经由他说了算——解冻，从此正常落盘。
+        writesFrozen = false;
         try {
           set((s) => ({
             userPerfumes,
@@ -436,6 +587,8 @@ export const useStore = create<State>()(
             // 导入自己的备份 = 这台机器从此属于用户，演示香柜退场且不再自动装载
             demo: false,
             demoDismissed: true,
+            // 盘上的内容已经由这次导入重新定义，读盘失败那条警告到此为止
+            hydrateError: null,
           }));
         } catch {
           // zustand 的 persist 是先改内存、再写盘，所以抛到这里时状态**已经换掉了**。
@@ -446,13 +599,57 @@ export const useStore = create<State>()(
         }
         return true;
       },
+      hasRescueBackup: () => {
+        try {
+          return !!safeLocalStorage()?.getItem(BACKUP_KEY);
+        } catch {
+          return false;
+        }
+      },
+      // 读盘失败时我们把原始字节另存到了 fencun-store.bak，但此前产品里没有任何入口去用它——
+      // 字节还在，用户却无从取回，等于没有恢复路径。
+      // 注意 .bak 存的是 persist 的包装形状 { state, version }，比导出文件多一层：
+      // 直接喂 importData 会因为顶层没有 userPerfumes 而被判成"不是我们的备份"。
+      restoreFromBackup: () => {
+        let inner: unknown;
+        try {
+          const raw = safeLocalStorage()?.getItem(BACKUP_KEY);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw) as { state?: unknown };
+          inner = parsed && typeof parsed === "object" && "state" in parsed ? parsed.state : parsed;
+        } catch {
+          return false;
+        }
+        return get().importData(JSON.stringify(inner));
+      },
     }),
     {
       name: "fencun-store",
-      // 服务端无 localStorage → 返回 undefined，persist 自动跳过；客户端正常持久化
-      storage: createJSONStorage(() =>
-        typeof window !== "undefined" ? window.localStorage : (undefined as unknown as Storage)
-      ),
+      // 服务端无 localStorage → 返回 undefined，persist 自动跳过；客户端正常持久化。
+      //
+      // ⚠️ setItem 必须自己接住异常，原因有两层：
+      //   ① zustand 的 persist 把 set 包成「先改内存、再写盘」，两层包装都不 try/catch。
+      //      写盘抛错时内存已经换掉 → UI 刷成"已生效"，盘上零字节，用户毫不知情。
+      //      读盘失败那一半早就有 hydrateError + SiteNotice 这条告知通道了，
+      //      写盘这一半一直没接上——这是设计缺口，不是取舍。
+      //   ② 异常会从 onClick 里逃逸，打断事件处理器：`set()` 之后的语句一律不执行。
+      //      实测两处可见后果——SearchAdd 的「+ 入柜」永久停在「取数据…」且 disabled；
+      //      香柜的 8 秒撤销条根本不出现，删掉的瓶子连后悔入口都没有。
+      //      React 的错误边界不接管事件处理器抛出的异常，app/error.tsx 也不会出现。
+      // 所以这里吞掉异常并立起 persistError，由 SiteNotice 统一告知。
+      storage: createJSONStorage(() => {
+        if (typeof window === "undefined") return undefined as unknown as Storage;
+        const ls = safeLocalStorage();
+        if (!ls) return undefined as unknown as Storage;
+        return guardedStorage(
+          ls,
+          (e) => {
+            // 只记第一次：配额满之后每一次写入都会抛，反复 setState 只会制造重渲染风暴
+            if (!useStore.getState().persistError) useStore.setState({ persistError: String(e) });
+          },
+          () => !writesFrozen
+        );
+      }),
       // 跳过自动 hydrate，改由 AppProvider 在挂载后手动 rehydrate，避免 SSR/客户端首屏不一致
       skipHydration: true,
       partialize: (s) => ({
@@ -476,14 +673,13 @@ export const useStore = create<State>()(
       migrate: (persisted, from) => {
         const s = (persisted ?? {}) as Record<string, unknown>;
         // v0 → v1：新增 demo / demoDismissed。
-        // 判据是"这台机器上有没有他自己的瓶"，不是"是不是老记录"——
+        // 判据是"这台机器上有没有属于他自己的东西"，不是"是不是老记录"——
         // 一律置 dismissed 会把「来过一次、柜子还空着」的人也挡在演示之外，
-        // 而那恰恰是最该看到演示的人；反过来，已经有瓶的人绝不能被装上别人的六瓶。
+        // 而那恰恰是最该看到演示的人；反过来，留下过任何痕迹的人绝不能被装上别人的六瓶。
+        // "痕迹"包含香历与反馈：柜清空了但香历还在，是产品自己承诺过的合法状态（见 hasOwnData）。
         if (from < 1) {
-          const own = Array.isArray(s.userPerfumes) ? s.userPerfumes.length : 0;
-          const custom = Array.isArray(s.customPerfumes) ? s.customPerfumes.length : 0;
           s.demo = false;
-          s.demoDismissed = own > 0 || custom > 0;
+          s.demoDismissed = hasOwnData(s);
         }
         return s;
       },
@@ -497,11 +693,14 @@ export const useStore = create<State>()(
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
           try {
-            const raw = window.localStorage.getItem("fencun-store");
-            if (raw) window.localStorage.setItem("fencun-store.bak", raw);
+            const raw = safeLocalStorage()?.getItem("fencun-store");
+            if (raw) safeLocalStorage()?.setItem(BACKUP_KEY, raw);
           } catch {
             // 备份本身失败（存储被禁/配额满）也不能让流程卡住，错误标志仍要立起来
           }
+          // ⚠️ 顺序不能反。下面这句 setState 会被 persist 立刻写回盘——
+          // 不先冻结，止损代码自己就完成了它要阻止的那次覆盖（见 writesFrozen 的说明）。
+          writesFrozen = true;
           useStore.setState({ hydrated: true, hydrateError: String(error) });
           return;
         }

@@ -84,7 +84,6 @@ export interface Context {
   formality?: number; // 0..1
   intimacy?: "close" | "neutral" | "broadcast";
   avoid?: string[]; // too_sweet | too_strong | too_formal | cloying | too_casual
-  notePreference?: string[];
   tension?: "none" | "low" | "high"; // 关系张力（前任婚礼/谈判…）——存在时用户一定愿意说
   duration?: 2 | 4 | 6 | 9; // 在场时长档位（只允许档位值，禁止精确小时——伪精确红线）
   meal?: boolean; // 餐桌场合：压制浓香/甜香的关键开关（气味干扰味觉）
@@ -107,7 +106,6 @@ export interface ScenePatch {
   formality?: number;
   intimacy?: "close" | "neutral" | "broadcast";
   avoid?: string[];
-  notePreference?: string[];
   tension?: "none" | "low" | "high";
   duration?: 2 | 4 | 6 | 9;
   meal?: boolean;
@@ -150,6 +148,13 @@ export interface ScoredPick {
    * 于是 20℃ 多云的一天也会弹出「天气突变」，正文却在说会议室或反季。
    */
   avoidCause: AvoidCause | null;
+  /**
+   * **触发这次 avoid 的那一条风险原文**（其余裁决为 null，取不到对应风险时也为 null）。
+   * 与 avoidCause 同源取出，是同一条纪律的最后一段：预警卡的眉标按成因分岔，
+   * 正文若还取 risks[0]，眉标写「季节不对」、正文却在讲高温——两句都为真，
+   * 归因链却断了。下游一律用它，取不到才退按成因写死的兜底句。
+   */
+  avoidRisk: string | null;
 }
 
 /** 判「今天不建议」的四种成因，与 computeVerdict 的四条触发一一对应 */

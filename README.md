@@ -23,8 +23,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v9.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v9.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v11.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v11.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -61,7 +61,7 @@
 - 🎯 **今日之选 + 怎么用** — 情境自动感知（实时天气 + 此刻时段），从你的香柜打分推一瓶，附完整分寸建议。
 - ⚖️ **不迁就的用香裁决** — `good / caution / avoid` 三档。真不合适就先说「今天不建议这瓶」，再告诉你坚持要用时怎么补救。
 - 💬 **自然语言场景** — 输入「去前任婚礼」「第一次见投资人」，DeepSeek 解析出场合、正式度、关系张力、是否饭局等，喂进打分与用法。
-- 🔔 **发现型钩子** — 主动提醒，而非等你来问：常喷的那瓶今天会翻车（天气突变预警）、搁置已久的那瓶今天正合适（吃灰提醒）。
+- 🔔 **发现型钩子** — 主动提醒，而非等你来问：常喷的那瓶今天会翻车（急性天气 / 反季 / 场合预警，眉标按成因分岔）、搁置已久的那瓶今天正合适（吃灰提醒）。
 - 🔁 **反馈闭环** — 答一句「今天，刚好吗」，个人偏移按瓶收敛：嫌冲，下次就少喷；答「刚好」，就记住这套配置直接复用；高温天答「淡了」，归因给天气，不冤枉香水。
 - 🔂 **轮换有度** — 昨天刚喷的今天自然让位、久置的自然浮起，兑现「今天喷哪瓶每天不一样」。
 - 📖 **香历** — 采纳或反馈的每一瓶自动落进月历（色点 = 当日主香调），点开任一天是当日快照，可补一句话手记。无香的日子留白，不做打卡不做断签。
@@ -71,9 +71,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v9.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/journal-v9.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v9.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v11.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v11.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v11.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -198,9 +198,10 @@ src/
                         / 手动记一瓶(ManualAdd) …
   lib/                  types · scoring(打分) · usage(用法) · recommend(编排)
                         · journal(香历) · perfumes(统一搜索 + 扩展目录)
-                        · numguard(数字白名单) · season · hooks · store · ratelimit
+                        · numguard(数字白名单) · nudges(发现型钩子，纯函数)
+                        · season · hooks · store · ratelimit
                         · demo(演示香柜黄金集，纯函数)
-scripts/                零依赖数据构建管线 + 截图 / 分享素材脚本
+scripts/                零依赖数据构建管线 + 截图 / 分享素材 / 依赖审计门禁
 data/zh-map/            英文→中文映射（accords / notes / brands / names）
 docs/                   产品方案 · 领域规则手册 · 数据工程 · 声音与文案 · 截图
 ```

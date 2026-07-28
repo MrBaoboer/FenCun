@@ -139,3 +139,24 @@ test("演示香柜：反馈都落在它真的穿过的那天，不出现没穿�
     );
   }
 });
+
+test("演示香柜：同一天同一瓶，香历与用香记录必须是同一个读数", () => {
+  // wearLog 与 feedbacks 是两个独立数组、各自 map，此前各拿自己的数组下标去取天气样本，
+  // 于是同一件事在香历里是「31℃ · 晴」、在「我的 · 用香记录」里却是 28℃——
+  // 同一份门面数据给出两个互相矛盾的读数，而其中一个已经印进 README 引用的截图。
+  // 26↔28、31↔26 还都跨了 tempBand 边界，连「成功配置复用」的命中键都会对不上。
+  const d = buildDemoState(catalog, NOW)!;
+  const byDay = new Map(d.wearLog.map((e) => [`${e.perfumeId}@${e.d}`, e]));
+  for (const f of d.feedbacks) {
+    const w = byDay.get(`${f.perfumeId}@${dateKey(f.at)}`);
+    assert.ok(w, `反馈没有对应的穿戴记录：${f.perfumeId}`);
+    assert.equal(f.context.tempC, w!.tempC, `同一天的温度对不上：香历 ${w!.tempC}℃ vs 反馈 ${f.context.tempC}℃`);
+    assert.equal(f.context.feel, w!.feel, "同一天的体感档对不上");
+  }
+});
+
+test("演示香柜：给定 now 必得同一份状态（纯函数，可用于截图脚本）", () => {
+  const a = JSON.stringify(buildDemoState(catalog, NOW));
+  const b = JSON.stringify(buildDemoState(catalog, NOW));
+  assert.equal(a, b);
+});

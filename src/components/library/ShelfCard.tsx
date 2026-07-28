@@ -48,7 +48,8 @@ export function ShelfCard({
         <button
           type="button"
           onClick={onRemove}
-          className="relative z-10 -m-2 -mr-3 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
+          // 删除入口，热区补到 44——比导航更该给足：点错的代价是一瓶香水从柜里消失
+          className="relative z-10 -m-2 -mr-3 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
           aria-label="移出香柜"
           title="移出香柜"
         >

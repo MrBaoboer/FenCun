@@ -26,10 +26,55 @@ test("CI blocks high-severity vulnerabilities in shipped dependencies", async ()
   );
 
   assert.ok(verifyJob, "CI workflow must define the verify job");
-  // 允许 run 之前有注释行（记录 --omit=dev 的理由），但 Install → Dependency audit
+  // 允许 run 之前有注释行（记录门禁口径的理由），但 Install → Dependency audit
   // 的相邻顺序与命令本身仍然锁死
   assert.match(
     verifyJob[1],
-    /^      - name: Install\n        run: npm ci\n      - name: Dependency audit\n(?:        #[^\n]*\n)*        run: npm audit --audit-level=high --omit=dev$/m,
+    /^      - name: Install\n        run: npm ci\n      - name: Dependency audit\n(?:        #[^\n]*\n)*        run: node scripts\/audit-gate\.mjs$/m,
   );
+});
+
+test("每一条依赖豁免都必须写清为什么无解、什么条件下能删", async () => {
+  // 门禁从 `--omit=dev`（整棵开发依赖树的匿名豁免）换成具名清单之后，
+  // 真正要守的就变成了这件事：清单不许悄悄变长，也不许出现一条没写理由的豁免。
+  const src = await readFile(new URL("./audit-gate.mjs", import.meta.url), "utf8");
+  const entries = [...src.matchAll(/id:\s*"(GHSA-[\w-]+)"/g)].map((m) => m[1]);
+  assert.ok(entries.length > 0, "豁免清单为空时应当直接删掉这套机制，而不是留一个空壳");
+  for (const id of entries) {
+    const block = src.slice(src.indexOf(`id: "${id}"`));
+    const why = block.match(/why:\s*"([^"]+)"/)?.[1] ?? "";
+    const until = block.match(/until:\s*"([^"]+)"/)?.[1] ?? "";
+    assert.ok(why.length >= 20, `${id} 缺少「为什么无解」`);
+    assert.ok(until.length >= 10, `${id} 缺少「什么条件下能删」`);
+  }
+  // 门禁必须是全树的：一旦有人把 --omit=dev 那类整棵子树的匿名豁免加回 CI，这条断言就红
+  const workflow = await readFile(workflowUrl, "utf8");
+  assert.doesNotMatch(workflow, /--omit=dev/);
+});
+
+test("新增的测试文件不许静默不跑：npm test 的清单必须覆盖全仓", async () => {
+  // package.json 里的 test 脚本是**手写白名单**而非模式匹配。贡献指南明确要求
+  // 「引擎改动必须附回归测试」，而新贡献者建一个 src/lib/usage.test.ts 让它本地通过之后，
+  // npm test 与 CI 都不会执行它——绿灯、零信号，是最难察觉的那种失败形态。
+  //
+  // 这里不改成 glob：`node --test` 的 glob 展开在不同 Node 版本上行为不一（CI 跑的是 22，
+  // 本机是 24），把门禁的可靠性押在运行时语义上不划算。改成让清单漏一个就红。
+  const { readdir } = await import("node:fs/promises");
+  const root = new URL("../", import.meta.url);
+  const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  const script = pkg.scripts.test;
+
+  const found = [];
+  const walk = async (rel) => {
+    for (const e of await readdir(new URL(rel, root), { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+      if (e.isDirectory()) await walk(`${rel}${e.name}/`);
+      else if (/\.test\.(ts|mjs)$/.test(e.name)) found.push(`${rel}${e.name}`);
+    }
+  };
+  await walk("src/");
+  await walk("scripts/");
+
+  const missing = found.filter((f) => !script.includes(f));
+  assert.deepEqual(missing, [], `这些测试文件不在 npm test 的清单里，永远不会被执行：${missing.join(", ")}`);
 });

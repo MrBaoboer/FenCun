@@ -25,6 +25,12 @@ export default function LibraryPage() {
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   const handleRemove = (id: number, name: string) => {
+    // 撤销槽只有一个：8 秒内连删两瓶，第二次 setUndoItem 直接覆盖第一次，
+    // 第一瓶的 RemovedBundle 就没有任何持有者了。目录香还能重搜回来（元数据归零），
+    // 手动记的那瓶（负数 id）则是香名、品牌、香调、扩散档一次性永久丢失——
+    // 正是 store.ts 注释自己写的「删掉就再也搜不回来……不给后悔的机会是不可接受的」。
+    // 所以只对这一类拦一次：不可恢复的走确认，其余照旧走 8 秒撤销（弹窗太吵的取舍不变）。
+    if (id < 0 && !window.confirm(`「${name}」是你手动记的，删掉就找不回来了。确定移出香柜？`)) return;
     const bundle = removePerfume(id);
     if (detailId === id) setDetailId(null);
     setUndoItem({ name, bundle });
