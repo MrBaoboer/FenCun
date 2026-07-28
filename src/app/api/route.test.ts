@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { heuristic, PatchSchema, unionFragranceFree } from "./parse-intent/route";
-import { template, type ExplainInput } from "./explain/route";
+import { template, NEGATIVE_VERDICT_RE, type ExplainInput } from "./explain/route";
 import { carriesNumber, extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
 
 // ---------- parse-intent · 无香场合红线 ----------
@@ -117,8 +117,9 @@ function mkInput(over: Partial<ExplainInput> = {}): ExplainInput {
 test("降级模板：avoid 必须先把「不建议」说出口，不得圆成可用", () => {
   // 这正是路由里 avoid 语义防线（正则）判定 LLM 输出是否合格的那条标准——
   // 模板自己必须无条件满足它，否则回退之后仍然说不出那句话。
+  // 用路由导出的那个符号，不再抄第四份——三份字面量此前已经漂移过一次（good 那份少了两个分支）
   const t = template(mkInput({ verdict: "avoid", risks: ["大家更多在冬季用它，今天用会有点反季。"] }));
-  assert.match(t, /不建议|不太建议|不太合适|不合适|不宜|慎|其实不/);
+  assert.match(t, NEGATIVE_VERDICT_RE);
   assert.ok(t.includes("烟草香草"), "没点名是哪一瓶");
   assert.ok(t.includes("1 下"), "没给出降到最低的具体用法");
 });

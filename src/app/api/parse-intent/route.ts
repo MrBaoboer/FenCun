@@ -114,6 +114,12 @@ export function unionFragranceFree(
 }
 
 export async function POST(req: NextRequest) {
+  // 与 explain 同理：限流挡的是「打不打 DeepSeek」，挡不住「读不读这个 body」。
+  // 这条路由只收一个 ≤120 字的 text，1KB 之外一律不读。
+  const len = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(len) && len > 1024) {
+    return NextResponse.json({ error: "too_large" }, { status: 413 });
+  }
   let text = "";
   try {
     text = (((await req.json()) as { text?: string })?.text ?? "").trim();
