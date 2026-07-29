@@ -23,6 +23,7 @@ export function SiteNotice() {
   const hydrated = useStore((s) => s.hydrated);
   const hydrateError = useStore((s) => s.hydrateError);
   const persistError = useStore((s) => s.persistError);
+  const storageWiped = useStore((s) => s.storageWiped);
   const restoreFromBackup = useStore((s) => s.restoreFromBackup);
   const hasRescueBackup = useStore((s) => s.hasRescueBackup);
   const [rescue, setRescue] = useState<"idle" | "failed" | "ok">("idle");
@@ -55,6 +56,17 @@ export function SiteNotice() {
         ) : (
           <> 可以到「我的」里导入你的备份文件。</>
         )}
+      </Banner>
+    );
+
+  // 盘被抹掉：排在写盘失败之前，因为这一条的紧迫性更高——内存里这份是最后一份了。
+  // 措辞刻意不追问是谁抹的（浏览器清除数据、另一标签页、扩展），只说清现状与唯一的出路。
+  if (storageWiped)
+    return (
+      <Banner>
+        这台机器上的记录<b className="font-bold">已被清空</b>——这一页里的内容是最后一份，
+        为了不覆盖你刚做的清除，它<b className="font-bold">不会</b>再存回去。想留下就到「我的」里导出一份；
+        不想留，关掉这一页即可。
       </Banner>
     );
 

@@ -353,15 +353,34 @@ test("多标签页：另一页写盘要认，读盘出过错时一切自动动�
   // 浏览器事件在 node --test 下造不出来，但判据可以。
   const { shouldRehydrateOnStorage, STORE_KEY } = await import("./store");
 
-  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null), true, "另一页写了我们的键就要重读");
-  // localStorage.clear() 的事件 key 是 null，同样要认——那时盘上已空，
-  // 继续按旧内存态写回去只会造出一份半新半旧的数据
-  assert.equal(shouldRehydrateOnStorage(null, null), true, "整清也要认");
-  assert.equal(shouldRehydrateOnStorage("别人的键", null), false, "无关的键不理会");
-  assert.equal(shouldRehydrateOnStorage(`${STORE_KEY}.bak`, null), false, "另存的备份不是状态源");
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "{}", null), true, "另一页写了我们的键就要重读");
+  assert.equal(shouldRehydrateOnStorage("别人的键", "{}", null), false, "无关的键不理会");
+  assert.equal(
+    shouldRehydrateOnStorage(`${STORE_KEY}.bak`, "{}", null),
+    false,
+    "另存的备份不是状态源"
+  );
   // 读盘出过错时写入已被冻结（见 onRehydrateStorage），这时任何自动重读都要停手
-  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "boom"), false, "读盘出过错就不许再自动动");
-  assert.equal(shouldRehydrateOnStorage(null, "boom"), false);
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "{}", "boom"), false, "读盘出过错就不许再自动动");
+});
+
+test("盘被抹掉不许走重读——重读会把内存里这一份原样写回去，等于撤销用户的清除", async () => {
+  // 这条用例此前是反的：它断言「整清也要认」，而"认"在实现上就是 rehydrate。
+  // zustand 在盘上取不到值时 merge(undefined, get()) 保留内存态，随后 onRehydrateStorage
+  // 的成功分支一句 setState 又被 persist 立刻写回盘。实测：331 字节（含手记）→ clear()
+  // → 盘上空 → rehydrate() → 331 字节连同手记原样回来。「清除本站数据」对这个产品不生效。
+  const { shouldRehydrateOnStorage, isStorageWipe, STORE_KEY } = await import("./store");
+
+  // localStorage.clear() 的事件 key 是 null
+  assert.equal(isStorageWipe(null, null), true, "clear() 是抹除");
+  // removeItem(STORE_KEY) 给出 key=我们的键、newValue=null
+  assert.equal(isStorageWipe(STORE_KEY, null), true, "removeItem 也是抹除");
+  assert.equal(isStorageWipe(STORE_KEY, "{}"), false, "有新值就是另一页写盘，不是抹除");
+  assert.equal(isStorageWipe("别人的键", null), false, "别人的键被删与我们无关");
+
+  // 抹除的两种形态都不许走重读
+  assert.equal(shouldRehydrateOnStorage(null, null, null), false, "clear() 不许重读");
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null, null), false, "removeItem 不许重读");
 });
 
 test("撤销要能回滚**一串**采纳，不只是最后一瓶", async () => {

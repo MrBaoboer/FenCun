@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test src/lib/engine.test.ts src/lib/journal.test.ts src/lib/nudges.test.ts src/lib/search.test.ts src/lib/store.test.ts src/lib/demo.test.ts src/app/api/route.test.ts src/app/theme.test.ts scripts/ci-workflow.test.mjs",
+    "test": "node --import tsx --test src/lib/engine.test.ts src/lib/journal.test.ts src/lib/nudges.test.ts src/lib/search.test.ts src/lib/store.test.ts src/lib/store-wipe.test.ts src/lib/demo.test.ts src/app/api/route.test.ts src/app/theme.test.ts scripts/ci-workflow.test.mjs",
     "build:data": "node scripts/build.mjs",
     "build:ext": "node scripts/build-ext.mjs",
     "extract:terms": "node scripts/extract-terms.mjs",
