@@ -23,8 +23,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v12.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v12.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v13.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v13.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -71,9 +71,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v12.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/journal-v12.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v12.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v13.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v13.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v13.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
