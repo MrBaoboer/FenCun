@@ -34,7 +34,7 @@ export function ShelfCard({
           {np.primary}
         </span>
       </button>
-      <div className="mt-1 truncate text-[0.72rem] text-ink-faint">
+      <div className="mt-1 truncate text-[0.74rem] text-ink-faint">
         {np.secondary ? <span className="en-italic">{np.secondary}</span> : null}
         {np.secondary ? " · " : ""}
         {p.brandZh}

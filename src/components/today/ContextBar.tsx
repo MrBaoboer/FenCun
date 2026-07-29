@@ -51,7 +51,7 @@ function CityForm({ onDone }: { onDone: () => void }) {
           // 这里的 placeholder 有 11 个汉字，而 globals.css 又把 input 的字号钉在 16px
           //（防 iOS 聚焦缩放），于是 320px 宽的手机上「确定」按钮会被挤出卡片。
           // 定位被拒之后，这个表单是唯一的补救入口。
-          className="serif min-w-0 flex-1 border-b border-field bg-transparent px-1 py-2 text-sm text-ink outline-none focus:border-accent"
+          className="serif min-w-0 flex-1 border-b border-field bg-transparent px-1 py-2 text-sm text-ink focus:border-accent"
         />
         <button type="submit" disabled={busy} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
           {busy ? "…" : "确定"}
@@ -81,7 +81,7 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
       {/* 顶行：此刻 + 日期 */}
       <div className="flex items-center justify-between">
         <Eyebrow>此刻 · Now</Eyebrow>
-        <span className="disp text-[0.72rem] tracking-[0.1em] text-ink-faint">{dateText}</span>
+        <span className="disp text-[0.74rem] tracking-[0.1em] text-ink-faint">{dateText}</span>
       </div>
 
       {ctx && !ctx.approximate ? (
@@ -97,7 +97,7 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
             aria-expanded={editing}
           >
             <LocationPin />
-            <span className="serif text-[0.98rem] font-semibold text-ink group-hover:text-accent">
+            <span className="serif text-[1rem] font-semibold text-ink group-hover:text-accent">
               {ctx.city}
             </span>
             <svg width="11" height="11" viewBox="0 0 24 24" className={`text-ink-faint transition-transform ${editing ? "rotate-180" : ""}`}>
@@ -109,12 +109,12 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
               <div className="serif truncate text-[1.55rem] font-bold leading-tight text-ink">
                 {weatherGreeting(ctx)}
               </div>
-              <p className="mt-2 text-[0.78rem] text-ink-faint">
+              <p className="mt-2 text-[0.8rem] text-ink-faint">
                 湿度 {Math.round(ctx.humidity)}% · 体感{FEEL_ZH[ctx.feel]}
               </p>
               {/* 回南天：不改打分，只说一句真正有用的。香水盖不住衣物本身的霉潮底味 */}
               {mustyAir(ctx.tempC, ctx.humidity) && (
-                <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
+                <p className="serif mt-1.5 text-[0.8rem] leading-relaxed text-ink-faint">
                   这种回潮天，先闻一下要穿的那件衣服——香水盖不住霉潮的底味。
                 </p>
               )}
@@ -138,14 +138,13 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
              它不会卡死：store 的 onRehydrateStorage 在成功与失败两条路上都会置
              hydrated，AppProvider 的 effect 必然走到 fetchByCity 或 resolveByCoords 之一。 */
       locState === "locating" || locState === "idle" ? (
-        <p className="serif mt-3 text-sm text-ink-faint">正在感知此刻的天气与体感…</p>
+        <p className="serif mt-3 text-sm text-ink-faint">正在感知此刻的天气…</p>
       ) : (
         <div className="mt-2">
           <div className="flex items-center gap-1.5">
             <LocationPin />
             <span className="serif text-[0.95rem] font-medium text-ink-soft">没拿到你的位置</span>
           </div>
-          <p className="serif mt-1.5 text-[0.88rem] text-ink-faint">你在哪座城市？氛寸来感知今天的天气。</p>
           <CityForm onDone={() => {}} />
           {/* 全站唯一没补热区的控件，实测只有 16px 高（WCAG 2.5.8 AA 要求 24px），
               而它恰好在"定位失败"这条恢复路径上——最需要点得中的时候最难点中。

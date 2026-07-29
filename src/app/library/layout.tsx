@@ -8,7 +8,7 @@ import { pageMetadata } from "@/app/page-meta";
 
 export const metadata = pageMetadata({
   title: "香柜 · 氛寸",
-  description: "你已有的香水都在这里：搜名字秒添加，吃灰的会被标出来。",
+  description: "你已有的香水都在这里：搜名字秒添加，吃灰的会标出来。",
   path: "/library",
 });
 

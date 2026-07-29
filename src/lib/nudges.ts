@@ -28,7 +28,7 @@ const NEVER_MS = 14 * DAY_MS; // 从没用过、入柜超两周
 // risks 为空时的兜底措辞。也必须按成因分岔——
 // 原来无论什么成因都写「今天的天气不太适合它」，正是眉标那个错误的同一处根因。
 const CAUSE_FALLBACK_REASON: Record<Exclude<AvoidCause, "fragrance_free">, string> = {
-  weather: "今天的体感对它不太友好",
+  weather: "今天的体感不太适合它",
   season: "它更偏另一个季节，今天用会有点反季",
   venue: "它的扩散偏强，今天这类封闭场合容易过头",
 };

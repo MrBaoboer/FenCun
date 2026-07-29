@@ -21,15 +21,12 @@ export default function ErrorPage({
         <h1 className="serif mt-3 text-[1.4rem] font-bold leading-snug text-ink">
           出了点问题，这不是你的错
         </h1>
-        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.92rem] leading-relaxed text-ink-soft">
-          页面遇到了一个意外错误。你的香柜与全部反馈都存在本机浏览器里，没有丢。
+        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
+          你的香柜与反馈都存在本机，没有丢。
         </p>
         <button onClick={reset} className="btn-primary mt-6 px-6 py-3 text-[0.9rem]">
           再试一次
         </button>
-        <p className="mx-auto mt-4 max-w-xs text-[0.74rem] leading-relaxed text-ink-faint">
-          重试只会清掉这次会话的临时选择，比如刚手动换上的那瓶。
-        </p>
       </div>
     </div>
   );

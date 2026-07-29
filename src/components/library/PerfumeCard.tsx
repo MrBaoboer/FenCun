@@ -31,9 +31,9 @@ function Tiers({ notes }: { notes: Perfume["notes"] }) {
   if (!shown.length) return null;
   return (
     <div className="flex flex-col gap-2">
-      <Eyebrow className="eyebrow-mute">气味档案</Eyebrow>
+      <Eyebrow className="eyebrow-mute">前中后调</Eyebrow>
       {shown.map(([label, a]) => (
-        <div key={label} className="flex gap-3 text-[0.86rem]">
+        <div key={label} className="flex gap-3 text-[0.85rem]">
           <span className="serif w-9 shrink-0 text-ink-faint">{label}</span>
           <span className="serif text-ink-soft">{a.join("、")}</span>
         </div>
@@ -49,7 +49,7 @@ function Stat({ label, value }: { label: string; value: string }) {
           还叠着 0.24em 字距——322df67 那轮只改了 ui.tsx 那份 Stat，漏了这份局部副本。
           回到 .eyebrow 自己的字号。 */}
       <span className="eyebrow eyebrow-mute">{label}</span>
-      <span className="serif text-[0.98rem] font-bold text-ink">{value}</span>
+      <span className="serif text-[1rem] font-bold text-ink">{value}</span>
     </div>
   );
 }
@@ -92,7 +92,7 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         </p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {p.styleTags.map((t) => (
-            <span key={t} className="serif rounded-pill border border-line-strong px-2.5 py-0.5 text-[0.72rem] text-ink-soft">
+            <span key={t} className="serif rounded-pill border border-line-strong px-2.5 py-0.5 text-[0.74rem] text-ink-soft">
               {t}
             </span>
           ))}
@@ -101,7 +101,7 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         <div className="my-5 grid grid-cols-4 gap-2 border-y border-line py-4">
           <Stat label="社交距离" value={SILLAGE_WORD[p.sillageTier]} />
           <Stat label="留香" value={durationShort(p.longevity)} />
-          <Stat label="适合季节" value={seasonSummary(p)} />
+          <Stat label="季节" value={seasonSummary(p)} />
           <Stat label="时段" value={daypartSummary(p)} />
         </div>
 
@@ -119,13 +119,13 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
         {/* 归因随「这一档背后有没有票」变。手动记的那瓶是用户自己勾的档，
             国货白名单里 sillage 为 null 的那 444 条则一票都没有——
             对这两类说「来自社区投票」是凭空造了一份不存在的数据 */}
-        <p className="mt-5 text-[0.72rem] leading-relaxed text-ink-faint">
+        <p className="mt-5 text-[0.74rem] leading-relaxed text-ink-faint">
           社交距离「{DISTANCE_LABEL[p.sillageTier]}」
           {p.custom
-            ? "是你自己填的扩散档"
+            ? "是你自己填的"
             : p.lowVotes || p.sillage == null
-              ? "这瓶社区数据还少，先按中庸档估"
-              : "来自社区投票，是多数评价者的感受"}
+              ? "只是估计，这瓶投票的人还少"
+              : "来自社区投票"}
           。
         </p>
       </div>

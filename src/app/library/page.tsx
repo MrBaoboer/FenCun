@@ -31,7 +31,7 @@ export default function LibraryPage() {
     // 手动记的那瓶（负数 id）则是香名、品牌、香调、扩散档一次性永久丢失——
     // 正是 store.ts 注释自己写的「删掉就再也搜不回来……不给后悔的机会是不可接受的」。
     // 所以只对这一类拦一次：不可恢复的走确认，其余照旧走 8 秒撤销（弹窗太吵的取舍不变）。
-    if (id < 0 && !window.confirm(`「${name}」是你手动记的，删掉就找不回来了。确定移出香柜？`)) return;
+    if (id < 0 && !window.confirm(`「${name}」删掉就找不回来了。确定移出香柜？`)) return;
     const bundle = removePerfume(id);
     if (detailId === id) setDetailId(null);
     setUndoItem({ name, bundle });
@@ -51,7 +51,7 @@ export default function LibraryPage() {
           <Eyebrow>香柜 · Shelf</Eyebrow>
           <h1 className="serif mt-1.5 text-[1.7rem] font-bold text-ink">我的香柜</h1>
         </div>
-        <span className="disp text-[0.78rem] tracking-wide text-ink-faint">
+        <span className="disp text-[0.8rem] tracking-wide text-ink-faint">
           {!hydrated || (catalog === null && !catalogError)
             ? "—"
             : lib.length > 0
@@ -73,8 +73,8 @@ export default function LibraryPage() {
         <div className="card px-6 py-12 text-center">
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
             {userPerfumes.length > lib.length
-              ? `香水目录没加载出来（可能是网络波动），有 ${userPerfumes.length - lib.length} 瓶暂时取不出来。它们都还在，没有丢。`
-              : "香水目录没加载出来（可能是网络波动），现在搜什么都会显示「没搜到」。重新加载试试；也可以直接「手动记一瓶」，那条路不需要目录。"}
+              ? `香水目录没加载出来，有 ${userPerfumes.length - lib.length} 瓶暂时取不出来。`
+              : "香水目录没加载出来，现在搜不出结果。要记一瓶，用搜索框里的「手动记一瓶」。"}
           </p>
           <button onClick={retryCatalog} className="btn-primary mt-4 px-6 py-3 text-[0.9rem]">
             重新加载
@@ -90,8 +90,7 @@ export default function LibraryPage() {
         <div className="card px-6 py-12 text-center">
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
             香柜还空着<br />
-            在上面搜一搜你拥有的香水<br />
-            品牌、香名、香调都能搜，如「香奈儿」「玫瑰」「木质」
+            在上面搜一搜你拥有的香水
           </p>
         </div>
       ) : (
@@ -123,7 +122,7 @@ export default function LibraryPage() {
           role="status"
           className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
         >
-          <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
+          <span className="serif min-w-0 truncate text-[0.85rem] text-ink-soft">
             已把「{undoItem.name}」移出香柜
           </span>
           <button
@@ -132,7 +131,7 @@ export default function LibraryPage() {
               if (undoTimer.current) clearTimeout(undoTimer.current);
               setUndoItem(null);
             }}
-            className="shrink-0 text-[0.86rem] font-semibold text-accent underline-offset-4 hover:underline"
+            className="shrink-0 text-[0.85rem] font-semibold text-accent underline-offset-4 hover:underline"
           >
             撤销
           </button>

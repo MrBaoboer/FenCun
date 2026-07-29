@@ -1,7 +1,7 @@
 "use client";
 // 根级错误边界。app/error.tsx 只包 page 段，接不住根 layout / AppProvider / SiteChrome
 // 自己抛出的错误——那时落到的是 Next 内置的英文 500 页，连 lang="zh-CN" 都没有，
-// error.tsx 里那句「你的香柜与全部反馈都存在本机浏览器里，没有丢」也不会出现。
+// error.tsx 里那句「你的香柜与反馈都存在本机，没有丢」也不会出现。
 // 而那句话恰恰是根级崩溃时最该出现的一句。
 //
 // global-error 必须自带 <html>/<body>：它替换的是整个文档。
@@ -58,7 +58,7 @@ export default function GlobalError({
             出了点问题，这不是你的错
           </h1>
           <p style={{ fontSize: "0.92rem", lineHeight: 1.75, opacity: 0.75, margin: "0.7rem 0 0" }}>
-            页面遇到了一个意外错误。你的香柜与全部反馈都存在本机浏览器里，没有丢。
+            你的香柜与反馈都存在本机，没有丢。
           </p>
           <button
             onClick={reset}

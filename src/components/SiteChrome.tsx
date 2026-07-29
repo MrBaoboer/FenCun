@@ -98,7 +98,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
                 key={n.href}
                 href={n.href}
                 aria-current={active ? "page" : undefined}
-                className={`serif rounded-pill px-4 py-2 text-[0.92rem] transition-colors ${
+                className={`serif rounded-pill px-4 py-2 text-[0.9rem] transition-colors ${
                   active ? "bg-sunken font-semibold text-ink" : "text-ink-faint"
                 }`}
               >

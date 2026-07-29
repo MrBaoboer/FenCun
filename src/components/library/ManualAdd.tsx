@@ -96,22 +96,19 @@ export function ManualAdd({
 
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
-      <p className="serif text-[0.82rem] leading-relaxed text-ink-faint">
-        没搜到也能记下来。挑 1–3 个最像它的香调，推荐就会带上它。
-      </p>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="香水名（必填）"
         maxLength={60}
-        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm focus:border-accent"
       />
       <input
         value={brand}
         onChange={(e) => setBrand(e.target.value)}
         placeholder="品牌（选填）"
         maxLength={40}
-        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm focus:border-accent"
       />
       <div>
         <p className="mb-1.5 text-[0.74rem] text-ink-faint">它闻起来像（选 1–3 个）</p>
@@ -164,7 +161,7 @@ export function ManualAdd({
           onClick={save}
           className="btn-primary flex-1 py-2.5 text-[0.88rem] disabled:opacity-50"
         >
-          记下这瓶，入柜
+          记下这瓶
         </button>
       </div>
     </div>

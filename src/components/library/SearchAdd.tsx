@@ -159,9 +159,9 @@ export function SearchAdd() {
               setFocused(false);
             }
           }}
-          placeholder="搜香名 / 品牌 / 香调，点一下就入柜"
+          placeholder="搜香名 / 品牌 / 香调"
           autoComplete="off"
-          className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
+          className="w-full bg-transparent text-sm placeholder:text-ink-faint"
         />
         {q && (
           // 热区：× 本身只有 9.7px 宽，触屏上基本要瞄准才点得到（WCAG 2.5.8 AA 下限 24px）。
@@ -178,7 +178,7 @@ export function SearchAdd() {
       {/* 结果条数对读屏用户此前完全静默——「搜名字秒添加」是产品主路径，
           不该只有看得见的人知道有几条可选。 */}
       <p aria-live="polite" className="sr-only">
-        {open ? (items.length > 0 ? `${items.length} 条结果` : "没有匹配的结果") : ""}
+        {open ? (items.length > 0 ? `${items.length} 条结果` : "没搜到") : ""}
       </p>
       {/* 加第一瓶 = 示例香柜整体退场，连同演示态里写过的手记与反馈一起清空
           （见 store.ts:DEMO_CLEARED 的理由：示例数据不得与真实数据混柜）。
@@ -186,7 +186,7 @@ export function SearchAdd() {
           而触发点在这里。把同一句话挪到动作旁边，比事后补一条撤销更省。 */}
       {demo && open && (
         <p className="mt-1.5 px-1 text-[0.74rem] leading-relaxed text-ink-faint">
-          加进你自己的第一瓶，示例的六瓶和那段示例记录会一起退场。
+          加进你自己的第一瓶，示例的六瓶和那段记录会一起退场。
         </p>
       )}
 
@@ -203,9 +203,9 @@ export function SearchAdd() {
           {extError && (
             <p
               role="status"
-              className="border-b border-line bg-warn-wash px-4 py-2.5 text-[0.78rem] leading-relaxed text-warn"
+              className="border-b border-line bg-warn-wash px-4 py-2.5 text-[0.8rem] leading-relaxed text-warn"
             >
-              这一瓶的数据没取到，稍后再试；或往下拉，用「手动记一瓶」把它记下来。
+              这一瓶的数据没取到。稍后再试，或用下面的「手动记一瓶」。
             </p>
           )}
           {manualOpen ? (
@@ -219,9 +219,7 @@ export function SearchAdd() {
             />
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-4 py-5 text-center">
-              <p className="text-sm text-ink-faint">
-                没搜到。试试英文名或品牌名——有些香水的中文昵称和官方名差得很远。
-              </p>
+              <p className="text-sm text-ink-faint">没搜到。试试英文名或品牌名。</p>
               <button
                 onClick={() => setManualOpen(true)}
                 className="chip serif px-4 py-2 text-[0.85rem] hover:text-ink"
@@ -262,7 +260,7 @@ export function SearchAdd() {
                           })()}
                         </div>
                         <span
-                          className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
+                          className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.74rem] ${
                             added ? "text-ink-faint" : "bg-ink text-paper"
                           }`}
                         >
@@ -287,7 +285,7 @@ export function SearchAdd() {
                         <div className="mt-0.5 truncate text-[0.74rem] text-ink-faint">{e.z || e.b}</div>
                       </div>
                       <span
-                        className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.72rem] ${
+                        className={`ml-3 shrink-0 rounded-pill px-2.5 py-1 text-[0.74rem] ${
                           added ? "text-ink-faint" : "bg-ink text-paper"
                         }`}
                       >

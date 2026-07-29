@@ -12,9 +12,12 @@
   --color-surface: #fffefb;
   --color-sunken: #eae5db;
 
-  --color-ink: #0b0904;          /* 近黑（主标题） */
-  --color-ink-soft: #141009;     /* 深墨（正文，强对比、去黄） */
-  --color-ink-faint: #29251a;    /* 说明文字（继续压深、降黄） */
+  /* 文字三档。此前三档实测对 surface 是 19.7 / 18.8 / 15.2——前两档只差 0.9，
+     肉眼分不出主次，等于三个 token 只有一种颜色，正文与说明文字一样重。
+     重新拉开成 19.7 / 12.0 / 6.7，三档都还在 AA 之上（最低的一档对最深的 sunken 仍有 5.4）。 */
+  --color-ink: #0b0904;          /* 近黑：标题与主推香名 */
+  --color-ink-soft: #3b352a;     /* 正文 */
+  --color-ink-faint: #635b4a;    /* 说明与元信息 */
   --color-line: #ddd6c6;
   --color-line-strong: #c2b9a2;
   /* 输入类控件的边框。单独一个 token 而不是复用 line-strong，理由是 WCAG 1.4.11
@@ -69,9 +72,10 @@ html[data-theme="night"] {
   --color-paper-deep: #191a1c;
   --color-surface: #26262a;      /* 明显抬亮的中性卡面 */
   --color-sunken: #2f2f34;
-  --color-ink: #f7f6f3;          /* 近白（去黄，最高对比） */
-  --color-ink-soft: #e4e2dc;     /* 亮正文（强对比，不发浅） */
-  --color-ink-faint: #a6a49c;    /* 中性灰说明 */
+  /* 同上：暗香此前是 17.2 / 14.3 / 7.4，头两档同样贴得太近。压到 17.2 / 11.2 / 7.4。 */
+  --color-ink: #f7f6f3;          /* 近白：标题与主推香名 */
+  --color-ink-soft: #cdc9c0;     /* 正文 */
+  --color-ink-faint: #a6a49c;    /* 说明与元信息 */
   --color-line: #34343a;
   --color-line-strong: #4a4a52;
   /* 暗香实测：line 1.22、line-strong 1.72，提到 #6f6f7b 得 3.04（见明韵那段的理由） */
@@ -121,6 +125,21 @@ html[data-theme="night"] {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   summary { cursor: pointer; }
+
+  /* 全站只有报头那两个图标按钮做过键盘焦点样式，其余四十多个可聚焦元素一律落到浏览器默认
+     焦点环——在明韵的宣纸底上是一圈细黑线，在暗香的炭黑底上几乎看不见。统一成金色环。
+     不在这里写 border-radius：outline 本就跟随元素自身圆角，写了反而会把药丸形的 chip
+     在聚焦那一刻改成圆角矩形。offset 留 2px，让环和元素之间有一道缝。 */
+  /* ⚠️ utilities 层压得过 base 层：元素上只要还挂着 Tailwind 的 `outline-none`，
+     这条就不生效。六个输入框原本都挂着它（当初为的是压掉浏览器那圈默认环），已一并摘掉。
+     仍保留 outline-none 的只有三处 tabIndex={-1} 的容器——弹层面板与 <main>：
+     它们接的是弹层开关时的**程序焦点**，套一圈环在整块面板外面是错的。 */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  /* 鼠标点击不该留下焦点环（:focus-visible 已经排除了指针触发，这条只是兜住旧内核） */
+  :focus:not(:focus-visible) { outline: none; }
 }
 
 @layer components {

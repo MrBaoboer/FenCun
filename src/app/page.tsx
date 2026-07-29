@@ -128,7 +128,7 @@ export default function TodayPage() {
       {/* 今日页的视觉开头是情境条（问候语随天气变），设计上刻意没有页面标题。
           但"没有 h1"对屏幕阅读器和搜索引擎都是缺一个入口——首页此前全站唯一的标题层级是一个 h3。
           用视觉隐藏的 h1 补上语义，不动已经立住的版面。 */}
-      <h1 className="sr-only">今日 · 从你的香柜里挑一瓶，并告诉你怎么喷</h1>
+      <h1 className="sr-only">今日 · 从你的香柜里挑一瓶</h1>
       <ContextBar ctx={ctx} />
 
       {hydrated && lib.length > 0 && ctx && nudges.length > 0 && (
@@ -158,13 +158,13 @@ export default function TodayPage() {
         <EmptyShelf />
       ) : !ctx ? (
         <p className="serif px-1 text-[0.82rem] leading-relaxed text-ink-faint">
-          等此刻的天气到位，氛寸就从你的香柜里挑一瓶。
+          等天气到位，就从你的香柜里挑一瓶。
         </p>
       ) : activePick ? (
         <>
           {ctx.approximate && (
             <p className="serif px-1 text-[0.82rem] leading-relaxed text-ink-faint">
-              还没拿到天气，这条推荐先按季节和时段来。
+              这条推荐先按季节和时段来。
             </p>
           )}
           <RecommendationCard
@@ -205,7 +205,7 @@ export default function TodayPage() {
           role="status"
           className="animate-fade-up fixed inset-x-0 bottom-24 z-40 mx-auto flex w-[min(26rem,calc(100%-2rem))] items-center justify-between gap-3 rounded-card border border-line-strong bg-surface px-4 py-3 shadow-float"
         >
-          <span className="serif min-w-0 truncate text-[0.86rem] text-ink-soft">
+          <span className="serif min-w-0 truncate text-[0.85rem] text-ink-soft">
             {undoAdoptItem.count > 1
               ? `已把「${undoAdoptItem.name}」等 ${undoAdoptItem.count} 瓶记进今天的香历`
               : `已把「${undoAdoptItem.name}」记进今天的香历`}
@@ -217,7 +217,7 @@ export default function TodayPage() {
               if (undoTimer.current) clearTimeout(undoTimer.current);
               setUndoAdoptItem(null);
             }}
-            className="shrink-0 text-[0.86rem] font-semibold text-accent underline-offset-4 hover:underline"
+            className="shrink-0 text-[0.85rem] font-semibold text-accent underline-offset-4 hover:underline"
           >
             撤销
           </button>
@@ -245,17 +245,12 @@ function CatalogError({ count, onRetry }: { count: number; onRetry: () => void }
     <div className="card animate-fade-up flex flex-col items-center gap-5 px-6 py-12 text-center">
       <div>
         <h3 className="serif text-[1.3rem] font-bold text-ink">香水目录没加载出来</h3>
-        {/* 空柜访客与满柜用户要说不同的话：前者没有"瓶"可丢，他需要知道的是
-            "搜索现在查不到东西，不是你的香水不在库里"，以及那条离线也能走的出口。 */}
+        {/* 空柜访客与满柜用户要说不同的话：前者没有"瓶"可丢，他需要的是那条不依赖目录的出口。 */}
         <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
           {count > 0 ? (
-            <>
-              可能是网络波动，有 {count} 瓶暂时取不出来。它们都还在，没有丢—— 点下面重试就能恢复今日推荐。
-            </>
+            <>有 {count} 瓶暂时取不出来，它们都还在。</>
           ) : (
-            <>
-              可能是网络波动，现在搜什么都会显示「没搜到」——不是你的香水不在库里。 点下面重试；也可以直接到香柜里「手动记一瓶」，那条路不需要目录。
-            </>
+            <>现在搜什么都查不到。也可以到香柜里「手动记一瓶」。</>
           )}
         </p>
       </div>

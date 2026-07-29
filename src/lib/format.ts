@@ -15,7 +15,7 @@ export const DISTANCE_LABEL: Record<1 | 2 | 3 | 4, string> = {
 };
 export const DISTANCE_HINT: Record<1 | 2 | 3 | 4, string> = {
   1: "适合电梯、会议等密闭场合",
-  2: "正常社交距离可感，安全日常",
+  2: "正常社交距离能闻到，不会打扰人",
   3: "同桌或小房间能闻到，注意场合",
   4: "户外、夜场加分，密闭空间慎用",
 };
@@ -35,7 +35,7 @@ export const DISTANCE_ATTRIB = "多数评价者的感受";
 /** 手动记一瓶：这一档是用户自己勾的，别说成社区评价 */
 export const DISTANCE_ATTRIB_SELF = "按你填的扩散档";
 /** 有记录但没票：不知道就说不知道，也不给「安全」这类断言 */
-export const DISTANCE_ATTRIB_THIN = "这瓶社区数据还少，先按中庸档估";
+export const DISTANCE_ATTRIB_THIN = "社区数据还少，先按中间档估";
 
 // 规格行副标签（按档，替代原写死的"近身可感"）
 export const DISTANCE_SUB: Record<1 | 2 | 3 | 4, string> = {
@@ -69,13 +69,11 @@ export function sillageSub(p: Perfume, tier: 1 | 2 | 3 | 4): string {
 // 让这句话的信息量落在"你该怎么办"上，而不是落在一个假装知道的数字上。
 export function durationHint(longevity: number | null): string {
   if (longevity == null) return "留香因人而异，用两次就知道它在你身上能撑多久";
-  // 「想起来就补一下」有轻微诱导过量的风险：过几小时你闻不到它，可能是它真的淡了，
-  // 也可能只是你的鼻子对一直闻着的味道变钝了——而旁人的鼻子没有同步变钝。
-  // 措辞纪律：**并列，不排序**。weak 级证据不足以断言哪个原因占主导，所以不写"那通常是鼻子适应了"。
-  if (longevity < 2)
-    return "散得偏快，出门前喷。过几个小时你可能先闻不到，旁人未必；真想补，半下就够";
+  // 「想起来就补一下」有轻微诱导过量的风险，所以补量本身就写死在句子里（半下）。
+  // 不解释"为什么你自己先闻不到"——嗅觉适应是原理，用户此刻要的是补多少。
+  if (longevity < 2) return "散得偏快，出门前喷；真想补，半下就够";
   if (longevity < 3) return "撑得住大半个白天，傍晚有正式场合值得补一次";
-  if (longevity < 4) return "基本能陪你过完这一天的白天";
+  if (longevity < 4) return "基本能陪你过完整个白天";
   return "留得住，晚上多半还在——少喷一点就够";
 }
 

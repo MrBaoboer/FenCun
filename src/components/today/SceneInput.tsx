@@ -59,7 +59,7 @@ export function SceneInput() {
         setErr("这句没读懂。换个说法试试，或直接点上面的场合。");
       }
     } catch {
-      setErr("网络没跟上。稍等片刻，再试一次。");
+      setErr("网络没跟上，再试一次。");
     }
     setBusy(false);
   }
@@ -69,14 +69,14 @@ export function SceneInput() {
       <div className="flex items-center justify-between gap-2 rounded-md bg-brand-wash px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Sparkle />
-          <span className="serif truncate text-[0.86rem] text-ink">
+          <span className="serif truncate text-[0.85rem] text-ink">
             <span className="text-ink-faint">氛寸读到 · </span>
             <span className="font-semibold">{scene.label}</span>
           </span>
         </div>
         <button
           onClick={() => setScene(null)}
-          className="shrink-0 text-[1.1rem] leading-none text-ink-faint hover:text-ink"
+          className="shrink-0 text-[1.08rem] leading-none text-ink-faint hover:text-ink"
           aria-label="清除场景"
         >
           ×
@@ -96,9 +96,9 @@ export function SceneInput() {
       <input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="或用一句话说说今天的场合，如「第一次见投资人」"
+        placeholder="或直接说一句，如「第一次见投资人」"
         maxLength={120}
-        className="serif w-full bg-transparent text-[0.86rem] text-ink outline-none placeholder:text-ink-faint"
+        className="serif w-full bg-transparent text-[0.85rem] text-ink placeholder:text-ink-faint"
       />
       <button
         type="submit"
@@ -116,7 +116,7 @@ export function SceneInput() {
       </button>
     </form>
       {err && (
-        <p id="scene-input-err" role="status" className="serif px-1 text-[0.78rem] text-warn">
+        <p id="scene-input-err" role="status" className="serif px-1 text-[0.8rem] text-warn">
           {err}
         </p>
       )}

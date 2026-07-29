@@ -16,9 +16,9 @@ export function EmptyShelf() {
       </svg>
       <div>
         <h3 className="serif text-[1.4rem] font-bold text-ink">你的香柜还是空的</h3>
-        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.92rem] leading-relaxed text-ink-soft">
+        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
           先把你拥有的香水放进来<br />
-          氛寸会从中告诉你今天该喷哪一瓶<br />
+          氛寸会告诉你今天该喷哪一瓶<br />
           怎么喷得恰到好处
         </p>
       </div>

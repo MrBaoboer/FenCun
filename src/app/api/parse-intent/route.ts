@@ -38,7 +38,7 @@ export const PatchSchema = z.object({
   label: z.string().min(1).max(24),
 });
 
-const SYSTEM = `你是"氛寸"的场景理解引擎。用户会用一句话描述今天的用香场合，你要真正理解其中的社交关系、情绪张力、正式度、亲密距离与表达意图，而不是生硬套标签，然后输出一个 JSON 补丁。
+const SYSTEM = `你是「氛寸」的场景理解引擎。用户会用一句话描述今天的用香场合。读懂其中的社交关系、情绪张力、正式度、亲密距离与表达意图，而不是生硬套标签，然后输出一个 JSON 补丁。
 
 只输出 JSON（无多余文字），字段：
 - occasion：从 [commute, work, date, social, formal, casual, home, sport] 里选最贴合的一个。
@@ -46,18 +46,18 @@ const SYSTEM = `你是"氛寸"的场景理解引擎。用户会用一句话描�
 - intimacy：close(近距离贴身，如约会看展)/neutral(常规社交距离)/broadcast(想被更多人注意到)。
 - avoid：数组，可含 too_sweet(别太甜)/too_strong(别太冲/扩散别太大)/too_formal(别太端着)/cloying(别腻)/too_casual(别太随意)。按场景语义判断该规避什么。
 - tension：none/low/high，关系张力——前任、谈判对手、竞争者同席、想赢的场合是 high；普通紧张是 low；没有就 none 或省略。
-- duration：2/4/6/9 之一（预计在场小时的档位，选最接近的：快事≈2、饭局婚礼看展≈4、长活动≈6、上班全天≈9），judge 不出就省略。
+- duration：2/4/6/9 之一（预计在场小时的档位，选最接近的：快事≈2、饭局婚礼看展≈4、长活动≈6、上班全天≈9），判断不出就省略。
 - meal：true/false，这个场合是否围着饭桌（婚宴/日料/火锅/酒局都算）——气味会干扰味觉。
-- fragranceFree：true/false，这是不是**无香场合**。就医、看病、陪诊、探病、体检、化疗/病房、月子中心、备孕产检都算 true。这类场合里有人对气味格外敏感且无法回避，命中时氛寸会建议今天不用香。拿不准就省略（默认 false），但只要出现医院相关线索就大胆给 true。
-- riskNote：≤20 字的一句话社交风险（如"婚礼焦点是新人，不宜喧宾夺主"），没有就省略。
-- label：≤12字的中文人话摘要，点出场景气质（例："前任婚礼·得体克制""初见投资人·稳重不抢戏""看展约会·近距离"）。
+- fragranceFree：true/false，这是不是**无香场合**。就医、看病、陪诊、探病、体检、化疗/病房、月子中心、备孕产检都算 true——这类场合里有人对气味格外敏感又躲不开。拿不准就省略，但只要出现医院相关线索就大胆给 true。
+- riskNote：≤20 字的一句话社交风险（如「婚礼焦点是新人，不宜喧宾夺主」），没有就省略。
+- label：≤12 字的中文摘要，点出场景气质（例：「前任婚礼·得体克制」「初见投资人·稳重不抢戏」「看展约会·近距离」）。
 
 示例思路：
-- "去前任婚礼" → formal、formality 0.75、intimacy neutral、avoid [too_strong, too_sweet]、tension high、duration 4、meal true、riskNote "婚礼焦点是新人，不宜喧宾夺主"、label "前任婚礼·得体克制"。
-- "第一次见投资人" → work/formal、formality 0.8、avoid [too_strong, too_sweet]、tension low、duration 2、meal false、riskNote "会议室密闭，浓香会被放大"、label "初见投资人·稳重不抢戏"。
-- "晚上和喜欢的人第一次约会，吃日料" → date、intimacy close、formality 0.4、tension low、duration 4、meal true、riskNote "日料店重食物香气，浓香失礼"、label "日料初见·近距离克制"。
-- "朋友生日局但不想太张扬" → social、avoid [too_strong]、intimacy neutral、meal true、label "生日局·低调不抢镜"。
-- "下午去医院看我妈" → formal/casual、fragranceFree true、riskNote "病房里有人对气味敏感且无法回避"、label "探病·今天不用香"。`;
+- 「去前任婚礼」→ formal、formality 0.75、intimacy neutral、avoid [too_strong, too_sweet]、tension high、duration 4、meal true、riskNote「婚礼焦点是新人，不宜喧宾夺主」、label「前任婚礼·得体克制」。
+- 「第一次见投资人」→ work/formal、formality 0.8、avoid [too_strong, too_sweet]、tension low、duration 2、meal false、riskNote「会议室密闭，浓香会被放大」、label「初见投资人·稳重不抢戏」。
+- 「晚上和喜欢的人第一次约会，吃日料」→ date、intimacy close、formality 0.4、tension low、duration 4、meal true、riskNote「日料店重食物香气，浓香失礼」、label「日料初见·近距离克制」。
+- 「朋友生日局但不想太张扬」→ social、avoid [too_strong]、intimacy neutral、meal true、label「生日局·低调不抢镜」。
+- 「下午去医院看我妈」→ formal/casual、fragranceFree true、riskNote「病房里有人对气味敏感且无法回避」、label「探病·今天不用香」。`;
 
 // 导出是为了可测：这条启发式承载「无香场合」红线（见下方 fragranceFree），
 // 而它恰恰是**没有 API key 时唯一会走到的那条路**——贡献者本地跑、线上限流或超时后，
@@ -75,9 +75,9 @@ export function heuristic(text: string) {
   let label = text.length <= 12 ? text : text.slice(0, 11) + "…";
   // 有没有真的读懂：任何一条规则命中才算。全都没中时不许拿原话回显冒充理解（见下方 matched）
   let hit = true;
-  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; duration = 4; label = "婚礼场合·得体克制"; }
+  if (has("婚礼", "婚宴", "喜宴")) { occasion = "formal"; formality = 0.75; avoid.push("too_strong", "too_sweet"); meal = true; duration = 4; label = "婚礼·得体克制"; }
   else if (has("投资人", "面试", "客户", "领导", "见家长", "正式", "商务", "会议")) { occasion = "formal"; formality = 0.8; avoid.push("too_strong"); duration = 2; label = "正式场合·稳重不抢戏"; }
-  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; duration = 4; label = "约会·宜近距离"; }
+  else if (has("约会", "暧昧", "看展", "看电影", "对象", "心动")) { occasion = "date"; formality = 0.3; intimacy = "close"; duration = 4; label = "约会·近距离"; }
   else if (has("聚会", "派对", "生日", "朋友", "局", "夜店", "酒吧")) { occasion = "social"; duration = 4; label = "聚会·自在"; }
   else if (has("运动", "健身", "跑步", "球")) { occasion = "sport"; formality = 0.1; duration = 2; label = "运动·清爽"; }
   else if (has("居家", "在家", "睡前", "休息")) { occasion = "home"; formality = 0.1; label = "居家·放松"; }

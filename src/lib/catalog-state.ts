@@ -11,7 +11,6 @@
 // 点进去就是这个死循环。而这恰恰是从简历/GitHub 点进来的人的第一屏。
 //
 // 所以补上第二个入口：柜是空的时候，目录失败本身就值得说。
-// （手动记一瓶其实离线可用，但界面上没有一个字告诉他该走那条路——文案里补了。）
 export function shouldShowCatalogError(
   catalogError: boolean,
   libCount: number,

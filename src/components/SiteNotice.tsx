@@ -36,10 +36,9 @@ export function SiteNotice() {
   if (hydrateError)
     return (
       <Banner>
-        这台机器上的数据没能读出来。原始内容已另存一份，<b className="font-bold">先别添加香水</b>
-        ——新的记录会覆盖掉它。
+        这台机器上的数据没能读出来。<b className="font-bold">先别添加香水</b>——新记录会把它覆盖掉。
         {rescue === "failed" ? (
-          <> 那份另存的内容也没能解出来，请到「我的」里导入你自己的备份文件。</>
+          <> 备份也没能恢复，到「我的」里导入你自己的备份文件。</>
         ) : canRescue ? (
           <>
             {" "}
@@ -49,7 +48,7 @@ export function SiteNotice() {
               onClick={async () => setRescue((await restoreFromBackup()) ? "ok" : "failed")}
               className="mx-0.5 font-bold underline underline-offset-2"
             >
-              试着恢复另存的那一份
+              试着恢复备份
             </button>
             ，或到「我的」里导入你自己的备份文件。
           </>
@@ -65,7 +64,7 @@ export function SiteNotice() {
     return (
       <Banner>
         这台机器上的记录<b className="font-bold">已被清空</b>。这一页里的还在，但<b className="font-bold">不会</b>
-        再存回去——想留下就到「我的」里导出一份，不想留就关掉这一页。
+        再存回去——想留下就到「我的」里导出一份。
       </Banner>
     );
 
@@ -73,8 +72,8 @@ export function SiteNotice() {
   if (persistError)
     return (
       <Banner>
-        这台机器现在<b className="font-bold">存不下东西</b>——可能是浏览器禁用了本站存储，或者存储空间满了。
-        这一次的操作照常有效，但关掉页面就会消失。要保住已有的记录，先到「我的」里导出一份备份。
+        {/* 整句不折行：JSX 会把行中间的换行折成一个空格，折在「——」前会多出一个空隙 */}
+        这台机器现在<b className="font-bold">存不下东西</b>。这次的操作照常有效，但关掉页面就会消失——想保住已有的记录，到「我的」里导出一份。
       </Banner>
     );
 
