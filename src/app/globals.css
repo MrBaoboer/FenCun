@@ -171,6 +171,37 @@ html[data-theme="night"] {
   }
   .btn-ghost:hover { background: var(--color-sunken); }
 
+  /* 报头那一排图标按钮（主题切换 / GitHub）。
+     图标本身只有 18–19px，此前只靠变色反馈，热区又是一块看不见的 ::after——
+     鼠标移上去除了颜色没有任何"这里可以点"的提示。
+     现在 ::after 同时充当热区与悬停光晕：40px 的圆，平时透明，悬停/键盘聚焦时浮出。 */
+  .icon-btn {
+    position: relative;
+    color: var(--color-ink-faint);
+    transition: color 0.2s var(--ease-out-soft);
+  }
+  .icon-btn::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    height: 2.5rem;
+    width: 2.5rem;
+    transform: translate(-50%, -50%);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    transition: background-color 0.2s var(--ease-out-soft);
+  }
+  /* 图标要浮在光晕之上：::after 在内容之后绘制，不抬 z-index 会把图标盖住 */
+  .icon-btn > svg { position: relative; z-index: 1; }
+  .icon-btn:hover { color: var(--color-accent); }
+  /* 光晕用香槟金的低比例混色，不用 --color-sunken：后者在报头底色上只有 1.05:1，
+     淡到看不出来，等于没做。金色一来足够分明，二来和图标 hover 时的变色同源。 */
+  .icon-btn:hover::after,
+  .icon-btn:focus-visible::after {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+
   /* 场景 chip */
   .chip {
     border-radius: var(--radius-pill);

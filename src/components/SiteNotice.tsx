@@ -64,9 +64,8 @@ export function SiteNotice() {
   if (storageWiped)
     return (
       <Banner>
-        这台机器上的记录<b className="font-bold">已被清空</b>——这一页里的内容是最后一份，
-        为了不覆盖你刚做的清除，它<b className="font-bold">不会</b>再存回去。想留下就到「我的」里导出一份；
-        不想留，关掉这一页即可。
+        这台机器上的记录<b className="font-bold">已被清空</b>。这一页里的还在，但<b className="font-bold">不会</b>
+        再存回去——想留下就到「我的」里导出一份，不想留就关掉这一页。
       </Banner>
     );
 

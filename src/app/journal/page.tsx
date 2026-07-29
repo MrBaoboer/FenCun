@@ -159,9 +159,9 @@ export default function JournalPage() {
           <Eyebrow className="eyebrow-mute">{formatDay(selected)}</Eyebrow>
           <p className="serif mt-2 text-[0.9rem] leading-relaxed text-ink-faint">
             {wearLog.length === 0
-              ? "香历还空着。从今天的推荐开始——你采纳或反馈的每一瓶，都会自动落在这里。"
+              ? "香历还空着。你采纳或反馈过的每一瓶，都会自动落在这里。"
               : selected === todayKey
-              ? "今天还没记。回「今日」采纳一瓶，或晚点答一句「刚好吗」，这一天就会有颜色。"
+              ? "今天还没记。去「今日」采纳一瓶，这一天就有颜色了。"
               : "这天没有记录。无香的日子，也是分寸。"}
           </p>
         </div>

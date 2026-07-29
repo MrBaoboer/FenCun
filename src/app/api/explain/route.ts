@@ -100,7 +100,7 @@ export function template(input: ExplainInput): string {
       return input.risks[0] || "今天的场合对气味格外敏感，把香水留在家里是更稳妥的选择。";
     }
     const why = (input.risks[0] || "它和此刻的天气或场合不太合拍").replace(/。$/, "");
-    return `说实话，今天不太建议用「${input.name}」——${why}。你要是今天就想用它，就只喷 ${input.usage.spraysLabel}（${input.usage.placement.join("、")}），把存在感压到最低。`;
+    return `今天不太建议用「${input.name}」——${why}。真要用，就只喷 ${input.usage.spraysLabel}（${input.usage.placement.join("、")}），把存在感压到最低。`;
   }
   const parts: string[] = [`今天${c.city}${c.weatherText}、${Math.round(c.tempC)}℃。`];
   if (input.reasons.length) parts.push(input.reasons[0].replace(/。$/, "") + "。");

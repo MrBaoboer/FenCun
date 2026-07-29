@@ -61,7 +61,7 @@ export default function ProfilePage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
-    setImportMsg({ kind: "ok", text: `已生成 ${name}——请确认它真的下载到了本机。` });
+    setImportMsg({ kind: "ok", text: `已生成 ${name}。` });
   }
   function doImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -111,7 +111,7 @@ export default function ProfilePage() {
     if (weakN > 0)
       lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐${it(weakN)}时，会建议略增喷量。`);
     if (lines.length === 0)
-      lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
+      lines.push("多答几次「今天，刚好吗」，氛寸会越来越懂你对每瓶的分寸。");
     return lines;
   }, [feedbacks]);
 
@@ -201,7 +201,7 @@ export default function ProfilePage() {
       <div className="card px-5 py-4">
         <Eyebrow>数据</Eyebrow>
         <p className="serif mt-2.5 text-[0.84rem] leading-relaxed text-ink-soft">
-          你的香柜与全部反馈只存在本机浏览器（暂无账号云同步）。换设备或清缓存会清空，建议偶尔导出备份。
+          你的香柜与全部反馈只存在这台设备的浏览器里。换设备或清缓存都会清空，建议偶尔导出一份备份。
         </p>
         <div className="mt-3 flex gap-2.5">
           <button onClick={doExport} className="btn-ghost flex-1 py-2.5 text-[0.82rem]">
@@ -237,7 +237,7 @@ export default function ProfilePage() {
                 这会清掉本机的<span className="text-warn">香柜、反馈与香历</span>，换回六瓶示例。
               </p>
               <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-                这一步不可撤销。要保住现在这份，先「导出香柜」再回来。
+                不可撤销。想留住现在这份，先导出再回来。
               </p>
               <div className="mt-2.5 flex gap-2">
                 <button
@@ -281,7 +281,7 @@ export default function ProfilePage() {
               {pending.preview.wearDays} 天香历
             </p>
             <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-              这一步不可撤销。要保住现在这份，先「导出香柜」再回来导入。
+              不可撤销。想留住现在这份，先导出再回来。
             </p>
             <div className="mt-2.5 flex gap-2">
               <button

@@ -20,7 +20,7 @@ export default function NotFound() {
           这一页不在氛寸里
         </h1>
         <p className="serif mx-auto mt-2.5 max-w-xs text-[0.92rem] leading-relaxed text-ink-soft">
-          链接可能过期了，或者地址少了一段。你的香柜与全部记录都在本机，没有受影响。
+          链接可能过期了，或者地址少了一段。
         </p>
         <Link href="/" className="btn-primary mt-6 inline-block px-6 py-3 text-[0.9rem]">
           回今日之选

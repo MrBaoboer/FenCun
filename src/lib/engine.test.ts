@@ -574,7 +574,7 @@ test("成功配置是基准不是终点：更近的反馈与场景必须还能�
   assert.ok(afterTooStrong.sprays[1] < base.sprays[1], `两次「太冲了」之后必须更少：${afterTooStrong.spraysLabel}`);
   assert.ok(wantClose.sprays[1] < base.sprays[1], `场景说「想贴身」也要能推动它：${wantClose.spraysLabel}`);
   // 回执必须跟着最终这个数走，不能停在「就按那次的量来」
-  assert.ok(afterTooStrong.note?.includes("偏冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
+  assert.ok(afterTooStrong.note?.includes("嫌它冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
 });
 
 test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给提示(P0-7)", () => {
@@ -583,7 +583,7 @@ test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给�
   const tense = C({ occasion: "social", feel: "mild", tempC: 20, tension: "high" });
   assert.ok(score(loud, tense).total < score(loud, base).total, "高张力应降权强扩散甜香");
   assert.ok(computeUsage(loud, tense).sprays[1] < computeUsage(loud, base).sprays[1], "高张力应再收一档");
-  assert.ok(computeRisks(loud, tense).some((r) => r.includes("成为被讨论")), "应给出社交提示");
+  assert.ok(computeRisks(loud, tense).some((r) => r.includes("成为话题")), "应给出社交提示");
   // formality 同样必须被消费（自由文本说"很正式"时，哪怕 occasion 落在 social 也要收得住）
   const formal = C({ occasion: "social", feel: "mild", tempC: 20, formality: 0.85 });
   assert.ok(score(loud, formal).total < score(loud, base).total, "高正式度应降权甜香强扩散");

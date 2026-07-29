@@ -97,7 +97,7 @@ export function ManualAdd({
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
       <p className="serif text-[0.82rem] leading-relaxed text-ink-faint">
-        没搜到也能记下来。挑 1–3 个最像它的香调，推荐就能带上它——用两次并反馈后会更准。
+        没搜到也能记下来。挑 1–3 个最像它的香调，推荐就会带上它。
       </p>
       <input
         value={name}

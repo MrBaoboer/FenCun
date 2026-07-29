@@ -164,7 +164,7 @@ export default function TodayPage() {
         <>
           {ctx.approximate && (
             <p className="serif px-1 text-[0.82rem] leading-relaxed text-ink-faint">
-              还没拿到天气，先按季节 · 时段为你推荐；上方填一下城市会更准。
+              还没拿到天气，这条推荐先按季节和时段来。
             </p>
           )}
           <RecommendationCard

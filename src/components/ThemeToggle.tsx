@@ -37,9 +37,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === "night" ? "切到明韵" : "切到暗香"}
       title={theme === "night" ? "切到明韵" : "切到暗香"}
-      /* 图标只有 19×19，热区靠 ::after 撑到 44×44（全站既有写法，见 ChangeBottleSheet 的关闭钮）。
-         视觉不变，手指点得中。 */
-      className="relative text-ink-faint transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-11 after:w-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:text-accent"
+      className="icon-btn"
     >
       {theme === "night" ? (
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none">

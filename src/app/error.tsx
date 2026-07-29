@@ -28,7 +28,7 @@ export default function ErrorPage({
           再试一次
         </button>
         <p className="mx-auto mt-4 max-w-xs text-[0.74rem] leading-relaxed text-ink-faint">
-          重试会清除本次会话的临时状态（如刚手动换上的那瓶），香柜与反馈不受影响；若反复出现，刷新页面或稍后再来。
+          重试只会清掉这次会话的临时选择，比如刚手动换上的那瓶。
         </p>
       </div>
     </div>

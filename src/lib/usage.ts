@@ -4,8 +4,6 @@ import { durationHint, SEASON_NAME } from "./format";
 import { tempBand } from "./season";
 import { DENSITY, isClosedOccasion } from "./occasion-priors";
 import {
-  sweetness,
-  balsamicWeight,
   sweetDominates,
   balsamicDominates,
   heavyDominates,
@@ -87,7 +85,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
       // 两处措辞必须互补，不能是同一句话的两种说法——同屏重复会显得系统在凑字数。
       durationHint: "留到下一次。它不会因为今天不用就跑掉",
       suitable: false,
-      note: "今天把它留在家里。出门前洗过手、换件没沾过香的外套，就是这个场合最好的分寸。",
+      note: "出门前洗个手、换一件没沾过香的外套，就够了。",
     };
   }
   const sil = p.sillage ?? 2.5;
@@ -234,11 +232,11 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
     note =
       hi < remembered
         ? ps >= 0.4
-          ? "上次同样天气、同样场合你说「刚好」——不过你后来又说过它偏冲，这次在那个量上再收一点。"
-          : "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
+          ? "同样的天气和场合你说过「刚好」，不过你后来嫌它冲，这次再收一点。"
+          : "同样的天气和场合你说过「刚好」，不过今天场合更收着，先按更少的量来。"
         : hi > remembered
-          ? "上次同样天气、同样场合你说「刚好」——今天在那个量上略放开一点。"
-          : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
+          ? "同样的天气和场合你说过「刚好」，今天在那个量上略放开一点。"
+          : "同样的天气和场合你说过「刚好」，就按那次的量来。";
   }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;
@@ -293,11 +291,17 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
 
   // 社交距离取「喷后有效档」而非原始扩散：已生效的减档（封闭/贴身/嫌冲/闷热压量）都会降低实际投射，
   // 封顶降 2 档，避免同屏出现「喷 1 下」却仍标「整间屋都是它」的自相矛盾。
+  // ⚠️ 这份清单必须与上面**真正减过量**的那几处一一对应。它原本漏了自己注释里点名的
+  // 「闷热压量」，也漏了餐桌与高张力——于是「今天这么热，喷得收着些更稳」+「喷 1 下」
+  // 与「一桌 / 整间屋都是它」会同屏出现，正是这段注释声称要消灭的那种自相矛盾。
   let distReduce = 0;
   if (density === "dense" || density === "closed") distReduce++;
   if (ctx.intimacy === "close") distReduce++;
   if (ctx.avoid?.includes("too_strong")) distReduce++;
   if (ps >= 0.4) distReduce++;
+  if (heatGuardOn && (sil >= 3.2 || heavyDominates(p, 50))) distReduce++;
+  if (ctx.meal) distReduce++;
+  if (ctx.tension === "high") distReduce++;
   const effTier = Math.max(1, p.sillageTier - Math.min(distReduce, 2)) as 1 | 2 | 3 | 4;
 
   // suitable 问的是「这一瓶今天合不合适」，所以与 computeVerdict 同口径：只看本瓶风险。
@@ -372,7 +376,7 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
     return [
       {
         kind: "scene",
-        text: "医院、诊所这类场合，很多人对气味格外敏感，而他们没有回避的余地——今天把香水留在家里最稳妥。",
+        text: "医院、诊所这类场合，有人对气味格外敏感又躲不开——今天把香水留在家里最稳妥。",
       },
     ];
   }
@@ -401,8 +405,6 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   // balsamic=59)、探索家、绿爱尔兰花呢会被判"树脂琥珀感偏厚"。而同一张卡的"为什么"里，
   // 打分层（早就用了主导度判据）正写着"调性清爽通透，正合今天的天气"。
   // 这两句必须由同一条判据产出，否则卡片自己打自己。
-  const sweet = sweetness(p);
-  const balsam = balsamicWeight(p);
   const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
   // 天气把这瓶压到「要留意」那一档时，这里就**必须**说得出为什么。
   //
@@ -448,15 +450,19 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
     wf.tone === "thin_in_cold" &&
     !risks.some((r) => r.kind === "weather")
   ) {
-    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住——别指望它陪一整天，想要更立得住就换一瓶更暖的。");
+    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住，想更立得住就换一瓶更暖的。");
   }
   // 餐桌场合：浓香/甜香和食物气味打架（高端餐饮甚至明示谢绝浓香）
-  if (ctx.meal && (Math.max(sweet, balsam) >= 55 || p.sillageTier >= 3)) {
-    push("meal", "这顿饭是场合的一部分——它的存在感会和食物气味打架，喷得比平时更收着些。");
+  // 判据与全仓一致走主导度：`Math.max(sweet, balsam) >= 55` 是最后一条残留的绝对线，
+  // 而 balsamicWeight 含 amber——蔚蓝浓香精（citrus=100 / amber=86 / sweet=0）这类
+  // 以 Ambroxan 干琥珀当骨架的清冽香会被判成"浓甜和食物气味打架"。
+  // sillageTier ≥3 那一支保留：扩散强本来就会和食物气味抢空间，与它是什么调无关。
+  if (ctx.meal && (sweetDominates(p, 55) || balsamicDominates(p, 55) || p.sillageTier >= 3)) {
+    push("meal", "它的存在感会和食物气味打架，今天喷得比平时更收着些。");
   }
   // 「用力过猛」组合提示（国内语境：办公室里的浓甜白花有"柜姐感"联想）
   if (overdressedCombo(p, ctx)) {
-    push("overdressed", "甜和扩散都偏高，这类场合容易显得用力过猛——压到 1 下、放低位置会体面很多。");
+    push("overdressed", "甜和扩散都偏高，这类场合容易用力过猛。压到 1 下、位置放低会体面很多。");
   }
   // 季节错配：相对差，不用绝对阈值。
   // **必须过和 buildReasons 同一道票数门槛**——「大家更多在冬季用它」是一句关于社区数据的断言，
@@ -474,7 +480,7 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   }
   // 高张力场合 × 存在感偏强：规则层自己就要说这句，不能只指望场景解析恰好返回 riskNote
   if (ctx.tension === "high" && p.sillageTier >= 3) {
-    push("tension", "这种场合，最好别让香水成为被讨论的那件事——它的存在感偏强，压到最低量、只留贴身的一点更稳妥。");
+    push("tension", "这种场合别让香水成为话题。它的存在感偏强，压到最低量、只留贴身的一点。");
   }
   // 场景解析给出的社交风险（LLM 的场景常识以受控字段进入，不允许它自由发挥进正文）
   if (ctx.riskNote && !risks.some((r) => r.text.includes(ctx.riskNote!))) {
@@ -527,8 +533,8 @@ export function buildReasons(
     if (wp) r.push(wp);
   }
   if (parts.occasion >= 0.8) r.push(`风格（${p.styleTags.join("·")}）贴合${ctx.occasion === "date" ? "约会" : "今天的场合"}`);
-  if (p.custom) r.push(`这瓶是你手动记录的，按所选香调的典型情况估计，用两次并反馈后会更准`);
-  else if (p.lowVotes) r.push(`这瓶的社区数据还少，判断偏保守，你的反馈会让它更准`);
+  if (p.custom) r.push(`这瓶是你手动记的，按所选香调估计，你的反馈会让它更准`);
+  else if (p.lowVotes) r.push(`这瓶社区数据还少，判断偏保守，你的反馈会让它更准`);
   if (r.length === 0) r.push(`${topAccords}的整体气质，和今天比较合拍`);
   return r;
 }
