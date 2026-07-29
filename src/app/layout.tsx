@@ -35,7 +35,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
 
 const TITLE = "氛寸 · 帮你用好香水";
 const DESCRIPTION =
-  "氛寸（Fēn Cùn）——按今天的天气和场合，从你已有的香水里告诉你该喷哪一瓶、怎么喷得恰到好处。";
+  "氛寸（Fēn Cùn）——根据实时天气和出席场合，告诉你今天最适合喷哪瓶香水，以及怎样用得恰到好处。";
 
 export const metadata: Metadata = {
   // metadataBase 必须给：没有它，openGraph.images 的相对路径不会被补成绝对 URL，
