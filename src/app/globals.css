@@ -17,6 +17,14 @@
   --color-ink-faint: #29251a;    /* 说明文字（继续压深、降黄） */
   --color-line: #ddd6c6;
   --color-line-strong: #c2b9a2;
+  /* 输入类控件的边框。单独一个 token 而不是复用 line-strong，理由是 WCAG 1.4.11
+     只对「识别这个控件所必需的边界」要求 3:1——
+     · 输入框、文本域：边框就是它唯一的可见界定，没有它用户看不出这里能打字，必须达标；
+     · .chip / .btn-ghost：有文字标签，控件本身由标签识别，边框是装饰，不在管辖内。
+     实测（明韵，卡面 #fffefb 上）：line 1.44、line-strong 1.94，两个都不够；
+     压到 #97907e 得 3.15。若把 line-strong 整体压到这一档，全站每一条分隔线都会跟着变重，
+     那是改设计语言，不是修缺陷。 */
+  --color-field: #97907e;
 
   --color-brand: #26402f;
   --color-brand-soft: #567562;
@@ -66,6 +74,8 @@ html[data-theme="night"] {
   --color-ink-faint: #a6a49c;    /* 中性灰说明 */
   --color-line: #34343a;
   --color-line-strong: #4a4a52;
+  /* 暗香实测：line 1.22、line-strong 1.72，提到 #6f6f7b 得 3.04（见明韵那段的理由） */
+  --color-field: #6f6f7b;
   --color-brand: #b7b2a4;        /* 去绿，改中性暖灰 */
   --color-brand-soft: #cbc6ba;
   --color-brand-wash: #2a2a2f;

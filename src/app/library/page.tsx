@@ -8,6 +8,7 @@ import { nameParts } from "@/lib/format";
 import { SearchAdd } from "@/components/library/SearchAdd";
 import { ShelfCard } from "@/components/library/ShelfCard";
 import { PerfumeCard } from "@/components/library/PerfumeCard";
+import { shouldShowCatalogError } from "@/lib/catalog-state";
 
 export default function LibraryPage() {
   const lib = useLibraryPerfumes();
@@ -66,12 +67,14 @@ export default function LibraryPage() {
           <div className="h-32 animate-pulse bg-sunken/50" />
           <div className="h-32 animate-pulse bg-sunken/50" />
         </div>
-      ) : catalogError && lib.length < userPerfumes.length ? (
+      ) : shouldShowCatalogError(catalogError, lib.length, userPerfumes.length) ? (
         // 与今日页同一条判据：看的是「有几瓶因此拿不出来」，不是「柜里有没有瓶」。
         // 扩展集与手动记录的香整条存在本机，目录挂了也一瓶不少。
         <div className="card px-6 py-12 text-center">
           <p className="serif text-[0.95rem] font-medium leading-relaxed text-ink-soft">
-            香水目录没加载出来（可能是网络波动），有 {userPerfumes.length - lib.length} 瓶暂时取不出来。它们都还在，没有丢。
+            {userPerfumes.length > lib.length
+              ? `香水目录没加载出来（可能是网络波动），有 ${userPerfumes.length - lib.length} 瓶暂时取不出来。它们都还在，没有丢。`
+              : "香水目录没加载出来（可能是网络波动），现在搜什么都会显示「没搜到」。重新加载试试；也可以直接「手动记一瓶」，那条路不需要目录。"}
           </p>
           <button onClick={retryCatalog} className="btn-primary mt-4 px-6 py-3 text-[0.9rem]">
             重新加载

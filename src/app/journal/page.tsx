@@ -1,7 +1,7 @@
 "use client";
 // 香历——被气味标记的生活流水。系统自动生成骨架（哪天·什么天气·喷了什么·感觉如何），
 // 用户零写作负担；留白不谴责：无香的日子也是分寸，绝无「断签」概念。
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { monthGrid, dateKey, familyColor } from "@/lib/journal";
 import { OCCASION_LABEL } from "@/lib/format";
@@ -175,6 +175,17 @@ function DaySnapshot({
   onSaveNote: (note: string) => void;
 }) {
   const [note, setNote] = useState(entry.note ?? "");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSave = (v: string) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => onSaveNote(v), 600);
+  };
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    },
+    []
+  );
 
   const weather =
     entry.tempC != null
@@ -198,14 +209,24 @@ function DaySnapshot({
           <span className="text-ink-soft"> · 你说「{RATING_ZH[feedback]}」</span>
         ) : null}
       </p>
+      {/* 落盘不能只挂 onBlur：手机上"打完字直接切走"没有 blur，桌面端直接关标签页同理，
+          那段字就没了——而香历手记是全站唯一的用户自由文本，只此一份、没有云端。
+          改成停顿 600ms 即落，blur 再收一次口（防抖计时器还没到就失焦）。
+          key=日期 让整组件在切换日期时重挂，所以计时器天然随卸载清掉，见上方注释。 */}
       <textarea
         value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onBlur={() => onSaveNote(note)}
+        onChange={(e) => {
+          setNote(e.target.value);
+          scheduleSave(e.target.value);
+        }}
+        onBlur={() => {
+          if (saveTimer.current) clearTimeout(saveTimer.current);
+          onSaveNote(note);
+        }}
         maxLength={60}
         rows={2}
         placeholder="这天有什么值得记的吗？一句就够。"
-        className="serif mt-4 w-full resize-none rounded-md border border-line bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        className="serif mt-4 w-full resize-none rounded-md border border-field bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent"
       />
     </div>
   );

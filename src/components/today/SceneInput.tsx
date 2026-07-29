@@ -90,7 +90,7 @@ export function SceneInput() {
     <form
       onSubmit={submit}
       aria-describedby={err ? "scene-input-err" : undefined}
-      className="flex items-center gap-2 rounded-md border border-line-strong px-3 py-2 focus-within:border-accent"
+      className="flex items-center gap-2 rounded-md border border-field px-3 py-2 focus-within:border-accent"
     >
       <Sparkle />
       <input

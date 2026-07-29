@@ -446,3 +446,22 @@ test("演示香柜退场时，用户亲手写的手记不许被一起清掉", as
   );
   assert.equal(st().wearLog[0].note, "同事问了是什么香");
 });
+
+test("目录挂了要告诉的是「还没有数据的那个人」——空柜访客此前整个漏在告知之外", async () => {
+  // 旧判据 `catalogError && lib.length < userPerfumes.length` 是为「满柜用户不要被误显示成
+  // 空柜」写的，逻辑对，但空柜新访客的两个数同为 0，`0 < 0` 恒假。实测把 perfumes.min.json
+  // 与 ext-index.json 改名后刷新 /library：搜索下拉只有「没搜到」，整页没有任何重试按钮，
+  // 而正文还举着「试试搜『香奈儿』」——正是刚才搜不出来的那个词。
+  // 这是从简历/GitHub 点进来的人的第一屏。
+  const { shouldShowCatalogError } = await import("./catalog-state");
+
+  assert.equal(shouldShowCatalogError(false, 0, 0), false, "目录没挂就什么都不说");
+  assert.equal(shouldShowCatalogError(true, 0, 0), true, "空柜访客必须被告知");
+  assert.equal(shouldShowCatalogError(true, 3, 6), true, "满柜用户有 3 瓶取不出来，照旧告知");
+  // 扩展集与手动记录的香整条存在本机，目录挂了它们一瓶不少——这种柜子不该被整块拦下
+  assert.equal(
+    shouldShowCatalogError(true, 6, 6),
+    false,
+    "全部由国货/手动记录组成的柜子一瓶不缺，不该弹错误卡"
+  );
+});

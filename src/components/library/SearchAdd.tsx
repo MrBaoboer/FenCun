@@ -51,7 +51,17 @@ export function SearchAdd() {
 
   useEffect(() => {
     qRef.current = q;
-    setManualOpen(false);
+    // ⚠️ **不要**在这里无条件 setManualOpen(false)。
+    //
+    // 这个 effect 的依赖是 [q, catalog, byId]，于是「手动记一瓶」正开着时，用户在上方
+    // 搜索框多打一个字，整张已经填好的表就被卸载：name/brand/勾好的香调/扩散档全没。
+    // 目录晚到时更隐蔽——catalog 由 null 变成数组也会跑一次，而「目录还没到位就点开
+    // 手动记一瓶」恰恰是首次到访最常见的顺序（见下方 warmSearch 的注释）。
+    // 用户在这张表里输入的是全站唯一无法从别处回填的数据：13 个香调 chip 没有任何来源，
+    // 而 canSave 要求至少勾一个。
+    //
+    // 同一个组件的另一处（外部点击 onClick，:100）已经为此专门写了 `if (manualOpen) return`，
+    // 只是这一条路漏了。表单只由它自己的「取消 / 入柜」关闭。
     setExtError(false);
     // 兜住"目录到位之前就点了搜索框"这条顺序（首次到访最常见）：那一下 catalog 还是 null，
     // 预热落空，这里补建一次。buildSearch 内部有单例缓存，重复调用零成本。
@@ -182,8 +192,31 @@ export function SearchAdd() {
 
       {open && (
         <div className="absolute z-40 mt-2 w-full animate-fade-in overflow-hidden rounded-lg border border-line bg-surface shadow-float">
+          {/* 取数失败的提示钉在下拉顶部，**不能**跟在结果列表后面。
+              实测（375×667，扩展集分片返回 500）：用户点第 1 条结果（y≈280）时，
+              原本渲染在列表末尾的那条 <li> 落在 y=[885,919]，而列表可视区只到 y=630，
+              且不会自动滚过去——屏上唯一的变化是右侧胶囊从「取数据…」变回「+ 入柜」，
+              用户感知就是"点了没反应"，最可能的反应是反复点同一条。
+              而真正的出口（手动记一瓶）就写在那条看不见的提示里。
+              扩展集是 3.4 万款的唯一入柜通道，这条路不能是静默失败。
+              role="status" 让读屏也能收到——原来那个 <li> 没有任何 aria 语义。 */}
+          {extError && (
+            <p
+              role="status"
+              className="border-b border-line bg-warn-wash px-4 py-2.5 text-[0.78rem] leading-relaxed text-warn"
+            >
+              这一瓶的数据没取到，稍后再试；或往下拉，用「手动记一瓶」把它记下来。
+            </p>
+          )}
           {manualOpen ? (
-            <ManualAdd initialName={q.trim()} onDone={() => { setManualOpen(false); setQ(""); }} />
+            <ManualAdd
+              initialName={q.trim()}
+              onDone={() => {
+                setManualOpen(false);
+                setQ("");
+              }}
+              onCancel={() => setManualOpen(false)}
+            />
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-4 py-5 text-center">
               <p className="text-sm text-ink-faint">
@@ -273,11 +306,6 @@ export function SearchAdd() {
                   都不是它？手动记一瓶 →
                 </button>
               </li>
-              {extError && (
-                <li className="px-4 py-2 text-[0.76rem] text-warn">
-                  数据没取到，稍后再试，或先手动记一瓶。
-                </li>
-              )}
             </ul>
           )}
         </div>

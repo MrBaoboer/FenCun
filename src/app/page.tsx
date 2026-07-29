@@ -20,6 +20,7 @@ import { AltList } from "@/components/today/AltList";
 import { FeedbackBar } from "@/components/today/FeedbackBar";
 import { ChangeBottleSheet } from "@/components/today/ChangeBottleSheet";
 import { EmptyShelf } from "@/components/today/EmptyShelf";
+import { shouldShowCatalogError } from "@/lib/catalog-state";
 
 export default function TodayPage() {
   const ctx = useResolvedContext();
@@ -144,7 +145,7 @@ export default function TodayPage() {
 
       {!hydrated ? (
         <div className="h-56 animate-pulse bg-sunken/50" />
-      ) : catalogError && lib.length < userPerfumes.length ? (
+      ) : shouldShowCatalogError(catalogError, lib.length, userPerfumes.length) ? (
         // 判据是「**有几瓶因此拿不出来**」，不是「柜里有没有瓶」。
         // 扩展集与手动记录的香整条存在本机，目录挂了它们照样在——按旧判据，
         // 一个全部由国货/手动记录组成的香柜会被整块拦在一张"没加载出来"的卡后面，
@@ -244,9 +245,18 @@ function CatalogError({ count, onRetry }: { count: number; onRetry: () => void }
     <div className="card animate-fade-up flex flex-col items-center gap-5 px-6 py-12 text-center">
       <div>
         <h3 className="serif text-[1.3rem] font-bold text-ink">香水目录没加载出来</h3>
+        {/* 空柜访客与满柜用户要说不同的话：前者没有"瓶"可丢，他需要知道的是
+            "搜索现在查不到东西，不是你的香水不在库里"，以及那条离线也能走的出口。 */}
         <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
-          可能是网络波动，有 {count} 瓶暂时取不出来。它们都还在，没有丢——
-          点下面重试就能恢复今日推荐。
+          {count > 0 ? (
+            <>
+              可能是网络波动，有 {count} 瓶暂时取不出来。它们都还在，没有丢—— 点下面重试就能恢复今日推荐。
+            </>
+          ) : (
+            <>
+              可能是网络波动，现在搜什么都会显示「没搜到」——不是你的香水不在库里。 点下面重试；也可以直接到香柜里「手动记一瓶」，那条路不需要目录。
+            </>
+          )}
         </p>
       </div>
       <button onClick={onRetry} className="btn-primary px-6 py-3 text-[0.9rem]">
