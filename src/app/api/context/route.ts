@@ -75,6 +75,25 @@ function cacheSet<T>(
   map.set(key, { at: Date.now(), data });
 }
 
+/**
+ * 只给**取到了天气**的那条响应加边缘缓存。
+ *
+ * 这条路由此前全站零 CDN 缓存（线上实测 `Cache-Control: public, max-age=0,
+ * must-revalidate`），于是每个访客每次打开应用都是一次跨区函数调用——而同一座城市
+ * 同一网格的答案对所有人是同一份。进程内那份 30 分钟网格缓存只在单个实例里有效，
+ * Vercel 一冷启就没了。
+ *
+ * s-maxage 取 5 分钟：比上游的更新频率保守得多，也远短于进程内的 30 分钟，
+ * 不会让用户读到明显过时的读数；stale-while-revalidate 让过期后的第一个人也不用等。
+ * 浏览器侧仍然 max-age=0——切城市要立刻见效。
+ *
+ * ⚠️ 错误响应（weather_unavailable / rate_limited / bad_coords）**不带这个头**：
+ * 把一次限流或一次上游抖动缓存 5 分钟，等于把一个人的坏运气分给所有人。
+ */
+const EDGE_CACHE = {
+  "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=1800",
+};
+
 function gridKey(lon: number, lat: number) {
   return `${lon.toFixed(2)},${lat.toFixed(2)}`;
 }
@@ -195,7 +214,7 @@ export async function GET(req: NextRequest) {
     const cached = cacheGet(weatherCache, ck, WEATHER_TTL);
     if (cached) {
       const data = cityName ? { ...cached, city: cityName } : cached;
-      return NextResponse.json(data);
+      return NextResponse.json(data, { headers: EDGE_CACHE });
     }
 
     // 反查城市名（坐标定位时）
@@ -229,7 +248,7 @@ export async function GET(req: NextRequest) {
       city: cityName,
     };
     cacheSet(weatherCache, ck, data, WEATHER_TTL, WEATHER_CACHE_MAX);
-    return NextResponse.json(data);
+    return NextResponse.json(data, { headers: EDGE_CACHE });
   } catch (e) {
     // 闸门触顶不是"上游出错"，不该按 error 级别刷日志——它是预期内的自我保护
     if (e instanceof WeatherBudgetExhausted) {

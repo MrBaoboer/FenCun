@@ -47,12 +47,23 @@ export default function JournalPage() {
 
   const entry = byDay.get(selected) ?? null;
 
-  if (!hydrated) return <div className="h-72 animate-pulse bg-sunken/50" />;
+  // ⚠️ h1 必须在 hydrated 闸门**之前**。这一页是静态预渲染的，而预渲染时 hydrated 恒为 false，
+  // 于是闸门直接 return 掉骨架屏——刻意加的那个 sr-only 标题一个字都没进 HTML。
+  // 线上实测 /journal 的预渲染正文只剩导航，整页没有任何 h1。
+  // 骨架屏本身不需要它是条件渲染的：一个视觉隐藏的标题，加载态显示它没有任何代价。
+  const heading = <h1 className="sr-only">香历 · 你的穿香记录</h1>;
+  if (!hydrated)
+    return (
+      <div className="flex flex-col gap-5">
+        {heading}
+        <div className="h-72 animate-pulse bg-sunken/50" />
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-5">
       {/* 同今日页：月份那一行是 h2（它随翻页变），页面本身的标题用视觉隐藏的 h1 补齐 */}
-      <h1 className="sr-only">香历 · 你的穿香记录</h1>
+      {heading}
       {/* 月导航 */}
       <div className="card px-5 py-4">
         <div className="flex items-center justify-between">

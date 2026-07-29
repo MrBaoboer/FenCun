@@ -30,9 +30,9 @@ export default function ProfilePage() {
   // 否则情境栏会停在上一座城市的读数上，屏上的城市和天气对不上，推荐也还是按旧天气算的。
   // 隔壁「重置到初始状态」早就这么做了（那里 `void resolveByCity(d.city)`），
   // 导入这条路漏了：同一个后果，只有一处收拾。
-  function applyImport(raw: string): boolean {
+  async function applyImport(raw: string): Promise<boolean> {
     const before = useStore.getState().city;
-    const ok = importData(raw);
+    const ok = await importData(raw);
     if (ok) {
       const after = useStore.getState().city;
       if (after && after !== before) void resolveByCity(after);
@@ -68,9 +68,9 @@ export default function ProfilePage() {
     e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const raw = String(reader.result);
-      const preview = previewImport(raw);
+      const preview = await previewImport(raw);
       if (!preview) {
         setPending(null);
         setImportMsg({ kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" });
@@ -79,7 +79,7 @@ export default function ProfilePage() {
       setImportMsg(null);
       // 空柜直接导入（没有任何东西会被覆盖）；柜里有东西则必须先看清差额再确认
       if (userPerfumes.length === 0 && wearLog.length === 0) {
-        const ok = applyImport(raw);
+        const ok = await applyImport(raw);
         setImportMsg(
           ok
             ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
@@ -285,9 +285,10 @@ export default function ProfilePage() {
             </p>
             <div className="mt-2.5 flex gap-2">
               <button
-                onClick={() => {
-                  const ok = applyImport(pending.raw);
+                onClick={async () => {
+                  const raw = pending.raw;
                   setPending(null);
+                  const ok = await applyImport(raw);
                   setImportMsg(
                     ok
                       ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }

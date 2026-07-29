@@ -2,7 +2,6 @@
 // 客户端状态（香水库 + 反馈 + 偏好），持久化到 localStorage
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { z } from "zod";
 import type { UserPerfume, Feedback, Occasion, ScenePatch, Perfume, WearEntry } from "./types";
 import type { DemoState } from "./demo";
 import { DEMO_CITY } from "./demo";
@@ -120,12 +119,14 @@ interface State {
   recordSwap: (fromPerfumeId?: number) => void;
   recordDustyAdopt: () => void;
   exportData: () => string;
-  previewImport: (raw: string) => ImportPreview | null;
-  importData: (raw: string) => boolean;
+  // 这两个是异步的：校验层（zod）按需加载，见 lib/import-schema.ts 的说明。
+  // 调用方本来就在等 FileReader，这一步不增加任何用户可感的等待。
+  previewImport: (raw: string) => Promise<ImportPreview | null>;
+  importData: (raw: string) => Promise<boolean>;
   /** 读盘失败时另存的那份原始字节还在不在——决定要不要给用户「试着恢复」这条路 */
   hasRescueBackup: () => boolean;
   /** 拿 fencun-store.bak 里的字节走一次导入。返回 false = 一个字节都没动 */
-  restoreFromBackup: () => boolean;
+  restoreFromBackup: () => Promise<boolean>;
 }
 
 /** 导入前的体检报告：让用户在覆盖发生**之前**看到自己要付出什么代价 */
@@ -134,84 +135,6 @@ export interface ImportPreview {
   feedbacks: number;
   wearDays: number;
 }
-
-// 导入校验：数据在本机，导入导出就是官方备份路径——它的健壮性等于数据安全。
-// 宽进严出：整体结构必须对，坏掉的单条记录丢弃而非整包拒收。
-const UserPerfumeSchema = z.object({
-  perfumeId: z.number().int(),
-  addedAt: z.number(),
-  lastWornAt: z.number().optional(),
-  wornCount: z.number().int().min(0).optional(),
-  // 不再校验 bias：那个字段从来没被写过（偏置是 aggregateBias 每次现算的）。
-  // 老备份里若带着它，zod 默认剥掉未声明的键，导入照常成功。
-});
-const FeedbackSchema = z.object({
-  perfumeId: z.number().int(),
-  at: z.number(),
-  context: z.object({
-    season: z.enum(["winter", "spring", "summer", "autumn"]),
-    daypart: z.enum(["day", "night"]),
-    tempC: z.number(),
-    occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
-    feel: z.enum(["hot_humid", "hot_dry", "mild", "cold"]).optional(),
-    humidity: z.number().optional(),
-  }),
-  rating: z.enum(["too_weak", "perfect", "too_strong", "scene_mismatch"]),
-  sprays: z.tuple([z.number(), z.number()]).optional(),
-  tags: z.array(z.string()).optional(),
-});
-const PerfumeSnapshotSchema = z
-  .object({
-    id: z.number().int(),
-    name: z.string(),
-    nameZh: z.string().nullable(),
-    aliases: z.array(z.string()),
-    brand: z.string(),
-    brandZh: z.string(),
-    gender: z.enum(["male", "female", "unisex"]),
-    accords: z.array(z.object({ en: z.string(), zh: z.string(), strength: z.number() })),
-    seasonPct: z.object({ winter: z.number(), spring: z.number(), summer: z.number(), autumn: z.number() }),
-    daypartPct: z.object({ day: z.number(), night: z.number() }),
-    sillageTier: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-    styleTags: z.array(z.string()),
-    // notes 必填：香气档案卡直接读 p.notes.top/middle/base，缺了就是点开即崩。
-    // 校验面窄于消费面，等于把"宽进严出"的宽进做成了一个运行时炸弹——
-    // 导入的坏数据不该在用户点进详情页时才爆出来。
-    notes: z.object({
-      top: z.array(z.string()),
-      middle: z.array(z.string()),
-      base: z.array(z.string()),
-    }),
-  })
-  .loose();
-const ImportSchema = z
-  .object({
-    userPerfumes: z.array(z.unknown()),
-    feedbacks: z.array(z.unknown()).optional(),
-    extPerfumes: z.array(z.unknown()).optional(),
-    customPerfumes: z.array(z.unknown()).optional(),
-    swapAways: z.record(z.string(), z.array(z.number())).optional(),
-    wearLog: z.array(z.unknown()).optional(),
-    city: z.string().nullable().optional(),
-    occasion: z.string().optional(),
-    swapCount: z.number().optional(),
-    dustyAdoptCount: z.number().optional(),
-  })
-  .loose();
-
-const WearEntrySchema = z.object({
-  d: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  perfumeId: z.number().int(),
-  name: z.string().max(120),
-  fam: z.string().max(20),
-  occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
-  tempC: z.number().nullable(),
-  weatherText: z.string().max(40),
-  feel: z.enum(["hot_humid", "hot_dry", "mild", "cold"]),
-  note: z.string().max(200).optional(),
-});
-
-const OCCASIONS: Occasion[] = ["commute", "work", "date", "social", "formal", "casual", "home", "sport"];
 
 /** 持久化结构版本。改动 partialize 的字段结构时 +1，并在 migrate 里补上对应的迁移分支。 */
 export const PERSIST_VERSION = 2;
@@ -396,16 +319,6 @@ function dedupeSortWear(entries: WearEntry[]): WearEntry[] {
   const byDay = new Map<string, WearEntry>();
   for (const e of entries) byDay.set(e.d, e);
   return [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)).slice(-730);
-}
-
-function keepValid<T>(items: unknown[] | undefined, schema: z.ZodType<T>): T[] {
-  if (!Array.isArray(items)) return [];
-  const out: T[] = [];
-  for (const it of items) {
-    const r = schema.safeParse(it);
-    if (r.success) out.push(r.data);
-  }
-  return out;
 }
 
 export const useStore = create<State>()(
@@ -659,21 +572,16 @@ export const useStore = create<State>()(
       },
       // 导入是整包替换而非合并（合并要解决 id 冲突、时间线交错、反馈重复计数，语义上更危险）。
       // 既然是替换，就必须先让用户看清替换后是什么样——静默覆盖等于无声的数据丢失。
-      previewImport: (raw) => {
-        try {
-          const parsed = ImportSchema.safeParse(JSON.parse(raw));
-          if (!parsed.success) return null;
-          const d = parsed.data;
-          const userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
-          if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return null;
-          return {
-            perfumes: userPerfumes.length,
-            feedbacks: keepValid(d.feedbacks, FeedbackSchema).length,
-            wearDays: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]).length,
-          };
-        } catch {
-          return null;
-        }
+      previewImport: async (raw) => {
+        const { parseBackup } = await import("./import-schema");
+        const d = parseBackup(raw);
+        if (!d) return null;
+        return {
+          perfumes: d.userPerfumes.length,
+          feedbacks: d.feedbacks.length,
+          // 香历按日去重：预览给的数字必须和真正落库后一致
+          wearDays: dedupeSortWear(d.wearLog).length,
+        };
       },
       // 返回 false 只能有一个含义：**文件被拒，状态一个字节都没动**。
       // 调用方据此告诉用户「导入没能完成，现在的数据没有被改动」——这句话必须永远为真。
@@ -682,34 +590,30 @@ export const useStore = create<State>()(
       // 而此时内存状态**早已被替换**——UI 就会说出那句谎话。
       // 触发场景不是假想：localStorage 配额写满、Safari 隐私模式、存储被策略禁用，
       // `setItem` 都会抛。所以校验全部前置到 set 之前，set 之后一律视为已生效。
-      importData: (raw) => {
-        let d: z.infer<typeof ImportSchema>;
-        let userPerfumes: UserPerfume[];
-        try {
-          const parsed = ImportSchema.safeParse(JSON.parse(raw));
-          if (!parsed.success) return false;
-          d = parsed.data;
-          userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
-          if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return false; // 全坏 = 不是我们的备份
-        } catch {
-          return false;
-        }
+      importData: async (raw) => {
+        // 校验全部前置，set 之后不再有任何可能失败的判断——「返回 false 只能意味着
+        // 状态一个字节都没动」这句承诺靠的就是这个顺序（见 import-schema.ts:parseBackup）。
+        const { parseBackup } = await import("./import-schema");
+        const d = parseBackup(raw);
+        if (!d) return false;
         // 读盘失败时写入被冻结（保住盘上没读出来的字节）。用户导入了自己的备份，
         // 就意味着这台机器上该有什么已经由他说了算——解冻，从此正常落盘。
         writesFrozen = false;
         try {
           set((s) => ({
-            userPerfumes,
-            feedbacks: keepValid(d.feedbacks, FeedbackSchema).slice(-400) as Feedback[],
-            extPerfumes: keepValid(d.extPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
-            customPerfumes: keepValid(d.customPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
-            swapAways: d.swapAways ?? {},
-            wearLog: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]),
-            city: typeof d.city === "string" ? d.city : s.city,
-            occasion: OCCASIONS.includes(d.occasion as Occasion) ? (d.occasion as Occasion) : s.occasion,
-            swapCount: typeof d.swapCount === "number" ? d.swapCount : s.swapCount,
-            dustyAdoptCount:
-              typeof d.dustyAdoptCount === "number" ? d.dustyAdoptCount : s.dustyAdoptCount,
+            userPerfumes: d.userPerfumes,
+            feedbacks: d.feedbacks,
+            extPerfumes: d.extPerfumes,
+            customPerfumes: d.customPerfumes,
+            swapAways: d.swapAways,
+            wearLog: dedupeSortWear(d.wearLog),
+            city: d.city ?? s.city,
+            // 备份里的城市是用户自己那台机器上生效过的，按 manual 收下：
+            // 他刚刚亲手选择了"用这份数据"，不该再被自动定位覆盖掉。
+            cityOrigin: d.city ? ("manual" as CityOrigin) : s.cityOrigin,
+            occasion: d.occasion ?? s.occasion,
+            swapCount: d.swapCount ?? s.swapCount,
+            dustyAdoptCount: d.dustyAdoptCount ?? s.dustyAdoptCount,
             // 导入自己的备份 = 这台机器从此属于用户，演示香柜退场且不再自动装载
             demo: false,
             demoDismissed: true,
@@ -720,8 +624,6 @@ export const useStore = create<State>()(
           // zustand 的 persist 是先改内存、再写盘，所以抛到这里时状态**已经换掉了**。
           // 写盘失败（配额满 / 隐私模式 / 存储被禁）不该反过来报告成"没有改动"——
           // 那是这次修复要消灭的那句谎话。这里吞掉异常但仍返回 true。
-          // 已知局限：写盘失败本身没有对用户暴露。但这个暴露面是全局的
-          //（addPerfume / addFeedback 等每一次写入都一样），不该只在导入这一处单独处理。
         }
         return true;
       },
@@ -736,7 +638,7 @@ export const useStore = create<State>()(
       // 字节还在，用户却无从取回，等于没有恢复路径。
       // 注意 .bak 存的是 persist 的包装形状 { state, version }，比导出文件多一层：
       // 直接喂 importData 会因为顶层没有 userPerfumes 而被判成"不是我们的备份"。
-      restoreFromBackup: () => {
+      restoreFromBackup: async () => {
         let inner: unknown;
         try {
           const raw = safeLocalStorage()?.getItem(BACKUP_KEY);

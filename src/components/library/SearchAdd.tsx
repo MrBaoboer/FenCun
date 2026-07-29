@@ -5,11 +5,11 @@ import { useStore } from "@/lib/store";
 import {
   buildSearch,
   loadExtSearch,
-  fetchExtPerfume,
   rankSearchHits,
   type RankCandidate,
   type ExtIndexEntry,
 } from "@/lib/perfumes";
+import { fetchExtPerfume } from "@/lib/catalog";
 import { nameParts } from "@/lib/format";
 import { ManualAdd } from "@/components/library/ManualAdd";
 import type { Perfume } from "@/lib/types";

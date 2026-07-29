@@ -46,7 +46,7 @@ export function SiteNotice() {
             可以
             <button
               type="button"
-              onClick={() => setRescue(restoreFromBackup() ? "ok" : "failed")}
+              onClick={async () => setRescue((await restoreFromBackup()) ? "ok" : "failed")}
               className="mx-0.5 font-bold underline underline-offset-2"
             >
               试着恢复另存的那一份

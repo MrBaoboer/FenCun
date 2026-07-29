@@ -2,7 +2,7 @@
 // 全局：一次性加载香水目录 + 解析实时情境（定位→和风天气），跨页共享
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import type { Perfume, Weather } from "@/lib/types";
-import { loadCatalog } from "@/lib/perfumes";
+import { loadCatalog } from "@/lib/catalog";
 import { feelFromWeather } from "@/lib/season";
 import {
   useStore,
