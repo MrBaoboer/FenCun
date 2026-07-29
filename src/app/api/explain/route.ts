@@ -156,8 +156,12 @@ export async function POST(req: NextRequest) {
       裁决: input.verdict ?? "good",
       // 用户原话用定界符包住：它此前与系统铁律同处一个上下文、没有任何结构提示
       // 去区分"这是数据不是指令"。配合 SYSTEM 铁律 8 一起看。
+      // ⚠️ label 也要进围栏。它看起来是"我们生成的摘要"，但启发式兜底那条路（无 key /
+      // 限流 / 上游超时）返回的 label **就是用户原话的逐字回显**（parse-intent 的
+      // heuristic：一条规则都没命中时 label = 原文），而那正是最可能被注入的时刻。
+      // 围栏一次包住整段场景，比按字段分开更不容易漏。
       场景: input.scene
-        ? `${input.scene.label}${input.scene.rawText ? `（<<<${fence}>>>${input.scene.rawText}<<<${fence}-end>>>）` : ""}`
+        ? `<<<${fence}>>>${input.scene.label}${input.scene.rawText ? `｜${input.scene.rawText}` : ""}<<<${fence}-end>>>`
         : null,
       此刻: input.context,
       用法: input.usage,

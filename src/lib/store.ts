@@ -12,6 +12,8 @@ export interface RemovedBundle {
   userPerfume?: UserPerfume;
   extPerfume?: Perfume;
   customPerfume?: Perfume;
+  /** 这瓶的历史反馈——移出时一并带走，撤销时原样放回 */
+  feedbacks?: Feedback[];
 }
 
 /**
@@ -388,6 +390,7 @@ export const useStore = create<State>()(
           userPerfume: s.userPerfumes.find((u) => u.perfumeId === id),
           extPerfume: s.extPerfumes.find((p) => p.id === id),
           customPerfume: s.customPerfumes.find((p) => p.id === id),
+          feedbacks: s.feedbacks.filter((fb) => fb.perfumeId === id),
         };
         // swapAways 也要跟着走：它是按 perfumeId 存的换香时间戳，瓶子移出香柜后
         // 这些键再也不会被读到（recommend 只查在柜的瓶），却会一直占着 localStorage，
@@ -400,6 +403,10 @@ export const useStore = create<State>()(
           extPerfumes: s.extPerfumes.filter((p) => p.id !== id),
           customPerfumes: s.customPerfumes.filter((p) => p.id !== id),
           swapAways,
+          // 反馈同理：它按 perfumeId 存，瓶子走了就再也不会进推荐，
+          // 却仍被「我的」那页算进「有 N 瓶你反馈过偏冲」——用户看着一句关于
+          // 一瓶早已不在柜里的香的画像，无从对照。撤销时由 restorePerfume 一并放回。
+          feedbacks: s.feedbacks.filter((fb) => fb.perfumeId !== id),
         });
         return removed;
       },
@@ -417,6 +424,15 @@ export const useStore = create<State>()(
             b.customPerfume && !s.customPerfumes.some((p) => p.id === b.customPerfume!.id)
               ? [...s.customPerfumes, b.customPerfume]
               : s.customPerfumes,
+          // 反馈随瓶回来。按 at 去重，避免连点两次撤销把同一批反馈灌两遍
+          feedbacks: b.feedbacks?.length
+            ? [
+                ...s.feedbacks,
+                ...b.feedbacks.filter(
+                  (fb) => !s.feedbacks.some((x) => x.perfumeId === fb.perfumeId && x.at === fb.at)
+                ),
+              ].sort((a, c) => a.at - c.at)
+            : s.feedbacks,
         })),
       // 采纳（换香/吃灰/反馈提交）→ 记一笔穿戴：刷新 lastWornAt（吃灰口径）。
       // wornCount（常喷口径）同一天只累计一次——反馈+采纳双路径不再虚增

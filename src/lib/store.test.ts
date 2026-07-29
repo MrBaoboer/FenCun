@@ -472,3 +472,43 @@ test("目录挂了要告诉的是「还没有数据的那个人」——空柜�
     "全部由国货/手动记录组成的柜子一瓶不缺，不该弹错误卡"
   );
 });
+
+test("移出香柜时反馈一并带走，撤销时原样放回", () => {
+  // 反馈按 perfumeId 存，瓶子走了就再也不会进推荐，却仍被「我的」那页算进
+  //「有 N 瓶你反馈过偏冲」——用户看着一句关于早已不在柜里那瓶香的画像，无从对照。
+  //
+  // 注意本文件的环境：每次 set 都会在写盘那一步抛（见文件头），所以拿不到
+  // removePerfume 的返回值。两半分开验：移出看状态，撤销喂一份手造的 bundle。
+  const st = () => useStore.getState();
+  const fb = (at: number) => ({
+    perfumeId: 485,
+    at,
+    context: { season: "summer" as const, daypart: "day" as const, tempC: 30, occasion: "commute" as const },
+    rating: "too_strong" as const,
+  });
+  const mine = [fb(1), fb(2)];
+
+  silent(() =>
+    useStore.setState({ userPerfumes: [], extPerfumes: [], customPerfumes: [], feedbacks: [], swapAways: {} })
+  );
+  silent(() => st().addPerfume(485));
+  silent(() => useStore.setState({ feedbacks: [...mine, fb(3)] }));
+  silent(() => useStore.setState({ feedbacks: mine }));
+
+  silent(() => st().removePerfume(485));
+  assert.equal(st().feedbacks.length, 0, "瓶子移出了，它的反馈还留在画像里");
+
+  // 别的瓶的反馈不许被误伤
+  const other = { ...fb(9), perfumeId: 17 };
+  silent(() => useStore.setState({ userPerfumes: [{ perfumeId: 17, addedAt: 1 }], feedbacks: [other] }));
+  silent(() => st().removePerfume(485));
+  assert.deepEqual(st().feedbacks, [other], "移出 485 不该动 17 的反馈");
+
+  // 撤销：反馈随瓶回来，且连点两次不得灌两遍
+  silent(() => useStore.setState({ userPerfumes: [], feedbacks: [] }));
+  const bundle = { userPerfume: { perfumeId: 485, addedAt: 1 }, feedbacks: mine };
+  silent(() => st().restorePerfume(bundle));
+  assert.equal(st().feedbacks.length, 2, "撤销之后反馈要回来");
+  silent(() => st().restorePerfume(bundle));
+  assert.equal(st().feedbacks.length, 2, "重复撤销把同一批反馈灌了两遍");
+});

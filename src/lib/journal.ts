@@ -27,6 +27,10 @@ export function monthGrid(year: number, monthIdx: number): (number | null)[][] {
 // ---------- 香调族群 → 色点 ----------
 // 色值取中明度土色系：在宣纸暖白与炭黑两套主题上都可读，饱和度压低不抢版面。
 
+// 色点同时要在明韵卡面(#fffefb)与暗香卡面(#26262a)上看得见。
+// 实测原来的 spicy(#9a5b33) 在暗色下只有 2.81、dark(#6e6257) 只有 2.55，
+// 低于 WCAG 1.4.11 的 3:1——而月视图里只有色点，看不清就等于这一天没有记录。
+// 两者各提亮一点即可两边都过（现为 3.09 / 4.84），其余九族原本就达标。
 const FAMILY_GROUPS: { key: string; color: string; accords: string[] }[] = [
   { key: "citrus", color: "#b98a2e", accords: ["citrus", "fresh", "aromatic", "lavender"] },
   { key: "aquatic", color: "#5f8291", accords: ["aquatic", "marine", "ozonic", "watery", "salty"] },
@@ -35,9 +39,9 @@ const FAMILY_GROUPS: { key: string; color: string; accords: string[] }[] = [
   { key: "fruity", color: "#a86a56", accords: ["fruity", "tropical", "cherry", "coconut"] },
   { key: "sweet", color: "#a9713f", accords: ["sweet", "vanilla", "caramel", "honey", "chocolate", "coffee", "gourmand", "lactonic", "almond", "nutty"] },
   { key: "woody", color: "#8a6a4f", accords: ["woody", "sandalwood", "cedar", "patchouli"] },
-  { key: "spicy", color: "#9a5b33", accords: ["warm spicy", "fresh spicy", "soft spicy", "spicy", "cinnamon"] },
+  { key: "spicy", color: "#a36036", accords: ["warm spicy", "fresh spicy", "soft spicy", "spicy", "cinnamon"] },
   { key: "amber", color: "#a66a2e", accords: ["amber", "balsamic", "resinous", "incense"] },
-  { key: "dark", color: "#6e6257", accords: ["leather", "suede", "smoky", "oud", "tobacco", "animalic"] },
+  { key: "dark", color: "#7c6f62", accords: ["leather", "suede", "smoky", "oud", "tobacco", "animalic"] },
   { key: "musky", color: "#948b7d", accords: ["powdery", "musky", "soapy", "aldehydic"] },
 ];
 const DEFAULT_FAMILY = { key: "other", color: "#8f8779" };
