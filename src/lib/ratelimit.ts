@@ -80,6 +80,31 @@ export const withinDailyBudget = makeDailyGate("LLM_DAILY_CAP", 3000);
  */
 export const withinWeatherBudget = makeDailyGate("WEATHER_DAILY_CAP", 5000);
 
+/**
+ * 这个 POST 是不是本站页面发来的。
+ *
+ * 两条付费上游此前完全不看来源，而 `Content-Type: text/plain` 让 POST 成为 CORS
+ * **简单请求**——不触发预检，任意第三方网页都能从每个访客的浏览器里静默发起调用。
+ * 限流键是访客自己的 IP，所以挂了脚本的页面有 N 个访客就等于 N 份合法额度；
+ * 剩下的日闸门又是每实例的，流量越大实例越多、总额度越高，方向也是反的。
+ *
+ * 两道一起用，各挡一半：
+ * · Content-Type 必须是 JSON —— 跨源想带这个头就必须过预检，而我们不发任何 CORS 头，
+ *   预检直接被浏览器判死。这一条不依赖任何请求头的可信度，是真正的闸。
+ * · Sec-Fetch-Site 存在时必须是 same-origin —— 它由浏览器写、页面脚本改不了。
+ *   不存在时（curl、老浏览器、服务端互调）不拦：那不是这条防线要解决的问题，
+ *   而且拦了会顺手把自托管者的健康检查也拦掉。
+ *
+ * 注意这不是"防刷"的全部，只是把「一个网页就能做到」退回到「得自己准备 IP」。
+ */
+export function fromOwnPage(req: Request): boolean {
+  const ct = req.headers.get("content-type") ?? "";
+  if (!ct.toLowerCase().includes("application/json")) return false;
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin") return false;
+  return true;
+}
+
 // 客户端标识（IP）的信任模型：
 // - Vercel 部署（默认场景）：平台会覆写 x-forwarded-for / x-real-ip / x-vercel-forwarded-for，
 //   客户端伪造的同名请求头会被丢弃，直接读是安全的。

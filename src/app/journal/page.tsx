@@ -1,7 +1,7 @@
 "use client";
 // 香历——被气味标记的生活流水。系统自动生成骨架（哪天·什么天气·喷了什么·感觉如何），
 // 用户零写作负担；留白不谴责：无香的日子也是分寸，绝无「断签」概念。
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { monthGrid, dateKey, familyColor } from "@/lib/journal";
 import { OCCASION_LABEL } from "@/lib/format";
@@ -47,12 +47,23 @@ export default function JournalPage() {
 
   const entry = byDay.get(selected) ?? null;
 
-  if (!hydrated) return <div className="h-72 animate-pulse bg-sunken/50" />;
+  // ⚠️ h1 必须在 hydrated 闸门**之前**。这一页是静态预渲染的，而预渲染时 hydrated 恒为 false，
+  // 于是闸门直接 return 掉骨架屏——刻意加的那个 sr-only 标题一个字都没进 HTML。
+  // 线上实测 /journal 的预渲染正文只剩导航，整页没有任何 h1。
+  // 骨架屏本身不需要它是条件渲染的：一个视觉隐藏的标题，加载态显示它没有任何代价。
+  const heading = <h1 className="sr-only">香历 · 你的穿香记录</h1>;
+  if (!hydrated)
+    return (
+      <div className="flex flex-col gap-5">
+        {heading}
+        <div className="h-72 animate-pulse bg-sunken/50" />
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-5">
       {/* 同今日页：月份那一行是 h2（它随翻页变），页面本身的标题用视觉隐藏的 h1 补齐 */}
-      <h1 className="sr-only">香历 · 你的穿香记录</h1>
+      {heading}
       {/* 月导航 */}
       <div className="card px-5 py-4">
         <div className="flex items-center justify-between">
@@ -148,9 +159,9 @@ export default function JournalPage() {
           <Eyebrow className="eyebrow-mute">{formatDay(selected)}</Eyebrow>
           <p className="serif mt-2 text-[0.9rem] leading-relaxed text-ink-faint">
             {wearLog.length === 0
-              ? "香历还空着。从今天的推荐开始——你采纳或反馈的每一瓶，都会自动落在这里。"
+              ? "香历还空着。你采纳或反馈过的每一瓶，都会自动落在这里。"
               : selected === todayKey
-              ? "今天还没记。回「今日」采纳一瓶，或晚点答一句「刚好吗」，这一天就会有颜色。"
+              ? "今天还没记。去「今日」采纳一瓶，这一天就有颜色了。"
               : "这天没有记录。无香的日子，也是分寸。"}
           </p>
         </div>
@@ -175,6 +186,17 @@ function DaySnapshot({
   onSaveNote: (note: string) => void;
 }) {
   const [note, setNote] = useState(entry.note ?? "");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSave = (v: string) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => onSaveNote(v), 600);
+  };
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    },
+    []
+  );
 
   const weather =
     entry.tempC != null
@@ -198,14 +220,24 @@ function DaySnapshot({
           <span className="text-ink-soft"> · 你说「{RATING_ZH[feedback]}」</span>
         ) : null}
       </p>
+      {/* 落盘不能只挂 onBlur：手机上"打完字直接切走"没有 blur，桌面端直接关标签页同理，
+          那段字就没了——而香历手记是全站唯一的用户自由文本，只此一份、没有云端。
+          改成停顿 600ms 即落，blur 再收一次口（防抖计时器还没到就失焦）。
+          key=日期 让整组件在切换日期时重挂，所以计时器天然随卸载清掉，见上方注释。 */}
       <textarea
         value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onBlur={() => onSaveNote(note)}
+        onChange={(e) => {
+          setNote(e.target.value);
+          scheduleSave(e.target.value);
+        }}
+        onBlur={() => {
+          if (saveTimer.current) clearTimeout(saveTimer.current);
+          onSaveNote(note);
+        }}
         maxLength={60}
         rows={2}
         placeholder="这天有什么值得记的吗？一句就够。"
-        className="serif mt-4 w-full resize-none rounded-md border border-line bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        className="serif mt-4 w-full resize-none rounded-md border border-field bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent"
       />
     </div>
   );

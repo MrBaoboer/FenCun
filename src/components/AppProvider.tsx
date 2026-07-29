@@ -2,9 +2,15 @@
 // 全局：一次性加载香水目录 + 解析实时情境（定位→和风天气），跨页共享
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import type { Perfume, Weather } from "@/lib/types";
-import { loadCatalog } from "@/lib/perfumes";
+import { loadCatalog } from "@/lib/catalog";
 import { feelFromWeather } from "@/lib/season";
-import { useStore, hasOwnData, shouldRehydrateOnStorage } from "@/lib/store";
+import {
+  useStore,
+  hasOwnData,
+  shouldRehydrateOnStorage,
+  shouldAskGeolocation,
+  isStorageWipe,
+} from "@/lib/store";
 import { buildDemoState } from "@/lib/demo";
 
 type LocState = "idle" | "locating" | "ok" | "denied" | "error";
@@ -68,7 +74,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // 代价是这一页上未落盘的临时选择可能被换掉——比静默丢掉别人写下的东西轻得多。
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (!shouldRehydrateOnStorage(e.key, useStore.getState().hydrateError)) return;
+      const s = useStore.getState();
+      if (s.hydrateError || s.storageWiped) return;
+      // 盘被抹掉是另一件事，不能当"另一页写了新东西"来重读——重读会把内存里这一份
+      // 原样写回去，等于撤销用户刚做的清除（见 store.ts:isStorageWipe）。
+      if (isStorageWipe(e.key, e.newValue)) {
+        s.noteStorageWiped();
+        return;
+      }
+      if (!shouldRehydrateOnStorage(e.key, e.newValue, s.hydrateError)) return;
       void useStore.persist?.rehydrate();
     };
     window.addEventListener("storage", onStorage);
@@ -168,6 +182,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const r = await fetch(`/api/context?city=${encodeURIComponent(city)}`);
         const d = await r.json();
         if (d.error || d.tempC == null) return false;
+        // 兜底城市与并行定位是同时出发的（见下方首次解析）。定位先回来时它才是对的那份，
+        // 城市这一路就不许再盖回去——否则用户会看到真实城市闪一下又跳回北京。
+        if (geoWonRef.current) return true;
         setWeather({ ...d, approximate: false });
         setLocState("ok");
         weatherFetchedAtRef.current = Date.now();
@@ -180,12 +197,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const resolveByCoords = useCallback(() => {
+  // 定位是否已经赢下这一局。见 fetchByCity 里的说明。
+  const geoWonRef = useRef(false);
+
+  /**
+   * 申请定位。
+   *
+   * `soft` 是「屏上已经有一份兜底天气」时用的：这一路纯属锦上添花，
+   * 所以既不把 locState 打到 locating（情境栏会闪一下「正在定位」再闪回来），
+   * 失败时也不打到 denied/error——那会把已经拿到手的兜底天气在界面上判死，
+   * 用户明明看得见「北京 32℃」，情境栏却说没拿到位置。
+   */
+  const resolveByCoords = useCallback((opts?: { soft?: boolean }) => {
+    const soft = opts?.soft === true;
     if (!("geolocation" in navigator)) {
-      setLocState("denied");
+      if (!soft) setLocState("denied");
       return;
     }
-    setLocState("locating");
+    if (!soft) setLocState("locating");
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
@@ -198,19 +227,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const r = await fetch(`/api/context?lon=${lon}&lat=${lat}`);
           const d = await r.json();
           if (d.error || d.tempC == null) {
-            setLocState("error");
+            if (!soft) setLocState("error");
             return;
           }
+          geoWonRef.current = true;
           setWeather(d);
           setLocState("ok");
           weatherFetchedAtRef.current = Date.now();
           // 存截断值：30 分钟后的静默重取走同一个网格，缓存必中
           lastSourceRef.current = { kind: "coords", lon: Number(lon), lat: Number(lat) };
+          // 定位成功就把反查到的城市记下来：下次打开先用它出首屏，同时照旧再定位一次。
+          // 记的是 geo 不是 manual——用户没有做过这个选择，出差搬家时要能自己跟上。
+          if (typeof d.city === "string" && d.city) useStore.getState().setGeoCity(d.city);
         } catch {
-          setLocState("error");
+          if (!soft) setLocState("error");
         }
       },
-      () => setLocState("denied"),
+      () => {
+        if (!soft) setLocState("denied");
+      },
       { timeout: 9000, maximumAge: 10 * 60 * 1000 }
     );
   }, []);
@@ -256,12 +291,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const d = buildDemoState(catalog, Date.now());
       if (d) useStore.getState().enterDemo(d);
     }
-    const city = useStore.getState().city;
+    const { city, cityOrigin } = useStore.getState();
     if (city) {
       // 记忆城市：接口失败/超时也要落到 error，触发 useResolvedContext 的季节+时段降级（否则返场用户卡在 idle→零推荐）
       fetchByCity(city).then((ok) => {
-        if (!ok) setLocState("error");
+        if (!ok && !geoWonRef.current) setLocState("error");
       });
+      // 城市不是用户自己选的时候（演示态兜底、上次定位的结果），并行再问一次定位。
+      // 两件事同时发的理由：城市那一路 300–600ms 就能出天气，定位要等授权框加 GPS，
+      // 串起来等于让所有人对着空情境栏等定位；并行则是「先给北京的读数，
+      // 定位一回来就换成你自己的」。定位失败就停在兜底那份，什么都不用做。
+      if (shouldAskGeolocation(cityOrigin)) resolveByCoords({ soft: true });
     } else {
       resolveByCoords();
     }

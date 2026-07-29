@@ -4,12 +4,13 @@
 // 把 /profile 分享出去点进来会落在首页。
 //（三个内页确实没有独有的可索引内容——数据都在用户本机，服务端渲染出来的只有骨架，
 //  见 sitemap.ts 的说明。所以这不是收录问题，是门面问题。）
-export const metadata = {
+import { pageMetadata } from "@/app/page-meta";
+
+export const metadata = pageMetadata({
   title: "我的分寸 · 氛寸",
   description: "氛寸从你的反馈里学到的偏好，以及这台机器上存了什么。",
-  alternates: { canonical: "/profile" },
-  openGraph: { title: "我的分寸 · 氛寸", description: "氛寸从你的反馈里学到的偏好，以及这台机器上存了什么。", url: "/profile" },
-};
+  path: "/profile",
+});
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return children;

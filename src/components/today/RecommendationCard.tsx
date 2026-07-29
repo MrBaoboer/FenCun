@@ -127,7 +127,7 @@ export function RecommendationCard({
       {np.secondary && <p className="en-italic mt-1.5 text-[1.15rem]">{np.secondary}</p>}
       {allAvoid && !isSelected && (
         <p className="serif mt-2.5 text-[0.85rem] leading-relaxed text-warn">
-          下面这瓶是相对最稳的一瓶
+          柜里这瓶相对最稳
         </p>
       )}
       <p className="mt-2.5 text-[0.8rem] text-ink-faint">

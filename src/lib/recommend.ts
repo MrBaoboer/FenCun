@@ -80,14 +80,21 @@ function computeVerdict(
   // 二元裁决对连续输入必然有台阶，真正要选的是：保持严格（接受台阶）还是降低阈值
   // （扩大劝退面）。这属于产品取舍，留给下一轮显式决定，不在这里悄悄改掉——
   // avoid 是输出最强、最不可逆的一档。
-  if (parts.weatherTone === "heavy_in_heat" && parts.heatLoad >= 0.9)
+  //
+  // 降级情境（拿不到天气）下，天气一律不参与裁决：那时 ctx.tempC 是 hooks.ts 按季节
+  // 填的代表温度（夏 27 / 冬 6 / 春 18 / 秋 16），不是读数。文案层已经因此闭嘴
+  //（usage.ts 里的 !ctx.approximate），裁决层不跟着停手就又成了「判了说不出为什么」
+  // ——实测降级冬季 40 款正落在这里：判了 caution，风险清单是空的。
+  const weatherKnown = !ctx.approximate;
+  if (weatherKnown && parts.weatherTone === "heavy_in_heat" && parts.heatLoad >= 0.9)
     return { verdict: "avoid", avoidCause: "weather" };
   if (seasonMiss) return { verdict: "avoid", avoidCause: "season" };
   if (tooLoudClosed) return { verdict: "avoid", avoidCause: "venue" };
   // 第二个触发源与 computeRiskNotes 共用同一个常量：天气压到这条线以下就判 caution，
   // 而同一条线也是那边"必须说得出一句话"的门槛。两边各写一个 0.95，就会重演
   // 「数字收了、话没说」——这次是反过来的形态：「判了、说不出为什么」。
-  if (risks.length > 0 || parts.weather < WEATHER_CAUTION) return { verdict: "caution", avoidCause: null };
+  if (risks.length > 0 || (weatherKnown && parts.weather < WEATHER_CAUTION))
+    return { verdict: "caution", avoidCause: null };
   return { verdict: "good", avoidCause: null };
 }
 

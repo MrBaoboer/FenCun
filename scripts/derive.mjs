@@ -131,14 +131,18 @@ export function toPerfume(r, maps) {
     longevity: r.longevity != null ? Number(r.longevity.toFixed(2)) : null,
     sillage: r.sillage != null ? Number(r.sillage.toFixed(2)) : null,
     sillageTier: sillageTier(r.sillage),
-    priceValue: r.priceValue != null ? Number(r.priceValue.toFixed(2)) : null,
     seasonPct: seasonPct(r.seasons),
     daypartPct: daypartPct(r.daypart),
     accords: accords.map((a) => ({ en: a.name, zh: zhAccord(a.name), strength: a.strength })),
     notes: { top: notesTop, middle: notesMid, base: notesBase },
     notesFlat: allNotes,
     styleTags: styleTags(r),
-    popularity: r.popularity,
+    // ⚠️ popularity 与 priceValue **刻意不进产出**。
+    // 两者在运行期一个字都没被读过（搜索排序用的是 people，见 lib/perfumes.ts），
+    // 却随主目录进每一次首屏——实测占 54.0KB raw / 12.5KB gzip，而主目录是四页共用、
+    // 在 <head> 里 preload 的关键路径资源。
+    // popularity 本身仍然要留在管线内部：extract-terms 靠它选 Top1500、
+    // build-ext 靠它给分片排序（见那两个文件），只是不再写进文件。
     people: r.people,
   };
 }

@@ -2,9 +2,9 @@
 // 客户端状态（香水库 + 反馈 + 偏好），持久化到 localStorage
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { z } from "zod";
 import type { UserPerfume, Feedback, Occasion, ScenePatch, Perfume, WearEntry } from "./types";
 import type { DemoState } from "./demo";
+import { DEMO_CITY } from "./demo";
 import { dayFloor } from "./recommend";
 
 /** 一次移除所涉及的全部本地记录——撤销时原样放回 */
@@ -12,6 +12,8 @@ export interface RemovedBundle {
   userPerfume?: UserPerfume;
   extPerfume?: Perfume;
   customPerfume?: Perfume;
+  /** 这瓶的历史反馈——移出时一并带走，撤销时原样放回 */
+  feedbacks?: Feedback[];
 }
 
 /**
@@ -35,6 +37,21 @@ export interface AdoptSnapshot {
   swapAways: Record<string, number[]>;
 }
 
+/** 当前城市名是怎么来的。判据见 State.cityOrigin 的说明 */
+export type CityOrigin = "none" | "demo" | "geo" | "manual";
+
+/**
+ * 拿到城市之后，还要不要再问一次定位。
+ *
+ * 只有 manual 不问——那是用户亲手指定的，自动定位没有资格覆盖它。
+ * 其余三种都问：demo/none 是因为还不知道用户在哪，geo 是因为用户会出差、会搬家。
+ *
+ * 抽成纯函数是为了可测：navigator.geolocation 在 node --test 下造不出来，判据可以。
+ */
+export function shouldAskGeolocation(origin: CityOrigin): boolean {
+  return origin !== "manual";
+}
+
 interface State {
   userPerfumes: UserPerfume[];
   feedbacks: Feedback[];
@@ -42,7 +59,20 @@ interface State {
   customPerfumes: Perfume[]; // 手动记录的香水（负数 id）
   swapAways: Record<string, number[]>; // perfumeId → 最近被从主推位换掉的时间戳（隐式差评原料，各留 10 条）
   wearLog: WearEntry[]; // 香历：一天一条，采纳/反馈时自动落账——记录资产，随时间增值
-  city: string | null; // 手动城市覆盖（定位失败时用）
+  city: string | null; // 当前生效的城市名
+  // 这个城市**是怎么来的**。只存城市名不够：同样是「北京」，用户亲手填的和演示态兜底给的，
+  // 下次打开时该做的事完全相反——前者要照办，后者要重新问一次定位。
+  //
+  // 不区分的代价实测过：演示态自带 city="北京"，退场时 DEMO_CLEARED 又没清它，
+  // 于是 AppProvider 的 `if (city) fetchByCity(city) else resolveByCoords()` 永远走左边，
+  // resolveByCoords 对**每一个**经过演示香柜的用户（即所有首访者）一次都没跑过——
+  // 实时天气是这个产品的核心输入，全线上用户拿到的都是北京的读数。
+  //
+  // · manual —— 用户在情境栏亲手指定，最高优先级，不再自动覆盖
+  // · geo    —— 定位成功后反查得到，仍会在每次打开时刷新（用户会出差、会搬家）
+  // · demo   —— 演示态兜底，只为首屏有天气可看；每次打开都要再申请一次定位
+  // · none   —— 没有城市，直接走定位
+  cityOrigin: CityOrigin;
   occasion: Occasion;
   scene: ScenePatch | null; // 自然语言场景（覆盖 occasion）
   hydrated: boolean;
@@ -53,6 +83,9 @@ interface State {
   // 而在存储不可写的设备上，用户加香水、记用香、留反馈每一步都显示成功，刷新后全没：
   // profile 页正写着「你的香柜与全部反馈只存在本机浏览器」，那是这个产品唯一的数据副本。
   persistError: string | null;
+  // 盘上的数据在本页开着的时候被抹掉了（浏览器的「清除本站数据」、另一标签页 clear()）。
+  // 内存里这一份是唯一的幸存者，但它已经不许再落盘——去留由用户决定，我们只负责说清楚。
+  storageWiped: boolean;
   // 演示态：初次到访时自动装载的黄金集香柜（见 lib/demo.ts）。
   // demo=true 期间界面始终自报身份；dismissed 一旦为真就永不再自动装载——
   // 用户清空过一次之后，这台机器上的香柜就只属于他自己。
@@ -74,6 +107,10 @@ interface State {
   undoAdopt: (s: AdoptSnapshot | AdoptSnapshot[]) => void;
   addFeedback: (fb: Feedback) => void;
   setCity: (c: string | null) => void;
+  /** 定位反查到的城市。与 setCity 分开，是因为来源不同、下次打开时的处置也不同 */
+  setGeoCity: (c: string) => void;
+  /** 盘被抹掉了：冻结写入并立起标志。顺序与读盘失败分支一致——先冻结，再 setState */
+  noteStorageWiped: () => void;
   setOccasion: (o: Occasion) => void;
   setScene: (s: ScenePatch | null) => void;
   hasPerfume: (id: number) => boolean;
@@ -84,12 +121,14 @@ interface State {
   recordSwap: (fromPerfumeId?: number) => void;
   recordDustyAdopt: () => void;
   exportData: () => string;
-  previewImport: (raw: string) => ImportPreview | null;
-  importData: (raw: string) => boolean;
+  // 这两个是异步的：校验层（zod）按需加载，见 lib/import-schema.ts 的说明。
+  // 调用方本来就在等 FileReader，这一步不增加任何用户可感的等待。
+  previewImport: (raw: string) => Promise<ImportPreview | null>;
+  importData: (raw: string) => Promise<boolean>;
   /** 读盘失败时另存的那份原始字节还在不在——决定要不要给用户「试着恢复」这条路 */
   hasRescueBackup: () => boolean;
   /** 拿 fencun-store.bak 里的字节走一次导入。返回 false = 一个字节都没动 */
-  restoreFromBackup: () => boolean;
+  restoreFromBackup: () => Promise<boolean>;
 }
 
 /** 导入前的体检报告：让用户在覆盖发生**之前**看到自己要付出什么代价 */
@@ -99,86 +138,8 @@ export interface ImportPreview {
   wearDays: number;
 }
 
-// 导入校验：数据在本机，导入导出就是官方备份路径——它的健壮性等于数据安全。
-// 宽进严出：整体结构必须对，坏掉的单条记录丢弃而非整包拒收。
-const UserPerfumeSchema = z.object({
-  perfumeId: z.number().int(),
-  addedAt: z.number(),
-  lastWornAt: z.number().optional(),
-  wornCount: z.number().int().min(0).optional(),
-  // 不再校验 bias：那个字段从来没被写过（偏置是 aggregateBias 每次现算的）。
-  // 老备份里若带着它，zod 默认剥掉未声明的键，导入照常成功。
-});
-const FeedbackSchema = z.object({
-  perfumeId: z.number().int(),
-  at: z.number(),
-  context: z.object({
-    season: z.enum(["winter", "spring", "summer", "autumn"]),
-    daypart: z.enum(["day", "night"]),
-    tempC: z.number(),
-    occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
-    feel: z.enum(["hot_humid", "hot_dry", "mild", "cold"]).optional(),
-    humidity: z.number().optional(),
-  }),
-  rating: z.enum(["too_weak", "perfect", "too_strong", "scene_mismatch"]),
-  sprays: z.tuple([z.number(), z.number()]).optional(),
-  tags: z.array(z.string()).optional(),
-});
-const PerfumeSnapshotSchema = z
-  .object({
-    id: z.number().int(),
-    name: z.string(),
-    nameZh: z.string().nullable(),
-    aliases: z.array(z.string()),
-    brand: z.string(),
-    brandZh: z.string(),
-    gender: z.enum(["male", "female", "unisex"]),
-    accords: z.array(z.object({ en: z.string(), zh: z.string(), strength: z.number() })),
-    seasonPct: z.object({ winter: z.number(), spring: z.number(), summer: z.number(), autumn: z.number() }),
-    daypartPct: z.object({ day: z.number(), night: z.number() }),
-    sillageTier: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-    styleTags: z.array(z.string()),
-    // notes 必填：香气档案卡直接读 p.notes.top/middle/base，缺了就是点开即崩。
-    // 校验面窄于消费面，等于把"宽进严出"的宽进做成了一个运行时炸弹——
-    // 导入的坏数据不该在用户点进详情页时才爆出来。
-    notes: z.object({
-      top: z.array(z.string()),
-      middle: z.array(z.string()),
-      base: z.array(z.string()),
-    }),
-  })
-  .loose();
-const ImportSchema = z
-  .object({
-    userPerfumes: z.array(z.unknown()),
-    feedbacks: z.array(z.unknown()).optional(),
-    extPerfumes: z.array(z.unknown()).optional(),
-    customPerfumes: z.array(z.unknown()).optional(),
-    swapAways: z.record(z.string(), z.array(z.number())).optional(),
-    wearLog: z.array(z.unknown()).optional(),
-    city: z.string().nullable().optional(),
-    occasion: z.string().optional(),
-    swapCount: z.number().optional(),
-    dustyAdoptCount: z.number().optional(),
-  })
-  .loose();
-
-const WearEntrySchema = z.object({
-  d: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  perfumeId: z.number().int(),
-  name: z.string().max(120),
-  fam: z.string().max(20),
-  occasion: z.enum(["commute", "work", "date", "social", "formal", "casual", "home", "sport"]),
-  tempC: z.number().nullable(),
-  weatherText: z.string().max(40),
-  feel: z.enum(["hot_humid", "hot_dry", "mild", "cold"]),
-  note: z.string().max(200).optional(),
-});
-
-const OCCASIONS: Occasion[] = ["commute", "work", "date", "social", "formal", "casual", "home", "sport"];
-
 /** 持久化结构版本。改动 partialize 的字段结构时 +1，并在 migrate 里补上对应的迁移分支。 */
-export const PERSIST_VERSION = 1;
+export const PERSIST_VERSION = 2;
 
 /**
  * 导出文件的格式版本。**与 PERSIST_VERSION 互不相干**：一个描述 localStorage 里的结构，
@@ -202,15 +163,39 @@ const BACKUP_KEY = "fencun-store.bak";
  * 而这些数据只有本机一份、没有云端，覆盖不可逆。
  *
  * 两个边界：
- * · `key === null` 是 `localStorage.clear()`，同样要认——那时我们这一页的内存态是唯一的幸存者，
- *   但盘上已经空了，继续按旧状态写回去只会造出一份半新半旧的数据；
+ * · 盘被清空（`localStorage.clear()` 或把这个键 removeItem）**不能**走重读，见 isStorageWipe；
  * · 读盘出过错时写入已经被冻结（见 onRehydrateStorage），这时一切自动动作都要停手。
  *
  * 抽成纯函数是为了可测：浏览器事件本身在 node --test 下造不出来，判据可以。
  */
-export function shouldRehydrateOnStorage(key: string | null, hydrateError: string | null): boolean {
+export function shouldRehydrateOnStorage(
+  key: string | null,
+  newValue: string | null,
+  hydrateError: string | null
+): boolean {
   if (hydrateError) return false;
-  return key === null || key === STORE_KEY;
+  if (isStorageWipe(key, newValue)) return false;
+  return key === STORE_KEY;
+}
+
+/**
+ * 这次 storage 事件是不是「盘被清空了」。
+ *
+ * `key === null` 是 `localStorage.clear()`；`key === STORE_KEY && newValue === null`
+ * 是 removeItem。两者都表示用户（或浏览器的「清除本站数据」）把这份数据抹掉了。
+ *
+ * ⚠️ 这里**绝不能**走 rehydrate。zustand 在盘上取不到值时会 `merge(undefined, get())`，
+ * 也就是把内存态原样留着，随后 onRehydrateStorage 的成功分支一句 setState 又被 persist
+ * 立刻写回盘——净效果是「清空」被撤销。实测过：写入 331 字节（含用户手记）→ clear() →
+ * 盘上为空 → rehydrate() → 331 字节连同手记原样回来。
+ *
+ * 那条注释原本写的是「继续按旧状态写回去只会造出一份半新半旧的数据」，方向是对的，
+ * 只是当时把「重读」当成了避免它的手段，而重读恰恰是执行它的手段。
+ *
+ * 正确的动作和读盘失败时一样：冻结写入 + 告诉用户，把去留交还给他。
+ */
+export function isStorageWipe(key: string | null, newValue: string | null): boolean {
+  return key === null || (key === STORE_KEY && newValue === null);
 }
 
 /**
@@ -338,16 +323,6 @@ function dedupeSortWear(entries: WearEntry[]): WearEntry[] {
   return [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)).slice(-730);
 }
 
-function keepValid<T>(items: unknown[] | undefined, schema: z.ZodType<T>): T[] {
-  if (!Array.isArray(items)) return [];
-  const out: T[] = [];
-  for (const it of items) {
-    const r = schema.safeParse(it);
-    if (r.success) out.push(r.data);
-  }
-  return out;
-}
-
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
@@ -358,10 +333,12 @@ export const useStore = create<State>()(
       swapAways: {},
       wearLog: [],
       city: null,
+      cityOrigin: "none",
       occasion: "commute",
       scene: null,
       hydrated: false,
       hydrateError: null,
+      storageWiped: false,
       persistError: null,
       demo: false,
       demoDismissed: false,
@@ -413,6 +390,7 @@ export const useStore = create<State>()(
           userPerfume: s.userPerfumes.find((u) => u.perfumeId === id),
           extPerfume: s.extPerfumes.find((p) => p.id === id),
           customPerfume: s.customPerfumes.find((p) => p.id === id),
+          feedbacks: s.feedbacks.filter((fb) => fb.perfumeId === id),
         };
         // swapAways 也要跟着走：它是按 perfumeId 存的换香时间戳，瓶子移出香柜后
         // 这些键再也不会被读到（recommend 只查在柜的瓶），却会一直占着 localStorage，
@@ -425,6 +403,10 @@ export const useStore = create<State>()(
           extPerfumes: s.extPerfumes.filter((p) => p.id !== id),
           customPerfumes: s.customPerfumes.filter((p) => p.id !== id),
           swapAways,
+          // 反馈同理：它按 perfumeId 存，瓶子走了就再也不会进推荐，
+          // 却仍被「我的」那页算进「有 N 瓶你反馈过偏冲」——用户看着一句关于
+          // 一瓶早已不在柜里的香的画像，无从对照。撤销时由 restorePerfume 一并放回。
+          feedbacks: s.feedbacks.filter((fb) => fb.perfumeId !== id),
         });
         return removed;
       },
@@ -442,6 +424,15 @@ export const useStore = create<State>()(
             b.customPerfume && !s.customPerfumes.some((p) => p.id === b.customPerfume!.id)
               ? [...s.customPerfumes, b.customPerfume]
               : s.customPerfumes,
+          // 反馈随瓶回来。按 at 去重，避免连点两次撤销把同一批反馈灌两遍
+          feedbacks: b.feedbacks?.length
+            ? [
+                ...s.feedbacks,
+                ...b.feedbacks.filter(
+                  (fb) => !s.feedbacks.some((x) => x.perfumeId === fb.perfumeId && x.at === fb.at)
+                ),
+              ].sort((a, c) => a.at - c.at)
+            : s.feedbacks,
         })),
       // 采纳（换香/吃灰/反馈提交）→ 记一笔穿戴：刷新 lastWornAt（吃灰口径）。
       // wornCount（常喷口径）同一天只累计一次——反馈+采纳双路径不再虚增
@@ -509,7 +500,17 @@ export const useStore = create<State>()(
           }
           return { feedbacks: next.slice(-400) };
         }),
-      setCity: (c) => set({ city: c }),
+      // 用户亲手指定：origin 记 manual，从此自动定位不再覆盖它（清空则退回 none，下次打开重新问）
+      setCity: (c) => set({ city: c, cityOrigin: c ? "manual" : "none" }),
+      // 定位成功后反查到的城市。**不**升级成 manual：用户没有做过这个选择，
+      // 下次打开仍要重新定位一次，否则出差/搬家之后会一直用旧城市的天气。
+      setGeoCity: (c) => set({ city: c, cityOrigin: "geo" }),
+      noteStorageWiped: () => {
+        // ⚠️ 顺序不能反，与 onRehydrateStorage 的错误分支同理：下面这句 setState 会被
+        // persist 立刻写回盘，不先冻结就等于自己把刚被抹掉的数据又写了回去。
+        writesFrozen = true;
+        set({ storageWiped: true });
+      },
       setOccasion: (o) => set({ occasion: o, scene: null }), // 手动选场合即清除自然语言场景
       setScene: (s) => set({ scene: s }),
       hasPerfume: (id) => get().userPerfumes.some((u) => u.perfumeId === id),
@@ -519,7 +520,11 @@ export const useStore = create<State>()(
         set((s) =>
           s.demoDismissed || hasOwnData(s as unknown as Record<string, unknown>)
             ? s
-            : { ...demoPayload(d), city: s.city ?? d.city }
+            : s.city
+              ? demoPayload(d) // 已经有城市（用户填的或上次定位到的）就不碰它
+              : // 演示城市**必须**带着来源一起写。只写 city 的旧写法让它和用户自己选的城市
+                // 长得一模一样，于是它躲过了退场清理、也躲过了每次打开的定位申请。
+                { ...demoPayload(d), city: d.city, cityOrigin: "demo" as CityOrigin }
         ),
       // 重置到初次打开的样子：先把这台机器上的一切抹平，再把示例香柜原样装回来。
       //
@@ -530,7 +535,14 @@ export const useStore = create<State>()(
       // 不是自动装载，清掉现有数据正是他要的结果。二次确认由调用方负责（见 profile 页）。
       // city / scene 一并复位——"初始状态"包含北京这座城市；调用方须随即重新解析一次天气，
       // 否则情境栏会停在旧城市的读数上，屏上的城市和天气对不上。
-      resetToDemo: (d) => set(() => ({ ...DEMO_CLEARED, ...demoPayload(d), city: d.city, scene: null })),
+      resetToDemo: (d) =>
+        set(() => ({
+          ...DEMO_CLEARED,
+          ...demoPayload(d),
+          city: d.city,
+          cityOrigin: "demo" as CityOrigin,
+          scene: null,
+        })),
       // 香历落账：一天一条、后写覆盖（同日改主意以最后一瓶为准），手记保留；按日期序封顶两年
       logWear: (entry) =>
         set((s) => {
@@ -576,21 +588,16 @@ export const useStore = create<State>()(
       },
       // 导入是整包替换而非合并（合并要解决 id 冲突、时间线交错、反馈重复计数，语义上更危险）。
       // 既然是替换，就必须先让用户看清替换后是什么样——静默覆盖等于无声的数据丢失。
-      previewImport: (raw) => {
-        try {
-          const parsed = ImportSchema.safeParse(JSON.parse(raw));
-          if (!parsed.success) return null;
-          const d = parsed.data;
-          const userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
-          if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return null;
-          return {
-            perfumes: userPerfumes.length,
-            feedbacks: keepValid(d.feedbacks, FeedbackSchema).length,
-            wearDays: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]).length,
-          };
-        } catch {
-          return null;
-        }
+      previewImport: async (raw) => {
+        const { parseBackup } = await import("./import-schema");
+        const d = parseBackup(raw);
+        if (!d) return null;
+        return {
+          perfumes: d.userPerfumes.length,
+          feedbacks: d.feedbacks.length,
+          // 香历按日去重：预览给的数字必须和真正落库后一致
+          wearDays: dedupeSortWear(d.wearLog).length,
+        };
       },
       // 返回 false 只能有一个含义：**文件被拒，状态一个字节都没动**。
       // 调用方据此告诉用户「导入没能完成，现在的数据没有被改动」——这句话必须永远为真。
@@ -599,34 +606,30 @@ export const useStore = create<State>()(
       // 而此时内存状态**早已被替换**——UI 就会说出那句谎话。
       // 触发场景不是假想：localStorage 配额写满、Safari 隐私模式、存储被策略禁用，
       // `setItem` 都会抛。所以校验全部前置到 set 之前，set 之后一律视为已生效。
-      importData: (raw) => {
-        let d: z.infer<typeof ImportSchema>;
-        let userPerfumes: UserPerfume[];
-        try {
-          const parsed = ImportSchema.safeParse(JSON.parse(raw));
-          if (!parsed.success) return false;
-          d = parsed.data;
-          userPerfumes = keepValid(d.userPerfumes, UserPerfumeSchema);
-          if (userPerfumes.length === 0 && d.userPerfumes.length > 0) return false; // 全坏 = 不是我们的备份
-        } catch {
-          return false;
-        }
+      importData: async (raw) => {
+        // 校验全部前置，set 之后不再有任何可能失败的判断——「返回 false 只能意味着
+        // 状态一个字节都没动」这句承诺靠的就是这个顺序（见 import-schema.ts:parseBackup）。
+        const { parseBackup } = await import("./import-schema");
+        const d = parseBackup(raw);
+        if (!d) return false;
         // 读盘失败时写入被冻结（保住盘上没读出来的字节）。用户导入了自己的备份，
         // 就意味着这台机器上该有什么已经由他说了算——解冻，从此正常落盘。
         writesFrozen = false;
         try {
           set((s) => ({
-            userPerfumes,
-            feedbacks: keepValid(d.feedbacks, FeedbackSchema).slice(-400) as Feedback[],
-            extPerfumes: keepValid(d.extPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
-            customPerfumes: keepValid(d.customPerfumes, PerfumeSnapshotSchema) as unknown as Perfume[],
-            swapAways: d.swapAways ?? {},
-            wearLog: dedupeSortWear(keepValid(d.wearLog, WearEntrySchema) as WearEntry[]),
-            city: typeof d.city === "string" ? d.city : s.city,
-            occasion: OCCASIONS.includes(d.occasion as Occasion) ? (d.occasion as Occasion) : s.occasion,
-            swapCount: typeof d.swapCount === "number" ? d.swapCount : s.swapCount,
-            dustyAdoptCount:
-              typeof d.dustyAdoptCount === "number" ? d.dustyAdoptCount : s.dustyAdoptCount,
+            userPerfumes: d.userPerfumes,
+            feedbacks: d.feedbacks,
+            extPerfumes: d.extPerfumes,
+            customPerfumes: d.customPerfumes,
+            swapAways: d.swapAways,
+            wearLog: dedupeSortWear(d.wearLog),
+            city: d.city ?? s.city,
+            // 备份里的城市是用户自己那台机器上生效过的，按 manual 收下：
+            // 他刚刚亲手选择了"用这份数据"，不该再被自动定位覆盖掉。
+            cityOrigin: d.city ? ("manual" as CityOrigin) : s.cityOrigin,
+            occasion: d.occasion ?? s.occasion,
+            swapCount: d.swapCount ?? s.swapCount,
+            dustyAdoptCount: d.dustyAdoptCount ?? s.dustyAdoptCount,
             // 导入自己的备份 = 这台机器从此属于用户，演示香柜退场且不再自动装载
             demo: false,
             demoDismissed: true,
@@ -637,8 +640,6 @@ export const useStore = create<State>()(
           // zustand 的 persist 是先改内存、再写盘，所以抛到这里时状态**已经换掉了**。
           // 写盘失败（配额满 / 隐私模式 / 存储被禁）不该反过来报告成"没有改动"——
           // 那是这次修复要消灭的那句谎话。这里吞掉异常但仍返回 true。
-          // 已知局限：写盘失败本身没有对用户暴露。但这个暴露面是全局的
-          //（addPerfume / addFeedback 等每一次写入都一样），不该只在导入这一处单独处理。
         }
         return true;
       },
@@ -653,7 +654,7 @@ export const useStore = create<State>()(
       // 字节还在，用户却无从取回，等于没有恢复路径。
       // 注意 .bak 存的是 persist 的包装形状 { state, version }，比导出文件多一层：
       // 直接喂 importData 会因为顶层没有 userPerfumes 而被判成"不是我们的备份"。
-      restoreFromBackup: () => {
+      restoreFromBackup: async () => {
         let inner: unknown;
         try {
           const raw = safeLocalStorage()?.getItem(BACKUP_KEY);
@@ -703,6 +704,7 @@ export const useStore = create<State>()(
         swapAways: s.swapAways,
         wearLog: s.wearLog,
         city: s.city,
+        cityOrigin: s.cityOrigin,
         occasion: s.occasion,
         swapCount: s.swapCount,
         dustyAdoptCount: s.dustyAdoptCount,
@@ -723,6 +725,17 @@ export const useStore = create<State>()(
         if (from < 1) {
           s.demo = false;
           s.demoDismissed = hasOwnData(s);
+        }
+        // v1 → v2：新增 cityOrigin。盘上只有城市名，得把来源反推出来。
+        //
+        // 在 v1 里 city 只有两个写入点：情境栏的手填，和演示态自带的 DEMO_CITY。
+        // 所以「不是北京」必然是手填的；「是北京」则绝大多数来自演示态——每一个首访者
+        // 都经过演示香柜，而真正手填北京的是少数。把后者一并判成 demo 的代价，
+        // 只是这些人下次打开会被问一次定位、然后自动定回北京，结果相同。
+        if (from < 2) {
+          const city = typeof s.city === "string" && s.city ? s.city : null;
+          s.city = city;
+          s.cityOrigin = city ? (city === DEMO_CITY ? "demo" : "manual") : "none";
         }
         return s;
       },

@@ -17,6 +17,14 @@
   --color-ink-faint: #29251a;    /* 说明文字（继续压深、降黄） */
   --color-line: #ddd6c6;
   --color-line-strong: #c2b9a2;
+  /* 输入类控件的边框。单独一个 token 而不是复用 line-strong，理由是 WCAG 1.4.11
+     只对「识别这个控件所必需的边界」要求 3:1——
+     · 输入框、文本域：边框就是它唯一的可见界定，没有它用户看不出这里能打字，必须达标；
+     · .chip / .btn-ghost：有文字标签，控件本身由标签识别，边框是装饰，不在管辖内。
+     实测（明韵，卡面 #fffefb 上）：line 1.44、line-strong 1.94，两个都不够；
+     压到 #97907e 得 3.15。若把 line-strong 整体压到这一档，全站每一条分隔线都会跟着变重，
+     那是改设计语言，不是修缺陷。 */
+  --color-field: #97907e;
 
   --color-brand: #26402f;
   --color-brand-soft: #567562;
@@ -66,6 +74,8 @@ html[data-theme="night"] {
   --color-ink-faint: #a6a49c;    /* 中性灰说明 */
   --color-line: #34343a;
   --color-line-strong: #4a4a52;
+  /* 暗香实测：line 1.22、line-strong 1.72，提到 #6f6f7b 得 3.04（见明韵那段的理由） */
+  --color-field: #6f6f7b;
   --color-brand: #b7b2a4;        /* 去绿，改中性暖灰 */
   --color-brand-soft: #cbc6ba;
   --color-brand-wash: #2a2a2f;
@@ -160,6 +170,37 @@ html[data-theme="night"] {
     transition: background-color 0.2s var(--ease-out-soft);
   }
   .btn-ghost:hover { background: var(--color-sunken); }
+
+  /* 报头那一排图标按钮（主题切换 / GitHub）。
+     图标本身只有 18–19px，此前只靠变色反馈，热区又是一块看不见的 ::after——
+     鼠标移上去除了颜色没有任何"这里可以点"的提示。
+     现在 ::after 同时充当热区与悬停光晕：40px 的圆，平时透明，悬停/键盘聚焦时浮出。 */
+  .icon-btn {
+    position: relative;
+    color: var(--color-ink-faint);
+    transition: color 0.2s var(--ease-out-soft);
+  }
+  .icon-btn::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    height: 2.5rem;
+    width: 2.5rem;
+    transform: translate(-50%, -50%);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    transition: background-color 0.2s var(--ease-out-soft);
+  }
+  /* 图标要浮在光晕之上：::after 在内容之后绘制，不抬 z-index 会把图标盖住 */
+  .icon-btn > svg { position: relative; z-index: 1; }
+  .icon-btn:hover { color: var(--color-accent); }
+  /* 光晕用香槟金的低比例混色，不用 --color-sunken：后者在报头底色上只有 1.05:1，
+     淡到看不出来，等于没做。金色一来足够分明，二来和图标 hover 时的变色同源。 */
+  .icon-btn:hover::after,
+  .icon-btn:focus-visible::after {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
 
   /* 场景 chip */
   .chip {

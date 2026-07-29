@@ -59,6 +59,50 @@ export function findInventedNumbers(text: string, allowed: Set<string>): string[
 }
 
 /**
+ * 半角数字 + 量词，比对的是**这个数配这个单位**我们给过没有。
+ *
+ * findInventedNumbers 只做集合成员判定，不看数字出现在什么语境、原来是什么单位。
+ * 而事实包里恒有两个小整数是**气温**与**湿度**：tempC 落在 -60~60（其中 0~12 全年
+ * 有相当长时间像小时数），humidity 恒在 0~100（永远像分钟、厘米或百分比）。
+ * 实测白名单 ['6','40','2'] 下，这三句全部放行、invented 为空、source 标 deepseek：
+ *   「留香 6 小时左右，喷 2 下就够」   ← 6 原本是气温
+ *   「扩散半径大约 40 厘米」            ← 40 原本是湿度
+ *   「建议喷 6 下，能顶 40 分钟」       ← 两个都换了槽位
+ * 只有小数形态（6.2）会被拦下。也就是说反伪精确在它**最可能被突破的形态**上是通的：
+ * 模型并不需要编一个新数字，把我们给的数字挪个单位就够了。
+ *
+ * 所以量词这一侧改成成对比对：从事实里抽出所有「数+量词」组合（区间按端点展开，
+ * 「2–3 下」同时放行「2 下」与「3 下」），输出里出现的组合不在其中即判编造。
+ * 量词范围与中文那一侧刻意一致——留香、喷量、社交距离，正是只给档位与区间的三件事。
+ * 百分比与温度不在其中：它们本来就是我们逐字给出的读数，不构成"点值承诺"。
+ */
+const AR_UNIT = "(?:小时|分钟|钟头|秒|毫升|ml|滴|下|喷|泵|厘米|公分|米|cm|天|周)";
+const AR_PAIR = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*个?\\s*(${AR_UNIT})`, "g");
+/** 区间：2–3 下 / 2-3 下 / 2~3 下 / 2 到 3 下 */
+const AR_RANGE = new RegExp(`(\\d+(?:\\.\\d+)?)\\s*(?:[-–—~～]|到|至)\\s*(\\d+(?:\\.\\d+)?)\\s*个?\\s*(${AR_UNIT})`, "g");
+
+/** 事实里出现过的「数+量词」组合，区间按两个端点展开 */
+export function allowedUnitPairs(facts: string): Set<string> {
+  const f = normalize(facts);
+  const out = new Set<string>();
+  for (const m of f.matchAll(AR_RANGE)) {
+    out.add(`${m[1]}${m[3]}`);
+    out.add(`${m[2]}${m[3]}`);
+  }
+  for (const m of f.matchAll(AR_PAIR)) out.add(`${m[1]}${m[2]}`);
+  return out;
+}
+
+export function findUnitMismatch(text: string, allowedPairs: Set<string>): string[] {
+  const t = normalize(text);
+  const bad: string[] = [];
+  for (const m of t.matchAll(AR_PAIR)) {
+    if (!allowedPairs.has(`${m[1]}${m[2]}`)) bad.push(m[0]);
+  }
+  return bad;
+}
+
+/**
  * 中文数字形态的伪精确。与 findInventedNumbers 分开导出，是因为它的放行判据不同：
  * 数字比对的是"这个数给过没有"，中文短语比对的是"这句话我们自己说过没有"。
  * @param facts 递给 LLM 的事实原文（未经 JSON 转义的拼接即可）

@@ -80,6 +80,7 @@ function toRaw(d) {
 
 console.time('scan');
 const shards = Array.from({ length: SHARDS }, () => []);
+const popById = new Map();
 const index = [];
 let total = 0, picked = 0, cjkCount = 0, cjkLowVotes = 0;
 
@@ -96,6 +97,8 @@ for await (const line of readLines(SRC)) {
   if (isCJK) cjkCount++;
   const rec = toPerfume(toRaw(d), maps);
   if (isCJK && people < MIN_PEOPLE) { rec.lowVotes = true; cjkLowVotes++; }
+  // 热度只用于排序，**不进产出**（见 derive.mjs 的说明）：单独记一张表，不挂在记录上
+  popById.set(rec.id, d?.popularity?.magnitude ?? 0);
   shards[rec.id % SHARDS].push(rec);
 
   const entry = { i: rec.id, n: rec.name, b: rec.brand };
@@ -109,9 +112,7 @@ process.stdout.write('\n');
 console.timeEnd('scan');
 
 // 分片内按热度降序（前端取片后无需再排）；索引按热度降序（搜索命中即近似热度序）
-for (const s of shards) s.sort((a, b) => b.popularity - a.popularity);
-const popById = new Map();
-for (const s of shards) for (const r of s) popById.set(r.id, r.popularity);
+for (const s of shards) s.sort((a, b) => (popById.get(b.id) || 0) - (popById.get(a.id) || 0));
 index.sort((a, b) => (popById.get(b.i) || 0) - (popById.get(a.i) || 0));
 
 fs.mkdirSync(EXT_DIR, { recursive: true });

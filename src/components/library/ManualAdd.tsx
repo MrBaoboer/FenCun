@@ -29,7 +29,15 @@ const SILLAGE_OPTIONS: { tier: 1 | 2 | 3 | 4; label: string; sillage: number }[]
   { tier: 4, label: "满室", sillage: 3.4 },
 ];
 
-export function ManualAdd({ initialName, onDone }: { initialName?: string; onDone: () => void }) {
+export function ManualAdd({
+  initialName,
+  onDone,
+  onCancel,
+}: {
+  initialName?: string;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
   const addCustomPerfume = useStore((s) => s.addCustomPerfume);
   const [name, setName] = useState(initialName ?? "");
   const [brand, setBrand] = useState("");
@@ -89,21 +97,21 @@ export function ManualAdd({ initialName, onDone }: { initialName?: string; onDon
   return (
     <div className="flex flex-col gap-3 px-4 py-4">
       <p className="serif text-[0.82rem] leading-relaxed text-ink-faint">
-        没搜到也能记下来。挑 1–3 个最像它的香调，推荐就能带上它——用两次并反馈后会更准。
+        没搜到也能记下来。挑 1–3 个最像它的香调，推荐就会带上它。
       </p>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="香水名（必填）"
         maxLength={60}
-        className="w-full rounded-md border border-line-strong bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <input
         value={brand}
         onChange={(e) => setBrand(e.target.value)}
         placeholder="品牌（选填）"
         maxLength={40}
-        className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+        className="w-full rounded-md border border-field bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
       />
       <div>
         <p className="mb-1.5 text-[0.74rem] text-ink-faint">它闻起来像（选 1–3 个）</p>
@@ -139,14 +147,26 @@ export function ManualAdd({ initialName, onDone }: { initialName?: string; onDon
           ))}
         </div>
       </div>
-      <button
-        type="button"
-        disabled={!canSave}
-        onClick={save}
-        className="btn-primary py-2.5 text-[0.88rem] disabled:opacity-50"
-      >
-        记下这瓶，入柜
-      </button>
+      {/* 放弃这张表必须有一个被标注出来的出口。此前唯一能关掉它的是搜索框里那个
+          10px 宽、aria-label 写着「清空」的 ×——而那正是会把整张表连同已填内容一起
+          带走的那条路，用户没有任何理由认为它是"取消"。 */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="chip serif shrink-0 px-4 py-2.5 text-[0.88rem] text-ink-faint hover:text-ink"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          disabled={!canSave}
+          onClick={save}
+          className="btn-primary flex-1 py-2.5 text-[0.88rem] disabled:opacity-50"
+        >
+          记下这瓶，入柜
+        </button>
+      </div>
     </div>
   );
 }

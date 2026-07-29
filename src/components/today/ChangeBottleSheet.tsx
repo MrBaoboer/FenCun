@@ -46,7 +46,7 @@ export function ChangeBottleSheet({
             <div className="eyebrow">换一瓶 · Your Shelf</div>
             {/* 原文只说「用法会跟着重算」，是纯浏览语义；实际上选定即采纳，
                 会记进今天的香历。把代价说在动作之前，比事后给撤销更省。 */}
-            <p className="mt-0.5 text-sm text-ink-soft">选定即今天用它，会记进香历；用法跟着重算</p>
+            <p className="mt-0.5 text-sm text-ink-soft">选定即今天用它，会记进香历，用法跟着重算</p>
           </div>
           <button
             onClick={onClose}

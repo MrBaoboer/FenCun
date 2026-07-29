@@ -126,7 +126,7 @@ export function PerfumeCard({ p, onClose }: { p: Perfume | null; onClose: () => 
             : p.lowVotes || p.sillage == null
               ? "这瓶社区数据还少，先按中庸档估"
               : "来自社区投票，是多数评价者的感受"}
-          ；浓度等未标注项以官方为准。
+          。
         </p>
       </div>
     </div>

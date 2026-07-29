@@ -30,9 +30,9 @@ export default function ProfilePage() {
   // 否则情境栏会停在上一座城市的读数上，屏上的城市和天气对不上，推荐也还是按旧天气算的。
   // 隔壁「重置到初始状态」早就这么做了（那里 `void resolveByCity(d.city)`），
   // 导入这条路漏了：同一个后果，只有一处收拾。
-  function applyImport(raw: string): boolean {
+  async function applyImport(raw: string): Promise<boolean> {
     const before = useStore.getState().city;
-    const ok = importData(raw);
+    const ok = await importData(raw);
     if (ok) {
       const after = useStore.getState().city;
       if (after && after !== before) void resolveByCity(after);
@@ -61,16 +61,16 @@ export default function ProfilePage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
-    setImportMsg({ kind: "ok", text: `已生成 ${name}——请确认它真的下载到了本机。` });
+    setImportMsg({ kind: "ok", text: `已生成 ${name}。` });
   }
   function doImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const raw = String(reader.result);
-      const preview = previewImport(raw);
+      const preview = await previewImport(raw);
       if (!preview) {
         setPending(null);
         setImportMsg({ kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" });
@@ -79,7 +79,7 @@ export default function ProfilePage() {
       setImportMsg(null);
       // 空柜直接导入（没有任何东西会被覆盖）；柜里有东西则必须先看清差额再确认
       if (userPerfumes.length === 0 && wearLog.length === 0) {
-        const ok = applyImport(raw);
+        const ok = await applyImport(raw);
         setImportMsg(
           ok
             ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
@@ -111,7 +111,7 @@ export default function ProfilePage() {
     if (weakN > 0)
       lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐${it(weakN)}时，会建议略增喷量。`);
     if (lines.length === 0)
-      lines.push("多给几次「今天，刚好吗」的反馈，氛寸就会越来越懂你对每瓶的分寸。");
+      lines.push("多答几次「今天，刚好吗」，氛寸会越来越懂你对每瓶的分寸。");
     return lines;
   }, [feedbacks]);
 
@@ -201,7 +201,7 @@ export default function ProfilePage() {
       <div className="card px-5 py-4">
         <Eyebrow>数据</Eyebrow>
         <p className="serif mt-2.5 text-[0.84rem] leading-relaxed text-ink-soft">
-          你的香柜与全部反馈只存在本机浏览器（暂无账号云同步）。换设备或清缓存会清空，建议偶尔导出备份。
+          你的香柜与全部反馈只存在这台设备的浏览器里。换设备或清缓存都会清空，建议偶尔导出一份备份。
         </p>
         <div className="mt-3 flex gap-2.5">
           <button onClick={doExport} className="btn-ghost flex-1 py-2.5 text-[0.82rem]">
@@ -237,7 +237,7 @@ export default function ProfilePage() {
                 这会清掉本机的<span className="text-warn">香柜、反馈与香历</span>，换回六瓶示例。
               </p>
               <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-                这一步不可撤销。要保住现在这份，先「导出香柜」再回来。
+                不可撤销。想留住现在这份，先导出再回来。
               </p>
               <div className="mt-2.5 flex gap-2">
                 <button
@@ -281,13 +281,14 @@ export default function ProfilePage() {
               {pending.preview.wearDays} 天香历
             </p>
             <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-              这一步不可撤销。要保住现在这份，先「导出香柜」再回来导入。
+              不可撤销。想留住现在这份，先导出再回来。
             </p>
             <div className="mt-2.5 flex gap-2">
               <button
-                onClick={() => {
-                  const ok = applyImport(pending.raw);
+                onClick={async () => {
+                  const raw = pending.raw;
                   setPending(null);
+                  const ok = await applyImport(raw);
                   setImportMsg(
                     ok
                       ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }

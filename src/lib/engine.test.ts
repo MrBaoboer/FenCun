@@ -574,7 +574,7 @@ test("成功配置是基准不是终点：更近的反馈与场景必须还能�
   assert.ok(afterTooStrong.sprays[1] < base.sprays[1], `两次「太冲了」之后必须更少：${afterTooStrong.spraysLabel}`);
   assert.ok(wantClose.sprays[1] < base.sprays[1], `场景说「想贴身」也要能推动它：${wantClose.spraysLabel}`);
   // 回执必须跟着最终这个数走，不能停在「就按那次的量来」
-  assert.ok(afterTooStrong.note?.includes("偏冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
+  assert.ok(afterTooStrong.note?.includes("嫌它冲"), `回执要说清为什么比记忆里更少：${afterTooStrong.note}`);
 });
 
 test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给提示(P0-7)", () => {
@@ -583,7 +583,7 @@ test("场景张力真的进引擎：tension=high 压强扩散、收喷量、给�
   const tense = C({ occasion: "social", feel: "mild", tempC: 20, tension: "high" });
   assert.ok(score(loud, tense).total < score(loud, base).total, "高张力应降权强扩散甜香");
   assert.ok(computeUsage(loud, tense).sprays[1] < computeUsage(loud, base).sprays[1], "高张力应再收一档");
-  assert.ok(computeRisks(loud, tense).some((r) => r.includes("成为被讨论")), "应给出社交提示");
+  assert.ok(computeRisks(loud, tense).some((r) => r.includes("成为话题")), "应给出社交提示");
   // formality 同样必须被消费（自由文本说"很正式"时，哪怕 occasion 落在 social 也要收得住）
   const formal = C({ occasion: "social", feel: "mild", tempC: 20, formality: 0.85 });
   assert.ok(score(loud, formal).total < score(loud, base).total, "高正式度应降权甜香强扩散");
@@ -1228,4 +1228,87 @@ test("nameParts：中英文同名时不再把同一个名字当副名再印一�
     secondary: null,
     primaryIsZh: false,
   });
+});
+
+test("闷指数不许被门控成阶跃：22.0℃ 两侧不得出现整批翻裁决", async () => {
+  // 原实现 `M = H > 0 ? clamp01((rh-60)/30) : 0`：湿度项不随热负荷连续趋零，
+  // 而是在 t 越过 22.0 的瞬间从 0 跳到满值。实测 90%RH 下 22.00→22.01℃，
+  // 天气乘子 1.0000→0.9399（6%），全目录 219 款（14.6%）从 good 翻成 caution，
+  // 配的文案还写着「今天气温偏高」。上海/广州 4–6 月清晨正是这一段。
+  // 讽刺的是这段连续化重写的动机就是消灭 0.1℃ 级断崖，结果在湿度轴上造了个 0.01℃ 级的。
+  const fs = await import("node:fs");
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  const at = (tempC: number) =>
+    C({ occasion: "casual", feel: "mild", tempC, humidity: 90, season: "spring" });
+  const countGood = (tempC: number) =>
+    catalog.filter((p) => buildPick(p, at(tempC)).verdict === "good").length;
+
+  // 0.01℃ 之差不该动到任何一款
+  assert.equal(countGood(22.0), countGood(22.01), "22.0℃ 处不许有阶跃");
+  assert.equal(countGood(21.99), countGood(22.0));
+
+  // 乘子本身必须连续：跨过 22.0 时相邻两点的差远小于一个百分点
+  const heavy = mk({ people: 20000, accords: acc([["vanilla", 100], ["sweet", 92]]) });
+  const w = (t: number) => score(heavy, at(t)).weather;
+  assert.ok(Math.abs(w(22.01) - w(22.0)) < 0.002, `22℃ 两侧乘子跳变 ${w(22.0)} → ${w(22.01)}`);
+  // 但方向仍要对：热负荷起来之后确实要压下去
+  assert.ok(w(30) < w(22) - 0.03, "越热压得越狠这条方向不能丢");
+});
+
+test("不变式：说了「收着些」，喷量就必须真的收——整个 22–36℃ 段逐点成立", async () => {
+  // 文案的闸是连续量（热负荷从 22℃ 起算），喷量与部位吃的却是离散的 ctx.feel（≥28℃）。
+  // 实测这道缝：24℃/80% 与 27℃/65% 各有 374 款说了「喷得收着些更稳」而真减量 0 款，
+  // 27℃/90% 是 577 款说了、0 款减。22–28℃ 配 65%+ 湿度是华东华南春夏最常见的天气。
+  // 产品自陈「规则算数、LLM 说话」，这里恰恰是数没算、话先说了。
+  const fs = await import("node:fs");
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  const HEAVY_LINE = (s: string) =>
+    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感在高温里会放大");
+  const cool = C({ occasion: "casual", feel: "mild", tempC: 15, humidity: 50, season: "spring" });
+  const gaps: string[] = [];
+  for (const [tempC, humidity] of [
+    [24, 80], [26, 70], [27, 65], [27, 90], [28, 70], [30, 70], [33, 45], [36, 80],
+  ] as const) {
+    const ctx = C({
+      occasion: "casual",
+      feel: tempC >= 28 ? (humidity >= 65 ? "hot_humid" : "hot_dry") : "mild",
+      tempC,
+      humidity,
+      season: "summer",
+    });
+    for (const p of catalog) {
+      if (!computeRisks(p, ctx).some(HEAVY_LINE)) continue;
+      const hot = computeUsage(p, ctx);
+      const base = computeUsage(p, cool);
+      if (hot.sprays[1] >= base.sprays[1] && hot.sprays[0] >= base.sprays[0])
+        gaps.push(`${p.nameZh || p.name} @${tempC}℃/${humidity}%`);
+    }
+  }
+  assert.deepEqual(gaps.slice(0, 5), [], `说了却没收（共 ${gaps.length} 例）`);
+});
+
+test("拿不到天气时，一个天气断言都不许说——裁决也要跟着停手", async () => {
+  // buildReasons 早有 !ctx.approximate 守卫，风险通道漏了，而两者读的是同一个
+  // 被伪造出来的 ctx.tempC（hooks.ts 在拒绝定位时按季节填代表温度：夏 27 / 冬 6）。
+  // 实测降级冬季那份：288/1500 款拿到「今天偏冷，它这类清冽调容易发飘」，
+  // 并把裁决从 good 压成 caution——横幅正承认没拿到位置，正文却在断言今天的天气。
+  const fs = await import("node:fs");
+  const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
+  const WEATHER_CLAIM = /今天偏冷|今天这么热|气温偏高|又热又潮/;
+  for (const [season, tempC] of [
+    ["winter", 6], ["summer", 27], ["spring", 18], ["autumn", 16],
+  ] as const) {
+    // 完全复刻 hooks.ts 的降级 Context：feel 恒 mild、humidity 恒 50、approximate=true
+    const ctx = C({ occasion: "casual", feel: "mild", tempC, humidity: 50, season, approximate: true });
+    const claims: string[] = [];
+    const mute: string[] = [];
+    for (const p of catalog) {
+      const pick = buildPick(p, ctx);
+      if (pick.risks.some((r) => WEATHER_CLAIM.test(r))) claims.push(p.nameZh || p.name);
+      // 天气不参与裁决之后，仍然不许出现「判了说不出为什么」
+      if (pick.verdict !== "good" && pick.risks.length === 0) mute.push(p.nameZh || p.name);
+    }
+    assert.deepEqual(claims.slice(0, 3), [], `降级 ${season} 说了天气断言（共 ${claims.length} 款）`);
+    assert.deepEqual(mute.slice(0, 3), [], `降级 ${season} 判了却说不出为什么（共 ${mute.length} 款）`);
+  }
 });

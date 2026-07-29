@@ -1,8 +1,9 @@
-// 香水目录加载 + 中英文搜索（搜名秒加的引擎）
+// 中英文搜索（搜名秒加的引擎）。
+// 目录与分片的取数在 lib/catalog.ts —— 拆开是为了让 MiniSearch 只进用得上它的那一页，
+// 见那个文件的说明。
 import MiniSearch from "minisearch";
 import type { Perfume } from "./types";
 
-let cache: Perfume[] | null = null;
 let searchCache: MiniSearch<Perfume> | null = null;
 
 // 自定义分词：拉丁词整体小写，CJK 拆成单字，使中文也可检索
@@ -12,14 +13,6 @@ function tokenize(text: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) tokens.push(m[0].toLowerCase());
   return tokens;
-}
-
-export async function loadCatalog(): Promise<Perfume[]> {
-  if (cache) return cache;
-  const res = await fetch("/data/perfumes.min.json");
-  if (!res.ok) throw new Error("香水目录加载失败");
-  cache = (await res.json()) as Perfume[];
-  return cache;
 }
 
 export function buildSearch(perfumes: Perfume[]): MiniSearch<Perfume> {
@@ -65,8 +58,6 @@ export interface ExtIndexEntry {
 }
 
 let extIndexPromise: Promise<MiniSearch<ExtIndexEntry> | null> | null = null;
-const extShardCache = new Map<number, Perfume[]>();
-
 export function loadExtSearch(): Promise<MiniSearch<ExtIndexEntry> | null> {
   if (!extIndexPromise) {
     extIndexPromise = (async () => {
@@ -137,18 +128,3 @@ export function rankSearchHits<T>(query: string, cands: RankCandidate<T>[], limi
     .map((x) => x.c.item);
 }
 
-export async function fetchExtPerfume(id: number): Promise<Perfume | null> {
-  const shardNo = ((id % 64) + 64) % 64;
-  let shard = extShardCache.get(shardNo) ?? null;
-  if (!shard) {
-    try {
-      const res = await fetch(`/data/ext/${String(shardNo).padStart(2, "0")}.json`);
-      if (!res.ok) return null;
-      shard = (await res.json()) as Perfume[];
-      extShardCache.set(shardNo, shard);
-    } catch {
-      return null;
-    }
-  }
-  return shard.find((p) => p.id === id) ?? null;
-}

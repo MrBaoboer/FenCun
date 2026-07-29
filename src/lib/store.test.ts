@@ -16,7 +16,14 @@ function silent(fn: () => void) {
   } catch {}
 }
 
-test("importData 返回 false 只能意味着「一个字节都没动」", () => {
+/** importData/previewImport 现在是异步的（zod 按需加载，见 lib/import-schema.ts） */
+async function silentAsync(fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch {}
+}
+
+test("importData 返回 false 只能意味着「一个字节都没动」", async () => {
   // 原实现把校验和 set 一起包在 try 里：写盘抛错 → 走 catch → 返回 false，
   // 而此时内存状态**早已被替换**，UI 却会照着 false 说出
   // 「导入没能完成，现在的数据没有被改动」——这句话是谎话。
@@ -24,15 +31,15 @@ test("importData 返回 false 只能意味着「一个字节都没动」", () =>
 
   // ① 非 JSON → 拒收，状态不变
   const before = st().userPerfumes.length;
-  assert.equal(st().importData("这不是 JSON"), false);
+  assert.equal(await st().importData("这不是 JSON"), false);
   assert.equal(st().userPerfumes.length, before, "被拒时不得改动状态");
 
   // ② JSON 但不是我们的备份 → 拒收，状态不变
-  assert.equal(st().importData(JSON.stringify({ 随便: 1 })), false);
+  assert.equal(await st().importData(JSON.stringify({ 随便: 1 })), false);
   assert.equal(st().userPerfumes.length, before, "被拒时不得改动状态");
 
   // ③ userPerfumes 全部损坏 → 拒收（不是我们的备份），状态不变
-  assert.equal(st().importData(JSON.stringify({ userPerfumes: [{ 坏: true }] })), false);
+  assert.equal(await st().importData(JSON.stringify({ userPerfumes: [{ 坏: true }] })), false);
   assert.equal(st().userPerfumes.length, before, "被拒时不得改动状态");
 
   // ④ 合法备份 → 必须返回 true 并真的落库。
@@ -43,14 +50,14 @@ test("importData 返回 false 只能意味着「一个字节都没动」", () =>
     city: "北京",
     occasion: "commute",
   });
-  assert.equal(st().importData(good), true, "写盘失败也不得反过来说没导入");
+  assert.equal(await st().importData(good), true, "写盘失败也不得反过来说没导入");
   assert.equal(st().userPerfumes.length, 1);
   assert.equal(st().city, "北京");
 });
 
-test("previewImport：先看清代价，再决定要不要覆盖", () => {
+test("previewImport：先看清代价，再决定要不要覆盖", async () => {
   const st = () => useStore.getState();
-  assert.equal(st().previewImport("这不是 JSON"), null);
+  assert.equal(await st().previewImport("这不是 JSON"), null);
   const raw = JSON.stringify({
     userPerfumes: [
       { perfumeId: 485, addedAt: 1 },
@@ -70,12 +77,12 @@ test("previewImport：先看清代价，再决定要不要覆盖", () => {
     ],
   });
   // 香历按日去重：同一天两条只算一天——预览给的数字必须和真正落库后一致
-  assert.deepEqual(st().previewImport(raw), { perfumes: 2, feedbacks: 1, wearDays: 1 });
-  st().importData(raw);
+  assert.deepEqual(await st().previewImport(raw), { perfumes: 2, feedbacks: 1, wearDays: 1 });
+  await st().importData(raw);
   assert.equal(st().wearLog.length, 1, "预览数与实际落库数必须一致");
 });
 
-test("导入校验的必填面必须覆盖消费面：缺 notes 的快照不得放行", () => {
+test("导入校验的必填面必须覆盖消费面：缺 notes 的快照不得放行", async () => {
   // 香气档案卡直接读 p.notes.top/middle/base。schema 此前不校验它（对象上是 .loose()），
   // 于是一份缺 notes 的备份能导入成功、在用户点开详情页那一刻才崩。
   const st = () => useStore.getState();
@@ -93,11 +100,11 @@ test("导入校验的必填面必须覆盖消费面：缺 notes 的快照不得�
   // 缺 notes → 该条被丢弃（宽进严出：坏的单条丢掉，不整包拒收）
   const bad = snap();
   delete (bad as Record<string, unknown>).notes;
-  silent(() => st().importData(raw([bad])));
+  await silentAsync(() => st().importData(raw([bad])));
   assert.equal(st().customPerfumes.length, 0, "缺 notes 的快照被放行了");
 
   // 完整的照常收下
-  silent(() => st().importData(raw([snap()])));
+  await silentAsync(() => st().importData(raw([snap()])));
   assert.equal(st().customPerfumes.length, 1);
   assert.deepEqual(st().customPerfumes[0].notes, { top: [], middle: [], base: [] });
 });
@@ -261,7 +268,7 @@ test("写盘失败必须说出来：异常被吞掉、不打断调用方，但�
   assert.equal(g.getItem("keep"), null);
 });
 
-test("读盘失败另存的那份字节要能取回来：.bak 比导出文件多一层包装", () => {
+test("读盘失败另存的那份字节要能取回来：.bak 比导出文件多一层包装", async () => {
   // 此前 .bak 只写不读——字节还在，产品里却没有任何入口去用它，等于没有恢复路径。
   // 而它存的是 persist 的包装形状 { state, version }，比导出文件多一层：
   // 直接喂 importData 会因为顶层没有 userPerfumes 被判成"不是我们的备份"。
@@ -288,14 +295,14 @@ test("读盘失败另存的那份字节要能取回来：.bak 比导出文件多
   try {
     silent(() => useStore.setState({ userPerfumes: [], wearLog: [], city: null, hydrateError: "boom" }));
     assert.equal(st().hasRescueBackup(), true, "另存的那份应当被认出来");
-    assert.equal(st().restoreFromBackup(), true, "包装形状必须被剥开后再导入");
+    assert.equal(await st().restoreFromBackup(), true, "包装形状必须被剥开后再导入");
     assert.deepEqual(st().userPerfumes.map((u) => u.perfumeId), [485]);
     assert.equal(st().wearLog[0].note, "面试那天", "手记必须一并回来");
     assert.equal(st().hydrateError, null, "恢复成功后那条警告要撤掉");
     // 没有另存文件时不许假装能恢复
     delete mem["fencun-store.bak"];
     assert.equal(st().hasRescueBackup(), false);
-    assert.equal(st().restoreFromBackup(), false, "没有备份时必须返回「一个字节都没动」");
+    assert.equal(await st().restoreFromBackup(), false, "没有备份时必须返回「一个字节都没动」");
   } finally {
     if (prev === undefined) delete g.window;
     else g.window = prev;
@@ -353,15 +360,34 @@ test("多标签页：另一页写盘要认，读盘出过错时一切自动动�
   // 浏览器事件在 node --test 下造不出来，但判据可以。
   const { shouldRehydrateOnStorage, STORE_KEY } = await import("./store");
 
-  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null), true, "另一页写了我们的键就要重读");
-  // localStorage.clear() 的事件 key 是 null，同样要认——那时盘上已空，
-  // 继续按旧内存态写回去只会造出一份半新半旧的数据
-  assert.equal(shouldRehydrateOnStorage(null, null), true, "整清也要认");
-  assert.equal(shouldRehydrateOnStorage("别人的键", null), false, "无关的键不理会");
-  assert.equal(shouldRehydrateOnStorage(`${STORE_KEY}.bak`, null), false, "另存的备份不是状态源");
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "{}", null), true, "另一页写了我们的键就要重读");
+  assert.equal(shouldRehydrateOnStorage("别人的键", "{}", null), false, "无关的键不理会");
+  assert.equal(
+    shouldRehydrateOnStorage(`${STORE_KEY}.bak`, "{}", null),
+    false,
+    "另存的备份不是状态源"
+  );
   // 读盘出过错时写入已被冻结（见 onRehydrateStorage），这时任何自动重读都要停手
-  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "boom"), false, "读盘出过错就不许再自动动");
-  assert.equal(shouldRehydrateOnStorage(null, "boom"), false);
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, "{}", "boom"), false, "读盘出过错就不许再自动动");
+});
+
+test("盘被抹掉不许走重读——重读会把内存里这一份原样写回去，等于撤销用户的清除", async () => {
+  // 这条用例此前是反的：它断言「整清也要认」，而"认"在实现上就是 rehydrate。
+  // zustand 在盘上取不到值时 merge(undefined, get()) 保留内存态，随后 onRehydrateStorage
+  // 的成功分支一句 setState 又被 persist 立刻写回盘。实测：331 字节（含手记）→ clear()
+  // → 盘上空 → rehydrate() → 331 字节连同手记原样回来。「清除本站数据」对这个产品不生效。
+  const { shouldRehydrateOnStorage, isStorageWipe, STORE_KEY } = await import("./store");
+
+  // localStorage.clear() 的事件 key 是 null
+  assert.equal(isStorageWipe(null, null), true, "clear() 是抹除");
+  // removeItem(STORE_KEY) 给出 key=我们的键、newValue=null
+  assert.equal(isStorageWipe(STORE_KEY, null), true, "removeItem 也是抹除");
+  assert.equal(isStorageWipe(STORE_KEY, "{}"), false, "有新值就是另一页写盘，不是抹除");
+  assert.equal(isStorageWipe("别人的键", null), false, "别人的键被删与我们无关");
+
+  // 抹除的两种形态都不许走重读
+  assert.equal(shouldRehydrateOnStorage(null, null, null), false, "clear() 不许重读");
+  assert.equal(shouldRehydrateOnStorage(STORE_KEY, null, null), false, "removeItem 不许重读");
 });
 
 test("撤销要能回滚**一串**采纳，不只是最后一瓶", async () => {
@@ -426,4 +452,63 @@ test("演示香柜退场时，用户亲手写的手记不许被一起清掉", as
     `只该留下带手记的那一天：${JSON.stringify(st().wearLog.map((e) => e.d))}`
   );
   assert.equal(st().wearLog[0].note, "同事问了是什么香");
+});
+
+test("目录挂了要告诉的是「还没有数据的那个人」——空柜访客此前整个漏在告知之外", async () => {
+  // 旧判据 `catalogError && lib.length < userPerfumes.length` 是为「满柜用户不要被误显示成
+  // 空柜」写的，逻辑对，但空柜新访客的两个数同为 0，`0 < 0` 恒假。实测把 perfumes.min.json
+  // 与 ext-index.json 改名后刷新 /library：搜索下拉只有「没搜到」，整页没有任何重试按钮，
+  // 而正文还举着「试试搜『香奈儿』」——正是刚才搜不出来的那个词。
+  // 这是从简历/GitHub 点进来的人的第一屏。
+  const { shouldShowCatalogError } = await import("./catalog-state");
+
+  assert.equal(shouldShowCatalogError(false, 0, 0), false, "目录没挂就什么都不说");
+  assert.equal(shouldShowCatalogError(true, 0, 0), true, "空柜访客必须被告知");
+  assert.equal(shouldShowCatalogError(true, 3, 6), true, "满柜用户有 3 瓶取不出来，照旧告知");
+  // 扩展集与手动记录的香整条存在本机，目录挂了它们一瓶不少——这种柜子不该被整块拦下
+  assert.equal(
+    shouldShowCatalogError(true, 6, 6),
+    false,
+    "全部由国货/手动记录组成的柜子一瓶不缺，不该弹错误卡"
+  );
+});
+
+test("移出香柜时反馈一并带走，撤销时原样放回", () => {
+  // 反馈按 perfumeId 存，瓶子走了就再也不会进推荐，却仍被「我的」那页算进
+  //「有 N 瓶你反馈过偏冲」——用户看着一句关于早已不在柜里那瓶香的画像，无从对照。
+  //
+  // 注意本文件的环境：每次 set 都会在写盘那一步抛（见文件头），所以拿不到
+  // removePerfume 的返回值。两半分开验：移出看状态，撤销喂一份手造的 bundle。
+  const st = () => useStore.getState();
+  const fb = (at: number) => ({
+    perfumeId: 485,
+    at,
+    context: { season: "summer" as const, daypart: "day" as const, tempC: 30, occasion: "commute" as const },
+    rating: "too_strong" as const,
+  });
+  const mine = [fb(1), fb(2)];
+
+  silent(() =>
+    useStore.setState({ userPerfumes: [], extPerfumes: [], customPerfumes: [], feedbacks: [], swapAways: {} })
+  );
+  silent(() => st().addPerfume(485));
+  silent(() => useStore.setState({ feedbacks: [...mine, fb(3)] }));
+  silent(() => useStore.setState({ feedbacks: mine }));
+
+  silent(() => st().removePerfume(485));
+  assert.equal(st().feedbacks.length, 0, "瓶子移出了，它的反馈还留在画像里");
+
+  // 别的瓶的反馈不许被误伤
+  const other = { ...fb(9), perfumeId: 17 };
+  silent(() => useStore.setState({ userPerfumes: [{ perfumeId: 17, addedAt: 1 }], feedbacks: [other] }));
+  silent(() => st().removePerfume(485));
+  assert.deepEqual(st().feedbacks, [other], "移出 485 不该动 17 的反馈");
+
+  // 撤销：反馈随瓶回来，且连点两次不得灌两遍
+  silent(() => useStore.setState({ userPerfumes: [], feedbacks: [] }));
+  const bundle = { userPerfume: { perfumeId: 485, addedAt: 1 }, feedbacks: mine };
+  silent(() => st().restorePerfume(bundle));
+  assert.equal(st().feedbacks.length, 2, "撤销之后反馈要回来");
+  silent(() => st().restorePerfume(bundle));
+  assert.equal(st().feedbacks.length, 2, "重复撤销把同一批反馈灌了两遍");
 });

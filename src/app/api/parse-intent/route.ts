@@ -2,7 +2,7 @@
 // 这是氛寸的差异化：真正理解"去前任婚礼""第一次见投资人"的语义，而非硬套标签
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
+import { allow, clientKey, withinDailyBudget, fromOwnPage } from "@/lib/ratelimit";
 import { carriesNumber } from "@/lib/numguard";
 
 export const runtime = "nodejs";
@@ -123,6 +123,9 @@ export function unionFragranceFree(
 }
 
 export async function POST(req: NextRequest) {
+  // 来源校验排在最前（见 ratelimit.ts:fromOwnPage）：跨源请求不该被服务，
+  // 也不该像限流那样退回启发式——那是给我们自己的用户的兜底。
+  if (!fromOwnPage(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   // 与 explain 同理：限流挡的是「打不打 DeepSeek」，挡不住「读不读这个 body」。
   // 这条路由只收一个 ≤120 字的 text，1KB 之外一律不读。
   const len = Number(req.headers.get("content-length") ?? 0);

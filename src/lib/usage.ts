@@ -4,8 +4,6 @@ import { durationHint, SEASON_NAME } from "./format";
 import { tempBand } from "./season";
 import { DENSITY, isClosedOccasion } from "./occasion-priors";
 import {
-  sweetness,
-  balsamicWeight,
   sweetDominates,
   balsamicDominates,
   heavyDominates,
@@ -16,6 +14,39 @@ import {
 } from "./scoring";
 
 // 空间密度与「封闭场合」的定义只有一处：occasion-priors.ts
+
+/**
+ * 高温防护是否生效。**喷量与那句风险文案共用这一条**。
+ *
+ * 此前两边各吃各的：文案的闸是连续量（weatherFit 的热负荷从 22℃ 起算），
+ * 喷量与部位吃的是离散的 `ctx.feel`，而 feel 要 tempC ≥ 28 才算 hot（season.ts:20）。
+ * 实测这道缝的宽度：
+ *   24℃/80%  374 款说了「喷得收着些更稳」→ 真减量 0 款
+ *   27℃/65%  374 款说了 → 0 款
+ *   27℃/90%  577 款说了 → 0 款
+ *   28℃/70%  577 款说了 → 577 款全减
+ * 22–28℃ 配 65%+ 湿度是华东华南春夏最常见的天气，不是边缘工况。用户在这一整段看到的是：
+ * 卡上明确写「喷得收着些更稳」，紧挨着的喷量格给的却是和凉爽天一模一样的最高档。
+ *
+ * 产品自陈的原则是「规则算数、LLM 说话」，这里恰恰是数没算、话先说了——
+ * 也是本仓库反复在修的「同一个概念两条判据」换了个门。
+ *
+ * 顺带把 28.0℃ 那个台阶一并去掉：feel 是阶跃量，实测 90%RH 下 28.00℃ 一步翻 71 款。
+ */
+export function heatGuard(p: Perfume, ctx: Context) {
+  const wf = weatherFit(p, ctx.feel, ctx.tempC, ctx.humidity);
+  const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
+  // 两支保持原样，**不要**试图只留连续那一支。我试过把 `hot` 摘掉（理由是它在 28.0℃
+  // 阶跃、一步翻 71 款），结果撞碎两件既有的东西，都被单测当场抓住：
+  //   · 28℃ 以上、净乘子却因自身清爽被抵回 0.95 以上的那批（当蓝、蔚蓝浓香精、爱神）
+  //     从此一条风险都说不出，而裁决层照旧判 avoid —— 实测 57 条「判了说不出为什么」，
+  //     正是这道闸原本在兜的；
+  //   · 「干琥珀在高温里发闷」是上一轮**刻意**做过的取舍（与留印那条方向相反，
+  //     见 recommend.ts 的 stainRisk 段），摘掉 hot 等于把它悄悄推翻。
+  // 28℃ 那个台阶是环境量自身的离散性，与下方"换喷洒部位"同源，不在本轮范围内。
+  const on = hot || (wf.w < WEATHER_CAUTION && wf.tone === "heavy_in_heat");
+  return { wf, hot, on };
+}
 
 function accStrength(p: Perfume, en: string): number {
   const a = p.accords.find((x) => x.en === en);
@@ -54,7 +85,7 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
       // 两处措辞必须互补，不能是同一句话的两种说法——同屏重复会显得系统在凑字数。
       durationHint: "留到下一次。它不会因为今天不用就跑掉",
       suitable: false,
-      note: "今天把它留在家里。出门前洗过手、换件没沾过香的外套，就是这个场合最好的分寸。",
+      note: "出门前洗个手、换一件没沾过香的外套，就够了。",
     };
   }
   const sil = p.sillage ?? 2.5;
@@ -80,7 +111,9 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 真正的主变量是温度：干热同样让香水在皮肤上爆得更快。湿热多出来的是热舒适度惩罚
   //（汗液蒸发受阻，同样的浓度更容易越过"过头"线），不是额外的挥发惩罚——
   // 事实上干热下蒸发散热有效，皮温往往还低于同气温的湿热。所以两者都保护，不再厚此薄彼。
-  const hotFeel = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
+  // hot 是环境量（出汗、体感），guardOn 是「这瓶在这个热度里会过头」——两者用途不同，
+  // 见下方各自的落点与 heatGuard 的说明。
+  const { hot: hotFeel, on: heatGuardOn } = heatGuard(p, ctx);
   if (ctx.feel === "cold" && sil < 2.4) hi = Math.min(hi + 1, 5);
   // 高温减量有两条触发：扩散本身强，或这瓶**由**甜/树脂主导（computeRisks 会为后者写出
   // 「高温里存在感会比你以为的更强，喷得收着些更稳」）。第二条是为了让**已经说出口的那句话兑现**——
@@ -100,7 +133,15 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
   // 差出来的正是烟草与动物性主导的那一批：卡上写着「厚重感在高温里会放大，
   // 喷得收着些更稳」，喷量却纹丝不动地给到最高档。取并集不如直接认那个更宽的口径。
   // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
-  if (hotFeel && (sil >= 3.2 || heavyDominates(p, 50))) {
+  // ⚠️ 两条触发的**语义不同，判据也就不该合并**（我第一版合并了，被上面那两条用例当场抓住）：
+  //   · 扩散本身强 → 环境热把投射放大，与这瓶是什么调无关。它是环境规则，
+  //     和下方"换喷洒部位"同源，所以吃 hotFeel。
+  //   · 这瓶由厚重族主导且天气真的压了它 → 与那句风险文案是同一件事，
+  //     所以必须吃 heatGuardOn，一个字都不能差。
+  // 合并的代价是把第一条的保护一并删掉：强扩散但不厚重的香（sillage 3.5、无厚重族）
+  // 在 32℃ 会拿到和 20℃ 一样的喷量。
+  // 【天气驱动的减量总计封顶 1 下】——两条同时命中也只减一次，避免叠加过度。
+  if ((hotFeel && sil >= 3.2) || (heatGuardOn && heavyDominates(p, 50))) {
     hi = Math.max(lo, hi - 1);
     capped = true;
   }
@@ -191,11 +232,11 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
     note =
       hi < remembered
         ? ps >= 0.4
-          ? "上次同样天气、同样场合你说「刚好」——不过你后来又说过它偏冲，这次在那个量上再收一点。"
-          : "上次同样天气、同样场合你说「刚好」——不过今天这个场合更收着些，先按更少的量来。"
+          ? "同样的天气和场合你说过「刚好」，不过你后来嫌它冲，这次再收一点。"
+          : "同样的天气和场合你说过「刚好」，不过今天场合更收着，先按更少的量来。"
         : hi > remembered
-          ? "上次同样天气、同样场合你说「刚好」——今天在那个量上略放开一点。"
-          : "上次同样天气、同样场合你说「刚好」——就按那次的量来。";
+          ? "同样的天气和场合你说过「刚好」，今天在那个量上略放开一点。"
+          : "同样的天气和场合你说过「刚好」，就按那次的量来。";
   }
 
   const spraysLabel = lo === hi ? `${lo} 下` : `${lo}–${hi} 下`;
@@ -250,11 +291,17 @@ export function computeUsage(p: Perfume, ctx: Context, bias?: Bias): Usage {
 
   // 社交距离取「喷后有效档」而非原始扩散：已生效的减档（封闭/贴身/嫌冲/闷热压量）都会降低实际投射，
   // 封顶降 2 档，避免同屏出现「喷 1 下」却仍标「整间屋都是它」的自相矛盾。
+  // ⚠️ 这份清单必须与上面**真正减过量**的那几处一一对应。它原本漏了自己注释里点名的
+  // 「闷热压量」，也漏了餐桌与高张力——于是「今天这么热，喷得收着些更稳」+「喷 1 下」
+  // 与「一桌 / 整间屋都是它」会同屏出现，正是这段注释声称要消灭的那种自相矛盾。
   let distReduce = 0;
   if (density === "dense" || density === "closed") distReduce++;
   if (ctx.intimacy === "close") distReduce++;
   if (ctx.avoid?.includes("too_strong")) distReduce++;
   if (ps >= 0.4) distReduce++;
+  if (heatGuardOn && (sil >= 3.2 || heavyDominates(p, 50))) distReduce++;
+  if (ctx.meal) distReduce++;
+  if (ctx.tension === "high") distReduce++;
   const effTier = Math.max(1, p.sillageTier - Math.min(distReduce, 2)) as 1 | 2 | 3 | 4;
 
   // suitable 问的是「这一瓶今天合不合适」，所以与 computeVerdict 同口径：只看本瓶风险。
@@ -329,7 +376,7 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
     return [
       {
         kind: "scene",
-        text: "医院、诊所这类场合，很多人对气味格外敏感，而他们没有回避的余地——今天把香水留在家里最稳妥。",
+        text: "医院、诊所这类场合，有人对气味格外敏感又躲不开——今天把香水留在家里最稳妥。",
       },
     ];
   }
@@ -358,8 +405,6 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   // balsamic=59)、探索家、绿爱尔兰花呢会被判"树脂琥珀感偏厚"。而同一张卡的"为什么"里，
   // 打分层（早就用了主导度判据）正写着"调性清爽通透，正合今天的天气"。
   // 这两句必须由同一条判据产出，否则卡片自己打自己。
-  const sweet = sweetness(p);
-  const balsam = balsamicWeight(p);
   const hot = ctx.feel === "hot_humid" || ctx.feel === "hot_dry";
   // 天气把这瓶压到「要留意」那一档时，这里就**必须**说得出为什么。
   //
@@ -370,9 +415,20 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   // ——weatherFit 的热负荷从 22℃ 起算，而 ctx.feel 要更高才算 hot，两条线本来就不齐。
   //
   // 措辞仍然只由 tone 决定（本文件既有的纪律），门槛与裁决共用同一个常量。
-  const wf = weatherFit(p, ctx.feel, ctx.tempC, ctx.humidity);
+  // 与 computeUsage 的喷量减量共用同一条判据（见 heatGuard）：这句话说出口，那边的数就得动。
+  // 降级情境（拿不到天气）下这两条一律不出。
+  //
+  // buildReasons 早就有 `!ctx.approximate` 这道守卫（见本文件下方那段十行说明），
+  // 风险通道却漏了，而它们读的是同一个被伪造出来的 ctx.tempC——hooks.ts 在拒绝定位/
+  // 定位失败时按季节填一个代表温度（夏 27 / 冬 6 / 春 18 / 秋 16），humidity 恒填 50。
+  // 实测复刻那条降级 Context 跑主目录：冬季那份（伪造 6℃）有 288/1500 款拿到
+  //「今天偏冷，它这类清冽调容易发飘、留不住」，并把裁决从 good 压成 caution。
+  // 用户屏上横幅正承认没拿到位置，正文却在断言今天的天气——直接违反反伪精确红线，
+  // 也是刚修完的那个洞从第二个出口漏出来。
+  const { wf, on: heatOn } = heatGuard(p, ctx);
+  const heatGuardOn = heatOn && !ctx.approximate;
   const weatherDrivesCaution = wf.w < WEATHER_CAUTION;
-  if (hot || (weatherDrivesCaution && wf.tone === "heavy_in_heat")) {
+  if (heatGuardOn) {
     const weatherWord = ctx.feel === "hot_humid" ? "又热又潮" : hot ? "这么热" : "气温偏高";
     if (sweetDominates(p, 55)) {
       push("weather", `今天${weatherWord}，它的甜感偏重，上身久了容易发腻，可考虑换清爽些的。`);
@@ -388,16 +444,25 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   // 冷侧此前一句都没有。它不是"会过头"，而是**留不住**——措辞要对得上归因，
   // 也不能顺口许一个引擎不会兑现的动作：喷量的冷天加成只给扩散弱的那一档
   //（见本文件上方 `ctx.feel === "cold" && sil < 2.4`），所以这里不说"多喷一点"。
-  if (weatherDrivesCaution && wf.tone === "thin_in_cold" && !risks.some((r) => r.kind === "weather")) {
-    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住——别指望它陪一整天，想要更立得住就换一瓶更暖的。");
+  if (
+    weatherDrivesCaution &&
+    !ctx.approximate &&
+    wf.tone === "thin_in_cold" &&
+    !risks.some((r) => r.kind === "weather")
+  ) {
+    push("weather", "今天偏冷，它这类清冽调容易发飘、留不住，想更立得住就换一瓶更暖的。");
   }
   // 餐桌场合：浓香/甜香和食物气味打架（高端餐饮甚至明示谢绝浓香）
-  if (ctx.meal && (Math.max(sweet, balsam) >= 55 || p.sillageTier >= 3)) {
-    push("meal", "这顿饭是场合的一部分——它的存在感会和食物气味打架，喷得比平时更收着些。");
+  // 判据与全仓一致走主导度：`Math.max(sweet, balsam) >= 55` 是最后一条残留的绝对线，
+  // 而 balsamicWeight 含 amber——蔚蓝浓香精（citrus=100 / amber=86 / sweet=0）这类
+  // 以 Ambroxan 干琥珀当骨架的清冽香会被判成"浓甜和食物气味打架"。
+  // sillageTier ≥3 那一支保留：扩散强本来就会和食物气味抢空间，与它是什么调无关。
+  if (ctx.meal && (sweetDominates(p, 55) || balsamicDominates(p, 55) || p.sillageTier >= 3)) {
+    push("meal", "它的存在感会和食物气味打架，今天喷得比平时更收着些。");
   }
   // 「用力过猛」组合提示（国内语境：办公室里的浓甜白花有"柜姐感"联想）
   if (overdressedCombo(p, ctx)) {
-    push("overdressed", "甜和扩散都偏高，这类场合容易显得用力过猛——压到 1 下、放低位置会体面很多。");
+    push("overdressed", "甜和扩散都偏高，这类场合容易用力过猛。压到 1 下、位置放低会体面很多。");
   }
   // 季节错配：相对差，不用绝对阈值。
   // **必须过和 buildReasons 同一道票数门槛**——「大家更多在冬季用它」是一句关于社区数据的断言，
@@ -415,7 +480,7 @@ export function computeRiskNotes(p: Perfume, ctx: Context): RiskNote[] {
   }
   // 高张力场合 × 存在感偏强：规则层自己就要说这句，不能只指望场景解析恰好返回 riskNote
   if (ctx.tension === "high" && p.sillageTier >= 3) {
-    push("tension", "这种场合，最好别让香水成为被讨论的那件事——它的存在感偏强，压到最低量、只留贴身的一点更稳妥。");
+    push("tension", "这种场合别让香水成为话题。它的存在感偏强，压到最低量、只留贴身的一点。");
   }
   // 场景解析给出的社交风险（LLM 的场景常识以受控字段进入，不允许它自由发挥进正文）
   if (ctx.riskNote && !risks.some((r) => r.text.includes(ctx.riskNote!))) {
@@ -468,8 +533,8 @@ export function buildReasons(
     if (wp) r.push(wp);
   }
   if (parts.occasion >= 0.8) r.push(`风格（${p.styleTags.join("·")}）贴合${ctx.occasion === "date" ? "约会" : "今天的场合"}`);
-  if (p.custom) r.push(`这瓶是你手动记录的，按所选香调的典型情况估计，用两次并反馈后会更准`);
-  else if (p.lowVotes) r.push(`这瓶的社区数据还少，判断偏保守，你的反馈会让它更准`);
+  if (p.custom) r.push(`这瓶是你手动记的，按所选香调估计，你的反馈会让它更准`);
+  else if (p.lowVotes) r.push(`这瓶社区数据还少，判断偏保守，你的反馈会让它更准`);
   if (r.length === 0) r.push(`${topAccords}的整体气质，和今天比较合拍`);
   return r;
 }

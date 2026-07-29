@@ -51,7 +51,7 @@ function CityForm({ onDone }: { onDone: () => void }) {
           // 这里的 placeholder 有 11 个汉字，而 globals.css 又把 input 的字号钉在 16px
           //（防 iOS 聚焦缩放），于是 320px 宽的手机上「确定」按钮会被挤出卡片。
           // 定位被拒之后，这个表单是唯一的补救入口。
-          className="serif min-w-0 flex-1 border-b border-line-strong bg-transparent px-1 py-2 text-sm text-ink outline-none focus:border-accent"
+          className="serif min-w-0 flex-1 border-b border-field bg-transparent px-1 py-2 text-sm text-ink outline-none focus:border-accent"
         />
         <button type="submit" disabled={busy} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
           {busy ? "…" : "确定"}
@@ -147,7 +147,14 @@ export function ContextBar({ ctx }: { ctx: Context | null }) {
           </div>
           <p className="serif mt-1.5 text-[0.88rem] text-ink-faint">你在哪座城市？氛寸来感知今天的天气。</p>
           <CityForm onDone={() => {}} />
-          <button onClick={resolveByCoords} className="mt-2.5 text-xs text-ink-faint underline-offset-2 hover:underline">
+          {/* 全站唯一没补热区的控件，实测只有 16px 高（WCAG 2.5.8 AA 要求 24px），
+              而它恰好在"定位失败"这条恢复路径上——最需要点得中的时候最难点中。
+              同文件其余图标按钮用的是 after:h-11 w-11 的伪元素扩展，这里换成 py-1.5：
+              它是行内文字按钮，撑高自身比盖一层 44px 命中区更不容易压到相邻元素。 */}
+          <button
+            onClick={() => resolveByCoords()}
+            className="mt-2 py-1.5 text-xs text-ink-faint underline-offset-2 hover:underline"
+          >
             或再试一次自动定位
           </button>
         </div>
