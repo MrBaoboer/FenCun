@@ -12,8 +12,13 @@ const fraunces = Fraunces({
 });
 
 // 中文衬线主嗓音（自托管，构建期下载、不依赖 Google 运行时，规避国内墙）
+//
+// weight 用可变轴而不是列三档：Noto Serif SC 是可变字体（wght 200–900），列 500/600/700
+// 并不会各下一份字体文件——next/font 对**同一批** 101 个 woff2 分片各发一遍 @font-face，
+// 于是 304 条规则指向 101 个去重后的 URL，其中三分之二是重复声明。
+// 那份 CSS 是渲染阻塞的：实测 98.2KB gzip → 收敛成一档后约 33KB。
 const notoSerifSC = Noto_Serif_SC({
-  weight: ["500", "600", "700"],
+  weight: "variable",
   subsets: ["latin"],
   display: "swap",
   variable: "--font-noto-serif-sc",
@@ -30,7 +35,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
 
 const TITLE = "氛寸 · 帮你用好香水";
 const DESCRIPTION =
-  "氛寸（Fēn Cùn）——基于实时天气、体感与场合，从你已有的香水里告诉你今天该喷哪一瓶、怎么喷得恰到好处。";
+  "氛寸（Fēn Cùn）——根据实时天气和出席场合，告诉你今天最适合喷哪瓶香水，以及怎样用得恰到好处。";
 
 export const metadata: Metadata = {
   // metadataBase 必须给：没有它，openGraph.images 的相对路径不会被补成绝对 URL，

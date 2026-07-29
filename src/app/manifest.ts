@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "氛寸 · 帮你用好香水",
     short_name: "氛寸",
     description:
-      "基于实时天气、体感与场合，从你已有的香水里告诉你今天该喷哪一瓶、怎么喷得恰到好处。",
+      "根据实时天气和出席场合，告诉你今天最适合喷哪瓶香水，以及怎样用得恰到好处。",
     lang: "zh-CN",
     start_url: "/",
     display: "standalone",

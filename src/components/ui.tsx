@@ -93,7 +93,7 @@ export function EvidenceBar({
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
         <span className="text-[0.82rem] text-ink-soft">{label}</span>
-        {hint && <span className="text-[0.72rem] text-ink-faint">{hint}</span>}
+        {hint && <span className="text-[0.74rem] text-ink-faint">{hint}</span>}
       </div>
       <div className="h-[3px] w-full overflow-hidden bg-sunken">
         <div className="bar-grow h-full" style={{ width: `${pct}%`, backgroundColor: color }} />

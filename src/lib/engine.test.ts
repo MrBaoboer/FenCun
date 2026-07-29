@@ -884,10 +884,10 @@ test("厚重只准有一条判据：喷量、风险文案与打分归因不得�
   const { sweetDominates, balsamicDominates, richDominates, heavyDominates } = await import("./scoring");
   const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
   const hot = C({ occasion: "casual", feel: "hot_dry", tempC: 33, humidity: 45, season: "summer" });
-  // 三支都要数进来。此前这个谓词只认前两支，于是「厚重感在高温里会放大」那一支
+  // 三支都要数进来。此前这个谓词只认前两支，于是「厚重感会被放大」那一支
   // ——烟草与动物性主导的那批——在断言里根本不存在，而减量恰恰就漏在它身上。
   const HEAVY_LINE = (s: string) =>
-    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感在高温里会放大");
+    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感会被放大");
 
   const contradictory: string[] = [];
   const mismatched: string[] = [];
@@ -1263,7 +1263,7 @@ test("不变式：说了「收着些」，喷量就必须真的收——整个 2
   const fs = await import("node:fs");
   const catalog = JSON.parse(fs.readFileSync("public/data/perfumes.min.json", "utf8")) as Perfume[];
   const HEAVY_LINE = (s: string) =>
-    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感在高温里会放大");
+    s.includes("甜感偏重") || s.includes("树脂琥珀感偏厚") || s.includes("厚重感会被放大");
   const cool = C({ occasion: "casual", feel: "mild", tempC: 15, humidity: 50, season: "spring" });
   const gaps: string[] = [];
   for (const [tempC, humidity] of [

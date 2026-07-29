@@ -22,9 +22,9 @@ function NotesTiers({ notes }: { notes: ScoredPick["perfume"]["notes"] }) {
   if (shown.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <Eyebrow className="eyebrow-mute">气味档案</Eyebrow>
+      <Eyebrow className="eyebrow-mute">前中后调</Eyebrow>
       {shown.map(([label, arr]) => (
-        <div key={label} className="flex gap-3 text-[0.84rem]">
+        <div key={label} className="flex gap-3 text-[0.85rem]">
           <span className="serif w-9 shrink-0 text-ink-faint">{label}</span>
           <span className="serif text-ink-soft">{arr.join("、")}</span>
         </div>
@@ -87,7 +87,7 @@ export function RecommendationCard({
               今天不建议
             </span>
           ) : pick.verdict === "caution" ? (
-            <span className="flex items-center gap-1.5 text-[0.7rem] text-warn">
+            <span className="flex items-center gap-1.5 text-[0.68rem] text-warn">
               <span className="h-1.5 w-1.5 rounded-full bg-warn" />
               有一点要留意
             </span>
@@ -127,7 +127,7 @@ export function RecommendationCard({
       {np.secondary && <p className="en-italic mt-1.5 text-[1.15rem]">{np.secondary}</p>}
       {allAvoid && !isSelected && (
         <p className="serif mt-2.5 text-[0.85rem] leading-relaxed text-warn">
-          柜里这瓶相对最稳
+          真要用，这瓶相对最稳
         </p>
       )}
       <p className="mt-2.5 text-[0.8rem] text-ink-faint">
@@ -153,7 +153,7 @@ export function RecommendationCard({
         <div className="mt-2.5">
           <Eyebrow>
             {explainLoading
-              ? "氛寸正在斟酌措辞…"
+              ? "氛寸 · 正在斟酌"
               : explainSource === "deepseek"
               ? "氛寸 · 此刻为你解读"
               : "氛寸 · 用香建议"}
@@ -167,7 +167,7 @@ export function RecommendationCard({
         <div className="mt-6 border-t-2 border-t-ink pt-4">
           <Eyebrow className="!text-warn">今天的分寸 · 不用香</Eyebrow>
           <p className="serif mt-2 text-[0.95rem] leading-relaxed text-ink-soft">{pick.usage.note}</p>
-          <p className="serif mt-2 text-[0.84rem] leading-relaxed text-ink-faint">
+          <p className="serif mt-2 text-[0.85rem] leading-relaxed text-ink-faint">
             {pick.usage.durationHint}
           </p>
         </div>
@@ -188,7 +188,7 @@ export function RecommendationCard({
 
       {/* 分寸建议（展开） */}
       <details className="group mt-3">
-        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 py-2.5 text-[0.78rem] tracking-[0.12em] text-ink-faint transition-colors hover:text-ink-soft [&::-webkit-details-marker]:hidden">
+        <summary className="flex list-none items-center justify-center gap-1.5 py-2.5 text-[0.8rem] tracking-[0.12em] text-ink-faint transition-colors hover:text-ink-soft [&::-webkit-details-marker]:hidden">
           <span className="group-open:hidden">展开分寸建议</span>
           <span className="hidden group-open:inline">收起</span>
           <svg width="11" height="11" viewBox="0 0 24 24" className="transition-transform group-open:rotate-180">
@@ -197,15 +197,13 @@ export function RecommendationCard({
         </summary>
 
         <div className="flex flex-col gap-5 pb-2 pt-3">
-          <div className="flex flex-col gap-2.5 text-[0.86rem]">
+          <div className="flex flex-col gap-2.5 text-[0.85rem]">
             <DetailRow label="喷在哪" value={pick.usage.placement.join("、")} />
             {/* 归因：这一档来自社区评价者的主观投票，不是测量值。
                 没票的那批（手动记一瓶、国货白名单里 sillage 为 null 的 444 条）换一句说法——
-                同一排里「留香」已经诚实写了「因人而异」，这一格不能拿不存在的投票给安全断言 */}
-            <DetailRow
-              label="社交距离"
-              value={`${DISTANCE_LABEL[tier]} · ${sillageAttrib(p)}（${DISTANCE_HINT[tier]}）`}
-            />
+                同一排里「留香」已经诚实写了「因人而异」，这一格不能拿不存在的投票给安全断言。
+                档名不再重复一遍：三指标行里已经印着，这里只说它对旁人意味着什么。 */}
+            <DetailRow label="社交距离" value={`${DISTANCE_HINT[tier]} · ${sillageAttrib(p)}`} />
             <DetailRow label="留香" value={pick.usage.durationHint} />
           </div>
 
@@ -214,7 +212,7 @@ export function RecommendationCard({
               <Eyebrow className="!text-warn">分寸提醒</Eyebrow>
               <ul className="mt-1.5 flex flex-col gap-1">
                 {pick.risks.map((r, i) => (
-                  <li key={i} className="serif text-[0.84rem] leading-relaxed text-ink-soft">
+                  <li key={i} className="serif text-[0.85rem] leading-relaxed text-ink-soft">
                     {r}
                   </li>
                 ))}
@@ -223,9 +221,9 @@ export function RecommendationCard({
           )}
 
           <div className="flex flex-col gap-3">
-            <Eyebrow className="eyebrow-mute">为什么是这些建议</Eyebrow>
+            <Eyebrow className="eyebrow-mute">匹配度</Eyebrow>
             {/* 季节分是 seasonFit（以主场季为基准、按票数收缩），不是投票占比；无数据香不冒称「社区」 */}
-            <EvidenceBar label="季节匹配" value={pick.breakdown.season} hint={p.custom || p.lowVotes ? undefined : "以它的主场季为满格"} tone="accent" />
+            <EvidenceBar label="季节匹配" value={pick.breakdown.season} hint={p.custom || p.lowVotes ? undefined : "以主场季为满格"} tone="accent" />
             <EvidenceBar label="场合贴合" value={pick.breakdown.occasion} tone="accent" />
             <EvidenceBar
               label="天气适应"

@@ -26,7 +26,7 @@ export function ShelfCard({
         onClick={onOpen}
         // 只有真的挂了角标才给它让位。原来无条件 pr-14（56px）：375px 下卡内宽仅 125px，
         // 香名只剩 69px —— 连四个字的「烟草香草」都要被省略号截掉，而多数卡根本没有角标。
-        className={`w-full cursor-pointer text-left after:absolute after:inset-0 after:content-[''] ${
+        className={`w-full text-left after:absolute after:inset-0 after:content-[''] ${
           dusty ? "pr-14" : ""
         }`}
       >
@@ -34,7 +34,7 @@ export function ShelfCard({
           {np.primary}
         </span>
       </button>
-      <div className="mt-1 truncate text-[0.72rem] text-ink-faint">
+      <div className="mt-1 truncate text-[0.74rem] text-ink-faint">
         {np.secondary ? <span className="en-italic">{np.secondary}</span> : null}
         {np.secondary ? " · " : ""}
         {p.brandZh}
@@ -49,7 +49,7 @@ export function ShelfCard({
           type="button"
           onClick={onRemove}
           // 删除入口，热区补到 44——比导航更该给足：点错的代价是一瓶香水从柜里消失
-          className="relative z-10 -m-2 -mr-3 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
+          className="relative z-10 -m-2 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center text-ink-faint opacity-50 transition-all hover:text-warn hover:opacity-100 focus:opacity-100"
           aria-label="移出香柜"
           title="移出香柜"
         >

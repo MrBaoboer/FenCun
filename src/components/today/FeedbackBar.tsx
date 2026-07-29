@@ -7,9 +7,9 @@ import { Eyebrow } from "@/components/ui";
 import type { Context, Perfume } from "@/lib/types";
 
 const OPTIONS: { key: "too_weak" | "perfect" | "too_strong" | "scene_mismatch"; label: string; done: string }[] = [
-  { key: "too_weak", label: "淡了点", done: "记下了，下次帮你略微多喷一点。" },
-  { key: "perfect", label: "刚好", done: "记住这个配置了——下次同样的天气和场合，直接照它来。" },
-  { key: "too_strong", label: "太冲了", done: "记下了，下次默认帮你少喷半下。" },
+  { key: "too_weak", label: "淡了点", done: "记下了，下次多喷一点。" },
+  { key: "perfect", label: "刚好", done: "记住了。下次同样的天气和场合，照这个来。" },
+  { key: "too_strong", label: "太冲了", done: "记下了，下次少喷半下。" },
   { key: "scene_mismatch", label: "不合场合", done: "记下了。这类场合，下次先想到的不会是它。" },
 ];
 
@@ -84,9 +84,9 @@ export function FeedbackBar({
     logWear(wearEntryFrom(perfume, ctx)); // 反馈即穿过——今天这瓶落进香历
     setDone(
       adaptAttributed
-        ? "这几天你一直在用它，你闻不到，旁边的人未必。这笔先不加喷量——明天换一瓶，隔两天再回来闻它。"
+        ? "这几天你一直在用它——你闻不到，旁边的人未必。明天换一瓶，隔两天再回来闻它。"
         : envAttributed
-        ? "记下了。今天这天气本来就吃留香，这笔算在天气头上。"
+        ? "记下了。今天这天气本来就吃留香。"
         : o.done
     );
   }

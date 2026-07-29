@@ -40,11 +40,9 @@ export default function ProfilePage() {
     return ok;
   }
 
-  // 导出是这个纯本机、无账号无后端的产品里**唯一**的数据保全手段，界面上还明写着
-  // 「建议偶尔导出备份」。所以两件事都得做：
+  // 导出是这个纯本机、无账号无后端的产品里**唯一**的数据保全手段，所以两件事都得做：
   //   ① 用标准写法——锚点挂进文档再点，撤销 URL 推迟到下一帧。脱离文档的锚点与
-  //      同步 revoke 在非 Chromium 内核上是有名的不可靠组合（本机无法跨浏览器验证，
-  //      但这么写无论如何都只有好处、零风险）；
+  //      同步 revoke 在非 Chromium 内核上是有名的不可靠组合；
   //   ② 给一次成功回执。此前整个流程没有任何反馈，点了没反应的用户会以为已经备份好了，
   //      直到换设备才发现什么都没有——复用本页已有的 importMsg 播报位即可。
   function doExport() {
@@ -73,7 +71,7 @@ export default function ProfilePage() {
       const preview = await previewImport(raw);
       if (!preview) {
         setPending(null);
-        setImportMsg({ kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" });
+        setImportMsg({ kind: "error", text: "认不出这份文件，请选择氛寸导出的 JSON 备份。" });
         return;
       }
       setImportMsg(null);
@@ -83,14 +81,14 @@ export default function ProfilePage() {
         setImportMsg(
           ok
             ? { kind: "ok", text: "导入完成，香柜、反馈与香历都回来了。" }
-            : { kind: "error", text: "这份文件氛寸认不出来——请选择之前从氛寸导出的 JSON 备份。" }
+            : { kind: "error", text: "认不出这份文件，请选择氛寸导出的 JSON 备份。" }
         );
         return;
       }
       setPending({ raw, preview });
     };
     reader.onerror = () =>
-      setImportMsg({ kind: "error", text: "文件没读出来，可能已损坏——换个文件再试试。" });
+      setImportMsg({ kind: "error", text: "文件没读出来，换一个再试。" });
     reader.readAsText(file);
   }
 
@@ -107,11 +105,11 @@ export default function ProfilePage() {
     // 只有一瓶时说「它们」，画像的第一句就在告诉用户这段话不是为他写的
     const it = (n: number) => (n > 1 ? "它们" : "它");
     if (strongN > 0)
-      lines.push(`有 ${strongN} 瓶你反馈过偏冲——再推荐${it(strongN)}时，喷量与扩散都会各自收一点。`);
+      lines.push(`你反馈过 ${strongN} 瓶偏冲，再推荐${it(strongN)}时会少喷一点。`);
     if (weakN > 0)
-      lines.push(`有 ${weakN} 瓶你反馈过偏淡——再推荐${it(weakN)}时，会建议略增喷量。`);
+      lines.push(`你反馈过 ${weakN} 瓶偏淡，再推荐${it(weakN)}时会多喷一点。`);
     if (lines.length === 0)
-      lines.push("多答几次「今天，刚好吗」，氛寸会越来越懂你对每瓶的分寸。");
+      lines.push("多答几次「今天，刚好吗」，这里会记下你对每瓶的分寸。");
     return lines;
   }, [feedbacks]);
 
@@ -182,7 +180,7 @@ export default function ProfilePage() {
                       {p ? p.nameZh || p.name : "已移出的香水"}
                     </span>
                     {/* 防御性访问：损坏/旧版数据缺 context 时也不白屏（store 导入已深校验，这里是双保险） */}
-                    <span className="disp ml-2 text-[0.7rem] tracking-wide text-ink-faint">
+                    <span className="disp ml-2 text-[0.68rem] tracking-wide text-ink-faint">
                       {OCCASION_LABEL[f.context?.occasion ?? ""] ?? f.context?.occasion ?? "—"}
                       {typeof f.context?.tempC === "number" ? ` · ${Math.round(f.context.tempC)}℃` : ""}
                     </span>
@@ -200,12 +198,12 @@ export default function ProfilePage() {
       {/* 数据 · 本机存储与备份 */}
       <div className="card px-5 py-4">
         <Eyebrow>数据</Eyebrow>
-        <p className="serif mt-2.5 text-[0.84rem] leading-relaxed text-ink-soft">
-          你的香柜与全部反馈只存在这台设备的浏览器里。换设备或清缓存都会清空，建议偶尔导出一份备份。
+        <p className="serif mt-2.5 text-[0.85rem] leading-relaxed text-ink-soft">
+          你的香柜、反馈与香历只存在本机浏览器里，换设备或清缓存都会清空。
         </p>
         <div className="mt-3 flex gap-2.5">
           <button onClick={doExport} className="btn-ghost flex-1 py-2.5 text-[0.82rem]">
-            导出香柜（JSON）
+            导出
           </button>
           {/* 曾是 <label> 包一个 display:none 的 file input —— label 本身不在 tab 序列，
               于是「导入」这个控件对键盘用户**完全不存在**。改成真按钮转发点击，
@@ -233,11 +231,11 @@ export default function ProfilePage() {
         <div className="mt-1">
           {demoConfirm ? (
             <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">
-              <p className="serif text-[0.84rem] leading-relaxed text-ink">
+              <p className="serif text-[0.85rem] leading-relaxed text-ink">
                 这会清掉本机的<span className="text-warn">香柜、反馈与香历</span>，换回六瓶示例。
               </p>
-              <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-                不可撤销。想留住现在这份，先导出再回来。
+              <p className="serif mt-1.5 text-[0.8rem] leading-relaxed text-ink-faint">
+                不可撤销。想留住现在这份，先导出。
               </p>
               <div className="mt-2.5 flex gap-2">
                 <button
@@ -271,7 +269,7 @@ export default function ProfilePage() {
         </div>
         {pending && (
           <div className="mt-3 rounded-md border border-warn/40 bg-warn-wash px-3.5 py-3">
-            <p className="serif text-[0.84rem] font-semibold leading-relaxed text-ink">
+            <p className="serif text-[0.85rem] font-semibold leading-relaxed text-ink">
               导入会<span className="text-warn">整包替换</span>现在的数据，不是合并。
             </p>
             <p className="serif mt-1.5 text-[0.82rem] leading-relaxed text-ink-soft">
@@ -280,8 +278,8 @@ export default function ProfilePage() {
               导入后：{pending.preview.perfumes} 瓶在柜 · {pending.preview.feedbacks} 条反馈 ·{" "}
               {pending.preview.wearDays} 天香历
             </p>
-            <p className="serif mt-1.5 text-[0.78rem] leading-relaxed text-ink-faint">
-              不可撤销。想留住现在这份，先导出再回来。
+            <p className="serif mt-1.5 text-[0.8rem] leading-relaxed text-ink-faint">
+              不可撤销。想留住现在这份，先导出。
             </p>
             <div className="mt-2.5 flex gap-2">
               <button

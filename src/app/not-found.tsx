@@ -19,8 +19,8 @@ export default function NotFound() {
         <h1 className="serif mt-3 text-[1.4rem] font-bold leading-snug text-ink">
           这一页不在氛寸里
         </h1>
-        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.92rem] leading-relaxed text-ink-soft">
-          链接可能过期了，或者地址少了一段。
+        <p className="serif mx-auto mt-2.5 max-w-xs text-[0.9rem] leading-relaxed text-ink-soft">
+          链接可能过期了。
         </p>
         <Link href="/" className="btn-primary mt-6 inline-block px-6 py-3 text-[0.9rem]">
           回今日之选

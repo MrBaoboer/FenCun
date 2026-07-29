@@ -51,7 +51,7 @@ export default function JournalPage() {
   // 于是闸门直接 return 掉骨架屏——刻意加的那个 sr-only 标题一个字都没进 HTML。
   // 线上实测 /journal 的预渲染正文只剩导航，整页没有任何 h1。
   // 骨架屏本身不需要它是条件渲染的：一个视觉隐藏的标题，加载态显示它没有任何代价。
-  const heading = <h1 className="sr-only">香历 · 你的穿香记录</h1>;
+  const heading = <h1 className="sr-only">香历</h1>;
   if (!hydrated)
     return (
       <div className="flex flex-col gap-5">
@@ -111,7 +111,7 @@ export default function JournalPage() {
                 onClick={() => setSelected(k)}
                 disabled={future}
                 aria-pressed={isSelected}
-                aria-label={`${view.m + 1}月${day}日${e ? ` · ${e.name}` : ""}`}
+                aria-label={`${view.m + 1} 月 ${day} 日${e ? ` · ${e.name}` : ""}`}
                 // 固定 44×44 塞进 7 列网格：375px 视口下每列只有约 41px，320px 下只有 33px，
                 // 相邻两格互相压盖，色点与日期也跟星期头对不齐。
                 // 改成按列宽自适应、用 aspect-square 保住方形，并以 min-h 守住
@@ -159,7 +159,7 @@ export default function JournalPage() {
           <Eyebrow className="eyebrow-mute">{formatDay(selected)}</Eyebrow>
           <p className="serif mt-2 text-[0.9rem] leading-relaxed text-ink-faint">
             {wearLog.length === 0
-              ? "香历还空着。你采纳或反馈过的每一瓶，都会自动落在这里。"
+              ? "香历还空着。去「今日」采纳一瓶，它就落在这里。"
               : selected === todayKey
               ? "今天还没记。去「今日」采纳一瓶，这一天就有颜色了。"
               : "这天没有记录。无香的日子，也是分寸。"}
@@ -237,7 +237,7 @@ function DaySnapshot({
         maxLength={60}
         rows={2}
         placeholder="这天有什么值得记的吗？一句就够。"
-        className="serif mt-4 w-full resize-none rounded-md border border-field bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        className="serif mt-4 w-full resize-none rounded-md border border-field bg-transparent px-3 py-2 text-[0.88rem] leading-relaxed text-ink placeholder:text-ink-faint focus:border-accent"
       />
     </div>
   );

@@ -138,7 +138,7 @@ const ogHtml = `
                 line-height:1.55;">你选香水，氛寸管分寸</div>
     <div style="font-family:var(--font-serif);font-size:26px;color:var(--color-ink-faint);
                 margin-top:16px;line-height:1.6;">
-      从你已有的香水里，按此刻的天气、体感与场合，告诉你今天喷哪一瓶、怎么喷
+      根据实时天气和出席场合，告诉你今天最适合喷哪瓶香水，以及怎样用得恰到好处
     </div>
     <div style="display:flex;gap:14px;margin-top:34px;">
       ${["喷量", "社交距离", "留香", "场合", "风险"]

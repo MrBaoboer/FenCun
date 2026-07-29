@@ -35,7 +35,7 @@ export function NudgeCard({ nudge, onPick }: { nudge: Nudge; onPick: (id: number
         <div className="min-w-0 flex-1">
           <Eyebrow>搁置 {nudge.days} 天 · 今天正合适</Eyebrow>
           <p className="mt-1.5 truncate">
-            <span className={`text-[0.98rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
+            <span className={`text-[1rem] text-ink ${np.primaryIsZh ? "serif font-bold" : "disp font-semibold"}`}>
               {np.primary}
             </span>
             {np.secondary && <span className="en-italic ml-1.5 text-[0.8rem]">{np.secondary}</span>}
@@ -66,7 +66,7 @@ export function NudgeCard({ nudge, onPick }: { nudge: Nudge; onPick: (id: number
               写死的代价实测过：20℃ 多云、天气乘子恰为 1.000 的一天照样弹「天气突变」，
               正文却在说会议室或反季——看一眼窗外和情境栏就能证伪，这最伤信任。 */}
           <Eyebrow className="!text-warn">
-            {CAUSE_LABEL[nudge.cause]} · {nudge.basis === "habit" ? "你常喷的这瓶要留意" : "这瓶今天要留意"}
+            {CAUSE_LABEL[nudge.cause]} · {nudge.basis === "habit" ? "你常喷的这瓶要留意" : "这瓶要留意"}
           </Eyebrow>
           <p className="serif mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
             <span className="font-bold text-ink">{hp.primary}</span>：{nudge.reason}

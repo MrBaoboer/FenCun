@@ -8,7 +8,7 @@ import { pageMetadata } from "@/app/page-meta";
 
 export const metadata = pageMetadata({
   title: "我的分寸 · 氛寸",
-  description: "氛寸从你的反馈里学到的偏好，以及这台机器上存了什么。",
+  description: "氛寸从你的反馈里学到的偏好，以及本机存了什么。",
   path: "/profile",
 });
 

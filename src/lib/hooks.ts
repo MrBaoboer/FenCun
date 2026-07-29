@@ -168,7 +168,7 @@ export function useExplain(pick: ScoredPick | null, ctx: Context | null) {
     // "但你今天要是就想用它，可以这样把影响降到最低…"——那套措辞对约会、通勤是对的，
     // 对病房是错的。这里没有"降到最低"的版本，只有"别用"。规则文案直接输出，不留软化的余地。
     if (pick.usage.sprays[1] === 0) {
-      setText(pick.risks[0] ?? "这种场合建议今天不用香。");
+      setText(pick.risks[0] ?? "今天这个场合，把香水留在家里更稳妥。");
       setSource("template");
       setLoading(false);
       return;
