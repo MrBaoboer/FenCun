@@ -112,6 +112,15 @@ html[data-theme="night"] {
   }
   .tnum { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
   ::selection { background: rgba(140, 106, 38, 0.22); }
+
+  /* Tailwind v3 的 preflight 有 `button { cursor: pointer }`，v4 删掉了这条，按钮回到浏览器
+     默认的箭头。本站的按钮因此全都不再有手型指示，而紧挨着的 <a>（同样长相的报头图标）
+     由 UA 样式表照旧给手型——同一排两个图标，光标不一样。
+     此前是逐处补 `cursor-pointer`（补到三处就停了），改成在这里定一次。
+     disabled 不给手型；utility 层的 `disabled:cursor-default` 仍然压得过这条，不冲突。 */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary { cursor: pointer; }
 }
 
 @layer components {

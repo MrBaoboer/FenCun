@@ -12,8 +12,13 @@ const fraunces = Fraunces({
 });
 
 // 中文衬线主嗓音（自托管，构建期下载、不依赖 Google 运行时，规避国内墙）
+//
+// weight 用可变轴而不是列三档：Noto Serif SC 是可变字体（wght 200–900），列 500/600/700
+// 并不会各下一份字体文件——next/font 对**同一批** 101 个 woff2 分片各发一遍 @font-face，
+// 于是 304 条规则指向 101 个去重后的 URL，其中三分之二是重复声明。
+// 那份 CSS 是渲染阻塞的：实测 98.2KB gzip → 收敛成一档后约 33KB。
 const notoSerifSC = Noto_Serif_SC({
-  weight: ["500", "600", "700"],
+  weight: "variable",
   subsets: ["latin"],
   display: "swap",
   variable: "--font-noto-serif-sc",

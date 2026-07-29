@@ -188,7 +188,7 @@ export function RecommendationCard({
 
       {/* 分寸建议（展开） */}
       <details className="group mt-3">
-        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 py-2.5 text-[0.78rem] tracking-[0.12em] text-ink-faint transition-colors hover:text-ink-soft [&::-webkit-details-marker]:hidden">
+        <summary className="flex list-none items-center justify-center gap-1.5 py-2.5 text-[0.78rem] tracking-[0.12em] text-ink-faint transition-colors hover:text-ink-soft [&::-webkit-details-marker]:hidden">
           <span className="group-open:hidden">展开分寸建议</span>
           <span className="hidden group-open:inline">收起</span>
           <svg width="11" height="11" viewBox="0 0 24 24" className="transition-transform group-open:rotate-180">
