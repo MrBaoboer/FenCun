@@ -23,8 +23,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/today-day-v11.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
-    <td align="center"><img src="docs/screenshots/today-night-v11.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-day-v12.png" width="240" alt="今日之选 · 明韵"/><br/><sub><b>今日之选 · 明韵</b></sub></td>
+    <td align="center"><img src="docs/screenshots/today-night-v12.png" width="240" alt="今夜之选 · 暗香"/><br/><sub><b>今夜之选 · 暗香</b></sub></td>
   </tr>
 </table>
 
@@ -71,9 +71,9 @@
 <div align="center">
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/library-v11.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/journal-v11.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
-    <td align="center"><img src="docs/screenshots/profile-v11.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
+    <td align="center"><img src="docs/screenshots/library-v12.png" width="200" alt="香柜"/><br/><sub><b>香柜 · 搜名秒加 / 吃灰标记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/journal-v12.png" width="200" alt="香历"/><br/><sub><b>香历 · 穿香日历 / 一句话手记</b></sub></td>
+    <td align="center"><img src="docs/screenshots/profile-v12.png" width="200" alt="我的分寸"/><br/><sub><b>我的分寸 · 偏好画像 / 用香记录</b></sub></td>
   </tr>
 </table>
 </div>
@@ -150,7 +150,7 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 
 香水数据来自 **ledecanteur**（Fragrantica 社区数据），含真实社区投票：扩散 sillage(1–4)、留香 longevity(1–5)、四季 / 日夜投票、带强度香调、前中后调。
 
-- **分层**：原始 13.2 万款，按投票数 ≥ 50 筛得 3.67 万款。主目录取热度 **Top 1500 全中文精选**；其余进**扩展集**（索引懒加载，详情按 64 个分片取，含 785 款国货白名单）；再搜不到，还有**手动记一瓶**兜底——每一瓶都进得来。
+- **分层**：原始 13.2 万款，按投票数 ≥ 50 筛得 3.67 万款。主目录取热度 **Top 1500 全中文精选**；其余进**扩展集**（索引懒加载，详情按 64 个分片取，含 779 款靠国货白名单破格放行的低票记录）；再搜不到，还有**手动记一瓶**兜底——每一瓶都进得来。
 - **统一榜单**：主目录与扩展集合并重排、不分区，文本匹配档位优先、同档位按社区投票的主流度——高度匹配的结果永远靠前。
 - **中文化**：香调 / 气味词近全覆盖；香名 **89.0%** 有中文名——官方名 544、香圈通行绰号 39、直译 752。剩下 165 款没有可靠中文名，保留英文——错的中文名比英文更糟。原始数据不入仓库，仅提交构建产物；完整管线与数字见 [数据工程](docs/数据工程.md)。
 

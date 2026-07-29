@@ -24,4 +24,4 @@
 - [ ] `npm run lint` 通过 / passes
 - [ ] `npm test` 通过（改了引擎已补用例）/ passes (added cases for engine changes)
 - [ ] `npm run build` 通过 / passes
-- [ ] 提交已 DCO 签名 `git commit -s` / commits are signed off
+- [ ] （建议，非必需）提交已 DCO 签名 `git commit -s` / signed off (optional)
