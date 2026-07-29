@@ -4,8 +4,14 @@
 // LLM 输出里出现任何"我们没给过它"的数字（如编造的"留香6.2小时"）→ 整段丢弃，退模板。
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { allow, clientKey, withinDailyBudget } from "@/lib/ratelimit";
-import { extractDigits, findInventedNumbers, findPseudoPreciseCN } from "@/lib/numguard";
+import { allow, clientKey, withinDailyBudget, fromOwnPage } from "@/lib/ratelimit";
+import {
+  extractDigits,
+  findInventedNumbers,
+  findPseudoPreciseCN,
+  findUnitMismatch,
+  allowedUnitPairs,
+} from "@/lib/numguard";
 
 export const runtime = "nodejs";
 
@@ -119,6 +125,9 @@ function tooLarge(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  // 来源校验排在最前：它比 Content-Length 更便宜，且这一条不该产出降级模板——
+  // 跨源请求不是"我们的用户拿不到解读"，而是根本不该被服务。
+  if (!fromOwnPage(req)) return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   if (tooLarge(req)) return NextResponse.json({ error: "too_large" }, { status: 413 });
   let input: ExplainInput;
   try {
@@ -176,6 +185,11 @@ export async function POST(req: NextRequest) {
     风险提示: input.risks,
   });
   const allowedNumbers = extractDigits(factsOnly);
+  // 「数+量词」成对白名单。来源比 allowedNumbers 更窄：只认用法与风险这两段里
+  // 我们自己写死的档位与区间，不含 context 里的气温湿度读数——那正是被挪用的源头。
+  const allowedPairs = allowedUnitPairs(
+    JSON.stringify({ 用法: input.usage, 为什么合适: input.reasons, 风险提示: input.risks })
+  );
   // 中文数字那一侧比对的不是"这个数给过没有"，而是"这句话我们自己说过没有"——
   // 事实包里本来就有「用两次」「过几个小时」这类中文数词，一律当编造会让防线吃掉自己的事实。
   const factsText = [
@@ -219,7 +233,14 @@ export async function POST(req: NextRequest) {
     }
     // 防线②（铁律 2 的代码级）：数字白名单。"反伪精确"不能只是提示词里的一句拜托。
     // 半角与全角走同一条（两侧先 NFKC 归一），中文数字走量词白名单那条。
-    const invented = [...findInventedNumbers(text, allowedNumbers), ...findPseudoPreciseCN(text, factsText)];
+    const invented = [
+      ...findInventedNumbers(text, allowedNumbers),
+      ...findPseudoPreciseCN(text, factsText),
+      // 第三种形态：数字给过、单位换了。白名单只做集合成员判定，而事实里恒有
+      // 气温与湿度两个小整数，模型不必编新数字、把它们挪个槽位就成了伪精确
+      //（见 numguard.ts:findUnitMismatch）。
+      ...findUnitMismatch(text, allowedPairs),
+    ];
     if (invented.length > 0) {
       console.warn(`[explain] LLM 编造数字被拦截: ${invented.join(",")}`);
       return NextResponse.json({ text: fallback, source: "template" });

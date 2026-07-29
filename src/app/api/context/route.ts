@@ -79,7 +79,31 @@ function gridKey(lon: number, lat: number) {
   return `${lon.toFixed(2)},${lat.toFixed(2)}`;
 }
 
+/** 日闸门触顶。走既有的 catch 落到 weather_unavailable，客户端契约不变 */
+class WeatherBudgetExhausted extends Error {
+  constructor() {
+    super("weather daily budget exhausted");
+  }
+}
+
+/**
+ * 日闸门在**这里**消费，而不是在路由入口。
+ *
+ * 放在入口时它数的是「进站请求」，与和风的实际调用量没有任何对应关系，两个方向都错：
+ * · 一次缓存命中扣 1 个 token 却打 0 次和风——30 分钟网格缓存省下的配额完全不反映在闸门上；
+ * · 一次 miss 扣 1 个 token 却打 2 次和风（反查城市名 + 取实况）。
+ * 于是 cap=5000 实际对应 0～10000 次调用，这个数字对配额没有约束力。
+ *
+ * 更要紧的是它当时还排在 allow() 与坐标校验**之前**：`?lon=999&lat=999` 这种
+ * 直接 400、根本不碰和风的请求照样扣配额，单 IP 零成本就能把当天预算刷光，
+ * 之后落到这个实例的所有真实用户当天只剩 weather_unavailable。
+ * 对照 explain 那条路由是 `!allow(...) || !withinDailyBudget()`，限流在前、闸门在后——
+ * 两条代理付费上游的路由口径相反，这条是错的那条。
+ *
+ * 挪到这里之后，计数器的语义就等于和风控制台里的调用次数。
+ */
 async function qweather(path: string, params: Record<string, string>) {
+  if (!withinWeatherBudget()) throw new WeatherBudgetExhausted();
   const url = new URL(`https://${HOST}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   // key 走请求头而非 URL query（和风官方支持 X-QW-Api-Key）：
@@ -103,10 +127,7 @@ export async function GET(req: NextRequest) {
   }
   // 限流：单客户端 60 秒最多 20 次（切城市/定位）
   // 日闸门与 allow() 分工不同：allow 挡单客户端狂刷，它挡换 IP 的分布式刷量。
-  // 触顶后走既有的降级契约（200 + body 里的 error），客户端 AppProvider 只看 error 字段。
-  if (!withinWeatherBudget()) {
-    return NextResponse.json({ error: "weather_unavailable" }, { status: 200 });
-  }
+  // 闸门本身在 qweather() 里消费（见那里的说明）——它要数的是上游调用，不是进站请求。
   if (!allow(`ctx:${clientKey(req)}`, 20, 60_000)) {
     // 语义上该回 429，但客户端（AppProvider）只解析 body 判 d.error，
     // 返回 429 对它没有增益、反而可能把其他消费方打进降级链，
@@ -182,7 +203,10 @@ export async function GET(req: NextRequest) {
       try {
         const geo = await qweather("/geo/v2/city/lookup", { location: `${lonNum},${latNum}` });
         cityName = geo?.location?.[0]?.name ?? "你所在的位置";
-      } catch {
+      } catch (e) {
+        // 闸门触顶要往上抛：这是"今天不再打和风了"，不是"这一次反查失败了"。
+        // 吞掉它会让紧接着的取实况再撞一次同样的墙，白白多走一遍。
+        if (e instanceof WeatherBudgetExhausted) throw e;
         cityName = "你所在的位置";
       }
     }
@@ -207,6 +231,10 @@ export async function GET(req: NextRequest) {
     cacheSet(weatherCache, ck, data, WEATHER_TTL, WEATHER_CACHE_MAX);
     return NextResponse.json(data);
   } catch (e) {
+    // 闸门触顶不是"上游出错"，不该按 error 级别刷日志——它是预期内的自我保护
+    if (e instanceof WeatherBudgetExhausted) {
+      return NextResponse.json({ error: "weather_unavailable" }, { status: 200 });
+    }
     // 上游错误细节（如 "qweather 401"）只进服务端日志，不透传给客户端，
     // 避免泄露上游状态/配置信息。客户端契约不变：body 带 error 字段即走降级链。
     console.error("[api/context] upstream error:", e instanceof Error ? e.message : e);

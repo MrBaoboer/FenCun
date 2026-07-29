@@ -245,3 +245,53 @@ test("启发式兜底：也要给出在场时长档位，且没读懂时不许�
   assert.equal(heuristic("下午去医院").matched, true, "无香场合是横切信号，必须算命中");
   assert.equal(heuristic("和前任吃饭").matched, true, "张力与饭桌也是横切信号");
 });
+
+test("来源校验：一个第三方网页不该能从访客浏览器里调走我们的付费额度", async () => {
+  // Content-Type: text/plain 让 POST 成为 CORS **简单请求**——不触发预检，
+  // 任意页面都能对着两条付费路由发。限流键是访客自己的 IP，所以挂了脚本的页面
+  // 有 N 个访客就等于 N 份合法额度；每实例日闸门又随并发上升，方向也是反的。
+  const { fromOwnPage } = await import("@/lib/ratelimit");
+  const req = (h: Record<string, string>) => new Request("https://x/api", { headers: new Headers(h) });
+
+  // 真闸：跨源想带 application/json 就必须过预检，而我们不发任何 CORS 头
+  assert.equal(fromOwnPage(req({ "content-type": "text/plain" })), false, "简单请求形态必须挡住");
+  assert.equal(fromOwnPage(req({ "content-type": "application/x-www-form-urlencoded" })), false);
+  assert.equal(fromOwnPage(req({})), false, "没有 Content-Type 也不放行");
+
+  // 浏览器写的、页面脚本改不了的那一个
+  assert.equal(
+    fromOwnPage(req({ "content-type": "application/json", "sec-fetch-site": "cross-site" })),
+    false,
+    "浏览器已经说了这是跨站"
+  );
+  assert.equal(
+    fromOwnPage(req({ "content-type": "application/json", "sec-fetch-site": "same-origin" })),
+    true,
+    "本站页面照常放行"
+  );
+  // 没有 Sec-Fetch-Site 的不拦：curl、老浏览器、自托管的健康检查都在这一类，
+  // 那不是这条防线要解决的问题，交给限流
+  assert.equal(fromOwnPage(req({ "content-type": "application/json; charset=utf-8" })), true);
+});
+
+test("数字白名单：数给过、单位换了，同样是伪精确", async () => {
+  // 白名单只做集合成员判定，而事实包里恒有两个小整数是气温与湿度：
+  // tempC 的 0~12 段像小时数，humidity 恒在 0~100 像分钟/厘米。模型不必编新数字，
+  // 把我们给的数挪个槽位就够了——实测这三句原本全部放行、invented 为空、source 标 deepseek。
+  const { allowedUnitPairs, findUnitMismatch } = await import("@/lib/numguard");
+  const usage = { spraysLabel: "2–3 下", distance: "一臂", durationHint: "基本能陪你过完这一天的白天" };
+  const risks = ["建议只喷 1 下（颈侧）"];
+  const pairs = allowedUnitPairs(JSON.stringify({ 用法: usage, 风险提示: risks }));
+
+  // 区间要按端点展开，否则会把我们自己给的档位判成编造
+  assert.deepEqual([...pairs].sort(), ["1下", "2下", "3下"], "2–3 下要展开成 2 下与 3 下");
+
+  assert.deepEqual(findUnitMismatch("留香 6 小时左右。", pairs), ["6 小时"], "6 原本是气温");
+  assert.deepEqual(findUnitMismatch("扩散半径大约 40 厘米。", pairs), ["40 厘米"], "40 原本是湿度");
+  assert.deepEqual(findUnitMismatch("建议喷 6 下。", pairs), ["6 下"], "喷量档位我们只给了 1/2/3");
+
+  // 反向：自家措辞一律不许误伤（全目录 52500 条真实模板输出实测零拦截）
+  assert.deepEqual(findUnitMismatch("建议喷 2 下，喷在颈侧、手腕。", pairs), []);
+  assert.deepEqual(findUnitMismatch("今天这么热，建议只喷 1 下（颈侧）。", pairs), []);
+  assert.deepEqual(findUnitMismatch("今天北京晴、6℃，湿度 40。", pairs), [], "温度与湿度读数不带量词，不在管辖内");
+});
