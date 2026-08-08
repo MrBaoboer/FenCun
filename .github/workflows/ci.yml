@@ -23,7 +23,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          # 与 package.json 的 engines.node 同一个大版本。那边是 Vercel 实际用的那条
+          # （engines.node 覆盖项目面板设置），这里跟着它走，CI 与生产才是同一个运行时。
+          node-version: 24
           cache: npm
       - name: Install
         run: npm ci
@@ -52,7 +54,9 @@ jobs:
       # Scan the complete reachable history so force-pushes and root commits do not
       # depend on an event-derived `before^..after` range.
       - name: Gitleaks (full history)
-        uses: docker://ghcr.io/gitleaks/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 # v8.24.3
+        # Dependabot 的 github-actions 生态不跟进 `docker://` 引用——这个摘要在 v8.24.3
+        # 上停了半年没人推，是手动核对上游 release 后换的。改版本时记得一起改注释里的 tag。
+        uses: docker://ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
         env:
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: safe.directory

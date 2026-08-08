@@ -4,6 +4,10 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "氛寸 — 基于实时情境的个人用香决策 Agent",
+  "_engines注释": "运行时版本的唯一事实源。Vercel 明确规定 engines.node 覆盖项目面板里选的版本，写在这里就不必再去对一个仓库外、谁也审计不了的设置。选 24 的理由：Node 22 已于 2025-10-21 进入维护期，24 自 2025-10-28 起是 Active LTS。改这里要连同 .github/workflows/ci.yml 的 node-version 与 devDependencies 的 @types/node 一起改，三者必须同一个大版本。",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,7 +22,7 @@
   },
   "dependencies": {
     "minisearch": "^7.1.2",
-    "next": "16.2.12",
+    "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.4.3",
@@ -26,22 +30,14 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
-    "puppeteer-core": "^25.4.0",
+    "eslint-config-next": "16.3.0",
+    "puppeteer-core": "^25.5.0",
     "tailwindcss": "^4",
-    "tsx": "^4.23.1",
+    "tsx": "^4.23.11",
     "typescript": "^5"
-  },
-  "_overrides注释": {
-    "postcss": "长期项。next 把 postcss 钉在 8.4.31，而 @tailwindcss/postcss 要 ^8.5.x；两者不抬到同一条线上装不起来。",
-    "sharp": "临时项，为消 Dependabot 高危告警而抬。它把版本顶出了 next 声明的 optionalDependencies ^0.34.5，而 sharp 是 0.x、0.34→0.35 按 semver 即破坏性变更——等于替 next 宣称一个它没验证过的组合可用。实际风险接近零：sharp 只在 next/image 的图片优化路径上被 require，本仓库零引用，运行期永不加载。next 把 optionalDependencies 提到 ^0.35 之后即可删除本条。"
-  },
-  "overrides": {
-    "postcss": "^8.5.18",
-    "sharp": "^0.35.3"
   }
 }
