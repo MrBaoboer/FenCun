@@ -20,8 +20,12 @@ updates:
       # 不是我们自己能选的。每次想解禁，去核这两组声明——达标了就手动升，别等 Dependabot：
       #   eslint 10  ← eslint-plugin-react 7.37.5 / eslint-plugin-import 2.32.0 /
       #                eslint-plugin-jsx-a11y 6.10.2 的 peer 都封顶在 9（react 那条是 ^9.7）
-      #   typescript ← typescript-eslint 8.66.0 的 peer 是 >=4.8.4 <6.1.0，而 npm 上的
-      #                latest 已经是 7.x（原生编译器），中间的 6.x 还只有 beta
+      #   typescript 7 ← typescript-eslint 8.66.0 的 peer 是 >=4.8.4 <6.1.0；7.x 是原生编译器，
+      #                typescript-eslint 在模块加载时就 throw，lint 连启动都做不到。
+      #                现在停在 6.0.3——它落在那条 peer 范围内，四项验证全过。
+      #                ⚠️ 别信 npm 的 dist-tag：typescript 的 `beta` 至今指向 6.0.0-beta，
+      #                看上去像「6.x 还没正式版」，而 6.0.2 / 6.0.3 早已是正式发布。判断可用
+      #                版本要看 `npm view typescript versions`，不是看标签。
       # minor / patch 仍照常跟进。
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
