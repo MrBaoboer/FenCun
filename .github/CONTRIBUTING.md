@@ -31,6 +31,8 @@
 
 ## 本地开发
 
+需要 **Node 24**（Active LTS）。版本的唯一事实源是 `package.json` 的 `engines.node`，CI 与 Vercel 都以它为准；用别的大版本装依赖会看到一条 `EBADENGINE` 警告。
+
 ```bash
 git clone https://github.com/MrBaoboer/FenCun.git
 cd FenCun

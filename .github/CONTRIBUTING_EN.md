@@ -31,6 +31,8 @@ Every contribution must uphold these:
 
 ## Local development
 
+Requires **Node 24** (Active LTS). The single source of truth is `engines.node` in `package.json` — CI and Vercel both follow it; installing on another major prints an `EBADENGINE` warning.
+
 ```bash
 git clone https://github.com/MrBaoboer/FenCun.git
 cd FenCun

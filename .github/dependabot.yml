@@ -30,7 +30,8 @@ updates:
       # @types/node 跟随 Node 运行时大版本——现在是 24（见 package.json 的 engines.node，
       # 它同时决定 CI 与 Vercel）。不跳到领先运行时的 26：那会拿到 Node 24 上并不存在的
       # API 类型，而 Node 26 要到 2026-10-28 才是 LTS。→ 忽略其 major，minor / patch 仍在 24.x 内跟进。
-      # 运行时本身升级时，这三处要一起动：engines.node、ci.yml 的 node-version、这条 ignore。
+      # 运行时本身升级时，这三处要一起动：engines.node、ci.yml 的 node-version、这条 ignore；
+      # 再加三处面向人的复述：README 的「本地运行」与两份 CONTRIBUTING 的「本地开发」。
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
   # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新

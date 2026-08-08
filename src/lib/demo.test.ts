@@ -6,6 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildDemoState, demoBottlesReady, DEMO_CITY } from "./demo";
 import { recommend, buildPick, aggregateBias } from "./recommend";
+import { pickNudges } from "./nudges";
+import { seasonFromDateTemp, feelFromWeather, daypartFromHour } from "./season";
 import { dateKey } from "./journal";
 import type { Perfume, Context } from "./types";
 
@@ -159,4 +161,81 @@ test("演示香柜：给定 now 必得同一份状态（纯函数，可用于截
   const a = JSON.stringify(buildDemoState(catalog, NOW));
   const b = JSON.stringify(buildDemoState(catalog, NOW));
   assert.equal(a, b);
+});
+
+// ——— 四季不变式 ———
+// 上面那批断言全部钉在 NOW（7 月 27 日）这一个夏日上，于是一个只在秋冬发作的缺陷
+// 活了整整半年：实测 7 个场合 × 365 天，9 月 1 日到次年 2 月 28 日共 181 天两张
+// 发现型钩子一张都弹不出——蓝风铃反季进不了吃灰筛子、烟草香草当季不是 avoid。
+// 单季用例看不见换季才反转的前提，所以下面这几条一律跑满四季。
+const SEASON_DAYS: { label: string; iso: string; tempC: number; humidity: number }[] = [
+  { label: "春", iso: "2026-04-15T14:30:00", tempC: 15, humidity: 43 },
+  { label: "夏", iso: "2026-07-27T14:30:00", tempC: 27, humidity: 75 },
+  { label: "秋", iso: "2026-10-15T14:30:00", tempC: 13, humidity: 63 },
+  { label: "冬", iso: "2027-01-15T14:30:00", tempC: -3, humidity: 44 },
+];
+
+/** 按真实链路派生 Context——必填字段一个都不能少，否则会算出并不存在的缺陷 */
+function ctxFor(at: number, tempC: number, humidity: number): Context {
+  const dt = new Date(at);
+  return {
+    tempC, humidity, windSpeed: 0, weatherText: "晴", city: DEMO_CITY,
+    feel: feelFromWeather(tempC, humidity),
+    daypart: daypartFromHour(dt.getHours()),
+    season: seasonFromDateTemp(dt, tempC),
+    occasion: "commute", // 首访默认场合：这就是初次到访者实际看到的那一屏
+  };
+}
+
+test("演示香柜：四季都弹得出两张发现型钩子（产品自称的价值重心，不许只在夏天成立）", () => {
+  for (const s of SEASON_DAYS) {
+    const now = new Date(s.iso).getTime();
+    const d = buildDemoState(catalog, now)!;
+    const byId = new Map(catalog.map((p) => [p.id, p]));
+    const lib = d.userPerfumes.map((u) => byId.get(u.perfumeId)!);
+    const bias = aggregateBias(d.feedbacks);
+    const ctx = ctxFor(now, s.tempC, s.humidity);
+    const rec = recommend(lib, ctx, bias, {
+      daySeed: Math.floor(now / 86400000),
+      lastWornAt: new Map(
+        d.userPerfumes.filter((u) => u.lastWornAt != null).map((u) => [u.perfumeId, u.lastWornAt!])
+      ),
+      now,
+    });
+    const ns = pickNudges({ lib, userPerfumes: d.userPerfumes, feedbacks: d.feedbacks, ctx, rec, now });
+    assert.ok(ns.some((n) => n.kind === "dusty"), `${s.label}：吃灰提醒哑火`);
+    const w = ns.find((n) => n.kind === "weather");
+    assert.ok(w, `${s.label}：天气突变预警哑火`);
+    assert.equal(w!.kind === "weather" && w!.basis, "habit", `${s.label}：预警退回了冷启动兜底形态`);
+  }
+});
+
+test("演示香柜：四季的反馈都落在它真的穿过的那天（换季换脚本时最容易破的一条）", () => {
+  for (const s of SEASON_DAYS) {
+    const now = new Date(s.iso).getTime();
+    const d = buildDemoState(catalog, now)!;
+    const byDay = new Map(d.wearLog.map((e) => [`${e.perfumeId}@${e.d}`, e]));
+    for (const f of d.feedbacks) {
+      const w = byDay.get(`${f.perfumeId}@${dateKey(f.at)}`);
+      assert.ok(w, `${s.label}：反馈没有对应的穿戴记录（${f.perfumeId}）`);
+      assert.equal(f.context.tempC, w!.tempC, `${s.label}：同一天的温度对不上`);
+    }
+  }
+});
+
+test("演示香柜：四季的最常喷瓶都唯一，且反馈足以让壁垒在画像页现形", () => {
+  for (const s of SEASON_DAYS) {
+    const now = new Date(s.iso).getTime();
+    const d = buildDemoState(catalog, now)!;
+    const counts = d.userPerfumes.map((u) => u.wornCount ?? 0).sort((a, b) => b - a);
+    assert.ok(counts[0] > counts[1], `${s.label}：最常喷的瓶不唯一，预警卡归因会不稳定`);
+    assert.ok(counts[0] > 1, `${s.label}：wornCount 未超过 maxWorn 初值，预警会退回冷启动`);
+    // 画像页「氛寸学到的偏好」门槛是 |perceivedStrength| ≥ 0.4：
+    // 同一瓶必须凑够两次「太冲了」，单次会被时间衰减吃到够不着。
+    const bias = aggregateBias(d.feedbacks);
+    assert.ok(
+      [...bias.values()].some((b) => Math.abs(b.perceivedStrength) >= 0.4),
+      `${s.label}：没有一瓶跨过画像页门槛，壁垒在演示里是隐形的`
+    );
+  }
 });
