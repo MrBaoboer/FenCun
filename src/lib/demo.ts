@@ -23,61 +23,134 @@ export const DEMO_CITY = "北京";
 /**
  * 六瓶的取法：覆盖清爽柑橘 / 果香木质 / 清新辛香 / 甜厚东方 / 粉感花香 五种气质，
  * 让「今日之选 → 备选对比 → 换一瓶」这条主路径在任何季节都有真实的取舍可看。
- * wornCount 是跨年度的累计穿戴次数（不由 wearLog 推导）——烟草香草最高，于是它是
- * 「你常喷的那瓶」，天气突变预警在热天走 basis='habit' 主线而非冷启动兜底形态。
+ * 六瓶本身与季节无关；随季节换的是它们各自扮演的角色（见下方 DemoScript）。
  */
-const DEMO_BOTTLES: { name: string; ownedDays: number; wornCount: number }[] = [
-  { name: "Tobacco Vanille", ownedDays: 420, wornCount: 9 }, // 汤姆·福特 · 甜厚东方，冬季主力
-  { name: "Light Blue", ownedDays: 260, wornCount: 6 }, // 杜嘉班纳 · 柑橘清新，夏季通勤
-  { name: "Aventus", ownedDays: 190, wornCount: 5 }, // 信仰 · 果香木质，日常百搭
-  { name: "Sauvage", ownedDays: 150, wornCount: 4 }, // 迪奥 · 清新辛香，正式商务
-  { name: "Black Opium", ownedDays: 95, wornCount: 3 }, // 圣罗兰 · 咖啡香草，夜场
-  { name: "Wild Bluebell", ownedDays: 330, wornCount: 1 }, // 祖·玛珑 · 粉感花香，久未开封 → 吃灰提醒
+const DEMO_BOTTLES: { name: string; ownedDays: number }[] = [
+  { name: "Tobacco Vanille", ownedDays: 420 }, // 汤姆·福特 · 甜厚东方，冬季主力
+  { name: "Light Blue", ownedDays: 260 }, // 杜嘉班纳 · 柑橘清新，夏季通勤
+  { name: "Aventus", ownedDays: 190 }, // 信仰 · 果香木质，日常百搭
+  { name: "Sauvage", ownedDays: 150 }, // 迪奥 · 清新辛香，正式商务
+  { name: "Black Opium", ownedDays: 95 }, // 圣罗兰 · 咖啡香草，夜场
+  { name: "Wild Bluebell", ownedDays: 330 }, // 祖·玛珑 · 粉感花香
 ];
 
 /**
- * 穿香排期（距今天数 → 哪一瓶）。它同时决定三件事：香历色点、各瓶的 lastWornAt、以及谁在吃灰。
- * 蓝风铃停在 34 天前是刻意的：越过 21 天的吃灰线，让「翻出来」这张卡在演示里必然出现。
- */
-const WEAR_SCHEDULE: { daysAgo: number; name: string; occasion: Occasion; note?: string }[] = [
-  { daysAgo: 2, name: "Light Blue", occasion: "commute" },
-  { daysAgo: 4, name: "Aventus", occasion: "work" },
-  { daysAgo: 5, name: "Black Opium", occasion: "date" },
-  { daysAgo: 6, name: "Light Blue", occasion: "casual" },
-  { daysAgo: 8, name: "Sauvage", occasion: "formal", note: "见客户，收着喷的，散场时还在。" },
-  { daysAgo: 10, name: "Aventus", occasion: "work" },
-  { daysAgo: 12, name: "Light Blue", occasion: "commute" },
-  { daysAgo: 15, name: "Tobacco Vanille", occasion: "date" },
-  { daysAgo: 17, name: "Sauvage", occasion: "work" },
-  { daysAgo: 19, name: "Black Opium", occasion: "social" },
-  { daysAgo: 22, name: "Aventus", occasion: "casual" },
-  { daysAgo: 25, name: "Tobacco Vanille", occasion: "home" },
-  { daysAgo: 28, name: "Black Opium", occasion: "date" },
-  { daysAgo: 34, name: "Wild Bluebell", occasion: "commute", note: "梅雨初歇翻出来的，同事问了是什么香。" },
-];
-
-/**
- * 反馈序列——产品唯一的真壁垒，演示态必须让它可见地在起作用：
- * 黑鸦片**两次**「太冲了」会让它下次的喷量与扩散各自收一档（原因见下方那段注释：
- * 单次会被时间衰减吃到够不着门槛）。
+ * 演示脚本 —— 一份排期决定演示态的全部叙事。
  *
- * ⚠️ 这段原本写着「烟草香草三次『刚好』会沉淀成成功配置」，两处与代码不符：
- * 它只有两条 perfect，而且这张表没有 sprays 字段——而 aggregateBias 沉淀成功配置的
- * 唯一入口就挂在 `f.sprays` 上，所以演示态**从来没有**产出过成功配置。
- * 补 sprays 属于改动演示黄金集（会连带 README 截图），留到单独一轮；
- * 但注释先得说真话，否则下一个人会照着它去找一个不存在的东西。
+ * **为什么要按季节分成两份。** 两张发现型钩子各有一条硬前提：
+ *   · 吃灰卡要求「搁置超 21 天的那瓶今天判 good」（nudges.ts 的 verdict === "good" 筛子）；
+ *   · 预警卡要求「wornCount 最高的那瓶今天判 avoid」（hp.verdict !== "avoid" 即提前返回）。
+ * 单一排期把这两个角色钉死在蓝风铃（春夏花香）与烟草香草（冬香）身上，于是一入秋两条
+ * 前提同时反转：蓝风铃反季进不了吃灰筛子，烟草香草当季只是 caution 不是 avoid。
+ * 实测 7 个场合 × 365 天：9 月 1 日到次年 2 月 28 日共 181 天，两张卡一张都弹不出——
+ * 而 README 那五张图冻结在 7 月 7 日，门面展示的正好是这半年看不到的东西。
+ * 引擎判得没错，错在排期让前提必然落空；所以修在数据侧，不动引擎。
+ *
+ * 换季换的是角色不是瓶子：**你习惯性喷的那瓶今天不合适、你很久没碰的那瓶今天正好**——
+ * 这个叙事在两季都成立，只是主角对调（夏天烟草香草常喷 / 蓝风铃吃灰，
+ * 秋冬浅蓝常喷 / 黑鸦片吃灰）。习惯难改，本来就是产品要解决的那件事。
+ *
+ * wornCount 是跨年度的累计穿戴次数（不由 wearLog 推导），最高的那瓶即「你常喷的」，
+ * 让预警卡走 basis='habit' 主线而非冷启动兜底形态。
  */
-const FEEDBACK_SCHEDULE: { daysAgo: number; name: string; occasion: Occasion; rating: Feedback["rating"] }[] = [
-  { daysAgo: 15, name: "Tobacco Vanille", occasion: "date", rating: "perfect" },
-  { daysAgo: 25, name: "Tobacco Vanille", occasion: "home", rating: "perfect" },
-  // 同一瓶两次「太冲了」——这是产品唯一的真壁垒在演示里唯一看得见的形态：
-  // 画像页会因此写出「有 1 瓶你反馈过偏冲」，下次推它时喷量与扩散各自收一档。
-  // 单独一次会被时间衰减吃到 0.374，够不着画像页 0.4 的门槛，于是壁垒在演示里是隐形的。
-  { daysAgo: 19, name: "Black Opium", occasion: "social", rating: "too_strong" },
-  { daysAgo: 5, name: "Black Opium", occasion: "date", rating: "too_strong" },
-  { daysAgo: 8, name: "Sauvage", occasion: "formal", rating: "perfect" },
-  { daysAgo: 2, name: "Light Blue", occasion: "commute", rating: "perfect" },
-];
+interface DemoScript {
+  /** 英文名 → 累计穿戴次数。最高者唯一，否则预警卡的归因不稳定。 */
+  wornCount: Record<string, number>;
+  /** 穿香排期（距今天数 → 哪一瓶）：决定香历色点、各瓶 lastWornAt、以及谁在吃灰。 */
+  wear: { daysAgo: number; name: string; occasion: Occasion; note?: string }[];
+  /**
+   * 反馈序列——产品唯一的真壁垒，演示态必须让它可见地在起作用。
+   * 每条都必须在 wear 里有同瓶同日的对应条目，否则会出现「没穿却评价了」
+   * （demo.test.ts 有断言守着）。同一瓶要凑够**两次**「太冲了」：
+   * 单次会被时间衰减吃到 0.374，够不着画像页 0.4 的门槛，壁垒就成了隐形的。
+   *
+   * ⚠️ 这张表没有 sprays 字段——而 aggregateBias 沉淀「成功配置」的唯一入口就挂在
+   * `f.sprays` 上，所以演示态**从来没有**产出过成功配置。补它属于另一件事
+   * （会改动画像页、需重拍 profile 截图），按用户决定留到单独一轮；
+   * 但注释先得说真话，否则下一个人会照着它去找一个不存在的东西。
+   */
+  feedback: { daysAgo: number; name: string; occasion: Occasion; rating: Feedback["rating"] }[];
+}
+
+/**
+ * 春夏脚本。**与冻结在 2026-07-07 的那五张 README 截图逐字对应**——
+ * 动它之前先想清楚要不要重拍（scripts/shot.mjs 的 SHOTS 写死了那个日期）。
+ * 蓝风铃停在 34 天前是刻意的：越过 21 天的吃灰线，让「翻出来」这张卡必然出现。
+ */
+const WARM_SCRIPT: DemoScript = {
+  wornCount: { "Tobacco Vanille": 9, "Light Blue": 6, Aventus: 5, Sauvage: 4, "Black Opium": 3, "Wild Bluebell": 1 },
+  wear: [
+    { daysAgo: 2, name: "Light Blue", occasion: "commute" },
+    { daysAgo: 4, name: "Aventus", occasion: "work" },
+    { daysAgo: 5, name: "Black Opium", occasion: "date" },
+    { daysAgo: 6, name: "Light Blue", occasion: "casual" },
+    { daysAgo: 8, name: "Sauvage", occasion: "formal", note: "见客户，收着喷的，散场时还在。" },
+    { daysAgo: 10, name: "Aventus", occasion: "work" },
+    { daysAgo: 12, name: "Light Blue", occasion: "commute" },
+    { daysAgo: 15, name: "Tobacco Vanille", occasion: "date" },
+    { daysAgo: 17, name: "Sauvage", occasion: "work" },
+    { daysAgo: 19, name: "Black Opium", occasion: "social" },
+    { daysAgo: 22, name: "Aventus", occasion: "casual" },
+    { daysAgo: 25, name: "Tobacco Vanille", occasion: "home" },
+    { daysAgo: 28, name: "Black Opium", occasion: "date" },
+    { daysAgo: 34, name: "Wild Bluebell", occasion: "commute", note: "梅雨初歇翻出来的，同事问了是什么香。" },
+  ],
+  feedback: [
+    { daysAgo: 15, name: "Tobacco Vanille", occasion: "date", rating: "perfect" },
+    { daysAgo: 25, name: "Tobacco Vanille", occasion: "home", rating: "perfect" },
+    // 黑鸦片两次「太冲了」：画像页会因此写出「有 1 瓶你反馈过偏冲」，下次推它时喷量收一档。
+    { daysAgo: 19, name: "Black Opium", occasion: "social", rating: "too_strong" },
+    { daysAgo: 5, name: "Black Opium", occasion: "date", rating: "too_strong" },
+    { daysAgo: 8, name: "Sauvage", occasion: "formal", rating: "perfect" },
+    { daysAgo: 2, name: "Light Blue", occasion: "commute", rating: "perfect" },
+  ],
+};
+
+/**
+ * 秋冬脚本。角色对调：浅蓝成了「夏天留下来的习惯」（当季判 avoid → 预警卡），
+ * 黑鸦片停在 24 天前越过吃灰线且当季判 good（→ 吃灰卡）。
+ * 蓝风铃仍搁置 34 天，但反季判 avoid，会被吃灰筛子自然滤掉——这正是它该有的行为。
+ */
+const COOL_SCRIPT: DemoScript = {
+  wornCount: { "Light Blue": 9, "Tobacco Vanille": 6, Aventus: 5, Sauvage: 4, "Black Opium": 3, "Wild Bluebell": 1 },
+  wear: [
+    { daysAgo: 2, name: "Light Blue", occasion: "commute" },
+    { daysAgo: 3, name: "Tobacco Vanille", occasion: "date" },
+    { daysAgo: 5, name: "Aventus", occasion: "work" },
+    { daysAgo: 6, name: "Light Blue", occasion: "casual" },
+    { daysAgo: 8, name: "Sauvage", occasion: "formal", note: "见客户，收着喷的，散场时还在。" },
+    { daysAgo: 10, name: "Light Blue", occasion: "commute" },
+    { daysAgo: 12, name: "Tobacco Vanille", occasion: "home" },
+    { daysAgo: 14, name: "Aventus", occasion: "casual" },
+    { daysAgo: 16, name: "Light Blue", occasion: "work" },
+    { daysAgo: 17, name: "Sauvage", occasion: "work" },
+    { daysAgo: 20, name: "Light Blue", occasion: "commute" },
+    { daysAgo: 24, name: "Black Opium", occasion: "date" },
+    { daysAgo: 28, name: "Black Opium", occasion: "social" },
+    { daysAgo: 34, name: "Wild Bluebell", occasion: "commute", note: "天凉前最后一次用它，同事问了是什么香。" },
+  ],
+  feedback: [
+    // 烟草香草两次「太冲了」：当季主力最容易喷过头，也是壁垒在秋冬唯一看得见的形态。
+    { daysAgo: 3, name: "Tobacco Vanille", occasion: "date", rating: "too_strong" },
+    { daysAgo: 12, name: "Tobacco Vanille", occasion: "home", rating: "too_strong" },
+    { daysAgo: 24, name: "Black Opium", occasion: "date", rating: "perfect" },
+    { daysAgo: 8, name: "Sauvage", occasion: "formal", rating: "perfect" },
+    { daysAgo: 2, name: "Light Blue", occasion: "commute", rating: "perfect" },
+    { daysAgo: 14, name: "Aventus", occasion: "casual", rating: "perfect" },
+  ],
+};
+
+/**
+ * 选哪份脚本只看**日期**，不看气温——演示状态在 AppProvider / 画像页都由
+ * `buildDemoState(catalog, Date.now())` 生成，那两处都还没有天气可用。
+ * 于是 9 月里 ≥28℃ 的日子引擎会按 summer 判、而这里给的是秋冬脚本：
+ * 此时预警卡仍哑（浅蓝在高温下判 good），但吃灰卡会落到蓝风铃身上照常弹出——
+ * 比单一脚本下的两张全哑严格更好，这个残差是可接受的。
+ */
+function scriptFor(now: number): DemoScript {
+  const season = seasonFromDateTemp(new Date(now), null);
+  return season === "autumn" || season === "winter" ? COOL_SCRIPT : WARM_SCRIPT;
+}
 
 /**
  * 香历条目要写进当天的温度与天气。演示不联网取历史天气（那既慢又要额外配额），
@@ -141,10 +214,11 @@ export function buildDemoState(catalog: Perfume[] | null, now: number): DemoStat
   const byName = new Map(catalog.map((p) => [p.name, p]));
   const bottles = DEMO_BOTTLES.map((b) => ({ ...b, p: byName.get(b.name) }));
   if (bottles.some((b) => !b.p)) return null;
+  const script = scriptFor(now);
 
   // 各瓶最近一次穿戴 = 排期里距今最近的那一条
   const lastWorn = new Map<string, number>();
-  for (const w of WEAR_SCHEDULE) {
+  for (const w of script.wear) {
     const prev = lastWorn.get(w.name);
     if (prev == null || w.daysAgo < prev) lastWorn.set(w.name, w.daysAgo);
   }
@@ -155,11 +229,11 @@ export function buildDemoState(catalog: Perfume[] | null, now: number): DemoStat
       perfumeId: b.p!.id,
       addedAt: now - b.ownedDays * DAY_MS,
       ...(d != null ? { lastWornAt: now - d * DAY_MS } : {}),
-      wornCount: b.wornCount,
+      wornCount: script.wornCount[b.name],
     };
   });
 
-  const wearLog: WearEntry[] = WEAR_SCHEDULE.map((w) => {
+  const wearLog: WearEntry[] = script.wear.map((w) => {
     const p = byName.get(w.name)!;
     const at = now - w.daysAgo * DAY_MS;
     const s = sampleFor(at);
@@ -176,7 +250,7 @@ export function buildDemoState(catalog: Perfume[] | null, now: number): DemoStat
     };
   }).sort((a, b) => a.d.localeCompare(b.d));
 
-  const feedbacks: Feedback[] = FEEDBACK_SCHEDULE.map((f) => {
+  const feedbacks: Feedback[] = script.feedback.map((f) => {
     const p = byName.get(f.name)!;
     const at = now - f.daysAgo * DAY_MS;
     const s = sampleFor(at);

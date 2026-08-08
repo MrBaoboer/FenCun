@@ -158,6 +158,8 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 
 ## 本地运行
 
+需要 Node 24（版本的唯一事实源是 `package.json` 的 `engines.node`）。
+
 ```bash
 npm install
 cp .env.example .env.local   # 各项 key 的用途与申请入口见文件内注释（.env.local 已被 git 忽略）

@@ -16,15 +16,22 @@ updates:
         patterns:
           ["eslint*", "typescript", "tailwindcss", "@tailwindcss/*", "tsx", "puppeteer-core"]
     ignore:
-      # eslint 10 / typescript 6 的 major 由工具链（eslint-config-next）兼容性决定，
-      # 现阶段 eslint 10 会让 eslint-config-next 内置的 eslint-plugin-react 崩掉 → 忽略其 major，
-      # 待生态跟进后手动升级；minor / patch 仍照常跟进。
+      # eslint / typescript 的 major 由 eslint-config-next 那串内置插件的 peer 范围决定，
+      # 不是我们自己能选的。每次想解禁，去核这两组声明——达标了就手动升，别等 Dependabot：
+      #   eslint 10  ← eslint-plugin-react 7.37.5 / eslint-plugin-import 2.32.0 /
+      #                eslint-plugin-jsx-a11y 6.10.2 的 peer 都封顶在 9（react 那条是 ^9.7）
+      #   typescript ← typescript-eslint 8.66.0 的 peer 是 >=4.8.4 <6.1.0，而 npm 上的
+      #                latest 已经是 7.x（原生编译器），中间的 6.x 还只有 beta
+      # minor / patch 仍照常跟进。
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # @types/node 跟随 Node 运行时大版本（CI 与 Vercel 均为 Node 22），不跳到领先运行时的 26
-      # （否则会拿到 Node 22 上并不存在的 API 类型）→ 忽略其 major，minor / patch 仍在 22.x 内跟进。
+      # @types/node 跟随 Node 运行时大版本——现在是 24（见 package.json 的 engines.node，
+      # 它同时决定 CI 与 Vercel）。不跳到领先运行时的 26：那会拿到 Node 24 上并不存在的
+      # API 类型，而 Node 26 要到 2026-10-28 才是 LTS。→ 忽略其 major，minor / patch 仍在 24.x 内跟进。
+      # 运行时本身升级时，这三处要一起动：engines.node、ci.yml 的 node-version、这条 ignore；
+      # 再加三处面向人的复述：README 的「本地运行」与两份 CONTRIBUTING 的「本地开发」。
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
   # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新
