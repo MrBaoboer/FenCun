@@ -138,6 +138,32 @@ test("降级模板：无香场合不劝「你要是就想用它」——那句�
   assert.equal(t, "医院、诊所这类场合，很多人对气味格外敏感且无法回避。");
 });
 
+test("无香场合不许劝用：这条此前只有模板守着，LLM 那条路上是空的", async () => {
+  // SYSTEM 铁律 6 给 avoid 的话术是**无条件**的「话锋一转，你要是就想用它…」，
+  // 而 placement 为空时结论是「今天不用香」。这个洞此前看不见，因为 LLM 那条路根本没通；
+  // 一通就现形——预览实测两次，两次都写出了「你要是今天就想用它，那就别喷了」。
+  const { PUSH_TO_USE_RE } = await import("./explain/route");
+  for (const s of [
+    "你这次要是就想用它，那就别喷了，0 下的意思就是不带出门。",
+    "你要是今天就想用它，那就别喷了，带在身边闻闻就好。",
+    "要是想用，可以只在衣物内侧点一点。",
+    "非要用的话，离人远些。",
+  ]) {
+    assert.match(s, PUSH_TO_USE_RE, `劝用没被拦住：${s}`);
+  }
+  // 模板自己在无香场合下必须不触发它——否则回退之后仍然劝用，等于没修
+  const t = template(
+    mkInput({
+      verdict: "avoid",
+      usage: { spraysLabel: "0 下", placement: [], distance: "—", durationHint: "—" },
+      risks: ["医院、诊所这类场合，很多人对气味格外敏感且无法回避。"],
+    })
+  );
+  assert.ok(!PUSH_TO_USE_RE.test(t), `模板自己劝用了：${t}`);
+  // 说清「为什么不合适」本身不算劝用，别把该说的话也拦掉
+  assert.ok(!PUSH_TO_USE_RE.test("今天其实不太建议用这瓶，病房里很多人对气味敏感又躲不开。"));
+});
+
 test("降级模板：只复述给定事实，不得凭空生出数字——反伪精确在兜底路径上同样成立", () => {
   // 白名单口径与路由一致：允许的数字只能来自我们自己算出来的事实。
   const input = mkInput({ risks: ["甜和扩散都偏高，这类场合容易显得用力过猛。"] });
@@ -395,6 +421,42 @@ test("上游 200 却没给出能用的东西：要分得出是哪一种，且一
     message: { content: "今晚和客户吃饭，包间", reasoning_content: "今晚和客户吃饭" },
   });
   assert.ok(!echo.includes("客户"), `用户原话经模型转写后漏进了日志：${echo}`);
+});
+
+test("数字白名单：同一个量的中文写法不算编造——防线不许吃掉我们自己给它的话", async () => {
+  // 2026-08-08 线上实测的第二道死门：事实里写半角「喷 2 下」，模型用自然中文复述成
+  // 「喷两下」，按字形逐字比对接不上 → 整段丢弃退模板（日志 guard at=invented_numbers
+  // detail="两下"）。拦下的是我们自己递给它的那个量。
+  const { findPseudoPreciseCN, cnIntToNumber } = await import("@/lib/numguard");
+
+  const facts2 = "喷 2 下，落在手腕；大半天";
+  assert.deepEqual(findPseudoPreciseCN("今天喷两下就够", facts2), [], "「两下」说的就是事实里的 2 下");
+  assert.deepEqual(findPseudoPreciseCN("今天喷一下就够", facts2), ["一下"], "我们说的是 2 下，1 下是它自己加的");
+
+  // 区间按端点展开，与 findUnitMismatch 同一套口径：给了 2–3 下，两下与三下都算我们说过
+  const facts23 = "喷 2–3 下；撑得住大半个白天";
+  assert.deepEqual(findPseudoPreciseCN("喷两下到三下都行", facts23), []);
+  assert.deepEqual(findPseudoPreciseCN("喷五下更稳", facts23), ["五下"], "5 下我们没给过");
+
+  // 红线一寸没松：折算只开给「纯中文整数 + 量词」。带「半」「点」的粒度比我们给出的
+  // 任何档位都细（我们从不说 2.5 下），即便整数部分在事实里也照拦。
+  const facts6h = "留香 6 小时上下；喷 2 下";
+  for (const s of ["大概能撑六个半小时", "差不多六点五小时", "大概能撑半小时", "两个半小时就淡了"]) {
+    assert.ok(findPseudoPreciseCN(s, facts6h).length > 0, `该拦没拦：${s}`);
+  }
+  // 事实里没给过的量词组合，中文写法照样拦——这是防线的主业，没有变
+  assert.deepEqual(findPseudoPreciseCN("扩散半径一米五", facts6h), ["一米"]);
+  assert.deepEqual(findPseudoPreciseCN("间隔三十秒再补", facts6h), ["三十秒"]);
+
+  // 折算本身：只认整数，认不出就返回 null 交回原判据（宁可多退一次模板）
+  const cases: [string, number | null][] = [
+    ["两", 2], ["一", 1], ["六", 6], ["十", 10], ["十五", 15],
+    ["二十", 20], ["二十五", 25], ["一百二十", 120], ["〇", 0],
+    ["半", null], ["六个半", null], ["几", null], ["", null], ["下", null],
+  ];
+  for (const [s, want] of cases) {
+    assert.equal(cnIntToNumber(s), want, `「${s}」折算错了`);
+  }
 });
 
 test("数字白名单：数给过、单位换了，同样是伪精确", async () => {
