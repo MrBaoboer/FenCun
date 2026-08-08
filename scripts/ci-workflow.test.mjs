@@ -37,9 +37,12 @@ test("CI blocks high-severity vulnerabilities in shipped dependencies", async ()
 test("每一条依赖豁免都必须写清为什么无解、什么条件下能删", async () => {
   // 门禁从 `--omit=dev`（整棵开发依赖树的匿名豁免）换成具名清单之后，
   // 真正要守的就变成了这件事：清单不许悄悄变长，也不许出现一条没写理由的豁免。
+  //
+  // 清单为空是正常状态（上游把公告修掉了，豁免按 until 条件删掉），此时门禁行为
+  // 与「无豁免的全树审计」等价，仍然在干活。要守的不是「至少有一条」，而是下面
+  // 这两件：有几条就每条都得写清理由与退出条件，且门禁始终是全树的。
   const src = await readFile(new URL("./audit-gate.mjs", import.meta.url), "utf8");
   const entries = [...src.matchAll(/id:\s*"(GHSA-[\w-]+)"/g)].map((m) => m[1]);
-  assert.ok(entries.length > 0, "豁免清单为空时应当直接删掉这套机制，而不是留一个空壳");
   for (const id of entries) {
     const block = src.slice(src.indexOf(`id: "${id}"`));
     const why = block.match(/why:\s*"([^"]+)"/)?.[1] ?? "";
@@ -57,8 +60,8 @@ test("新增的测试文件不许静默不跑：npm test 的清单必须覆盖�
   // 「引擎改动必须附回归测试」，而新贡献者建一个 src/lib/usage.test.ts 让它本地通过之后，
   // npm test 与 CI 都不会执行它——绿灯、零信号，是最难察觉的那种失败形态。
   //
-  // 这里不改成 glob：`node --test` 的 glob 展开在不同 Node 版本上行为不一（CI 跑的是 22，
-  // 本机是 24），把门禁的可靠性押在运行时语义上不划算。改成让清单漏一个就红。
+  // 这里不改成 glob：`node --test` 的 glob 展开在不同 Node 版本上行为不一，把门禁的
+  // 可靠性押在运行时语义上不划算。改成让清单漏一个就红。
   const { readdir } = await import("node:fs/promises");
   const root = new URL("../", import.meta.url);
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));

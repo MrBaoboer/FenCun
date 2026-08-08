@@ -13,7 +13,7 @@
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)
 ![DeepSeek](https://img.shields.io/badge/DeepSeek-语义层-6C5CE7)
 ![Deploy](https://img.shields.io/badge/Vercel-自动部署-000?logo=vercel&logoColor=white)
@@ -134,7 +134,7 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 
 | 层 | 选型 | 说明 |
 |---|---|---|
-| 框架 | **Next.js 16**（App Router）+ **React 19** + **TypeScript 5** | 一仓库承载前端与轻后端 |
+| 框架 | **Next.js 16**（App Router）+ **React 19** + **TypeScript 6** | 一仓库承载前端与轻后端 |
 | 后端 | **Route Handlers** | 代理和风/DeepSeek，保护 key + 缓存 + 限流 + 降级 |
 | 样式 | **Tailwind v4**（CSS-first `@theme` token，无 UI 库） | 昼夜双主题、自持字体 |
 | 决策 | **确定性规则引擎**（纯 TS） | 前端本地打分，可解释可单测 |
@@ -157,6 +157,8 @@ rank  =  score × 轮换新鲜度 F(d) × 换瓶隐式差评                ← 
 ---
 
 ## 本地运行
+
+需要 Node 24（版本的唯一事实源是 `package.json` 的 `engines.node`）。
 
 ```bash
 npm install
