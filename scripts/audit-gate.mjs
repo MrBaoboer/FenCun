@@ -18,17 +18,13 @@ import { execSync } from "node:child_process";
 /**
  * 具名豁免。每一条都必须写清：为什么无解、什么条件下可以删掉。
  * 加一条之前先问：是真的无解，还是只是升级麻烦？
+ *
+ * 现在是空的——这是门禁的正常状态，不是机制失效。上一条（brace-expansion 的
+ * GHSA-mh99-v99m-4gvg）当时判定「1.x 到 1.1.16 终结、无补丁版」，后来上游发了
+ * 1.1.18，条件达成即删。清单空着的时候门禁行为不变：全树扫描，任何 high/critical
+ * 一律红。
  */
-const ALLOW = [
-  {
-    id: "GHSA-mh99-v99m-4gvg",
-    package: "brace-expansion",
-    why: "仅出现在开发链路（eslint 插件 → minimatch@3 → brace-expansion@1）。"
-      + "1.x 到 1.1.16 终结、无补丁版；全局 override 到 5.x 会让 eslint 起不来（5.x 改成命名导出，"
-      + "minimatch@3 的 require 拿到对象）；升 eslint@10 又会打断 eslint-config-next 内置的 eslint-plugin-react。",
-    until: "上游 eslint-plugin-* 迁到新的 minimatch 之后即可删除本条。",
-  },
-];
+const ALLOW = [];
 
 const allowIds = new Set(ALLOW.map((a) => a.id));
 const BLOCKING = new Set(["high", "critical"]);
@@ -86,4 +82,8 @@ if (unexpected.length > 0) {
   process.exit(1);
 }
 
-console.log(`\n依赖审计通过：全树扫描，${findings.length} 条 high/critical 全部具名豁免。`);
+console.log(
+  findings.length === 0
+    ? "\n依赖审计通过：全树扫描，无 high/critical 公告。"
+    : `\n依赖审计通过：全树扫描，${findings.length} 条 high/critical 全部具名豁免。`,
+);
