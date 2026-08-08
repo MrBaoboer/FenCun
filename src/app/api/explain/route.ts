@@ -237,7 +237,16 @@ export async function POST(req: NextRequest) {
           { role: "user", content: userMsg },
         ],
         temperature: 0.7,
-        max_tokens: 320,
+        // ⚠️ 关掉思考模式。deepseek-v4-flash 默认**开着**思考、且 reasoning_effort 默认 high，
+        // 而推理 token 计入 max_tokens——2026-08-08 实测线上每一次都是
+        // `finish=length content=0 reasoning=1212`：推理还没写完就撞上限，正文一个字没轮到，
+        // HTTP 仍然 200。这是「DeepSeek 一次都没打通」的主因，且它在响应体上与「没配 key」同形。
+        // 这里的任务是把规则引擎已经算好的事实说成人话，不需要推理；关掉同时省掉 3~4 秒延迟。
+        thinking: { type: "disabled" },
+        // 上限从 320 抬到 1024 不是为了让它多写（提示词仍然要求 2~4 句，实际正文约百来 token），
+        // 而是万一上面那个参数被中间层吃掉、思考仍然开着，也还留得下正文的余量。
+        // 思考关闭时未用的额度不计费，这层保险是免费的。
+        max_tokens: 1024,
         stream: false,
       }),
       signal: AbortSignal.timeout(15000),

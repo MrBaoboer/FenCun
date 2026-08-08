@@ -397,6 +397,42 @@ test("上游 200 却没给出能用的东西：要分得出是哪一种，且一
   assert.ok(!echo.includes("客户"), `用户原话经模型转写后漏进了日志：${echo}`);
 });
 
+test("数字白名单：同一个量的中文写法不算编造——防线不许吃掉我们自己给它的话", async () => {
+  // 2026-08-08 线上实测的第二道死门：事实里写半角「喷 2 下」，模型用自然中文复述成
+  // 「喷两下」，按字形逐字比对接不上 → 整段丢弃退模板（日志 guard at=invented_numbers
+  // detail="两下"）。拦下的是我们自己递给它的那个量。
+  const { findPseudoPreciseCN, cnIntToNumber } = await import("@/lib/numguard");
+
+  const facts2 = "喷 2 下，落在手腕；大半天";
+  assert.deepEqual(findPseudoPreciseCN("今天喷两下就够", facts2), [], "「两下」说的就是事实里的 2 下");
+  assert.deepEqual(findPseudoPreciseCN("今天喷一下就够", facts2), ["一下"], "我们说的是 2 下，1 下是它自己加的");
+
+  // 区间按端点展开，与 findUnitMismatch 同一套口径：给了 2–3 下，两下与三下都算我们说过
+  const facts23 = "喷 2–3 下；撑得住大半个白天";
+  assert.deepEqual(findPseudoPreciseCN("喷两下到三下都行", facts23), []);
+  assert.deepEqual(findPseudoPreciseCN("喷五下更稳", facts23), ["五下"], "5 下我们没给过");
+
+  // 红线一寸没松：折算只开给「纯中文整数 + 量词」。带「半」「点」的粒度比我们给出的
+  // 任何档位都细（我们从不说 2.5 下），即便整数部分在事实里也照拦。
+  const facts6h = "留香 6 小时上下；喷 2 下";
+  for (const s of ["大概能撑六个半小时", "差不多六点五小时", "大概能撑半小时", "两个半小时就淡了"]) {
+    assert.ok(findPseudoPreciseCN(s, facts6h).length > 0, `该拦没拦：${s}`);
+  }
+  // 事实里没给过的量词组合，中文写法照样拦——这是防线的主业，没有变
+  assert.deepEqual(findPseudoPreciseCN("扩散半径一米五", facts6h), ["一米"]);
+  assert.deepEqual(findPseudoPreciseCN("间隔三十秒再补", facts6h), ["三十秒"]);
+
+  // 折算本身：只认整数，认不出就返回 null 交回原判据（宁可多退一次模板）
+  const cases: [string, number | null][] = [
+    ["两", 2], ["一", 1], ["六", 6], ["十", 10], ["十五", 15],
+    ["二十", 20], ["二十五", 25], ["一百二十", 120], ["〇", 0],
+    ["半", null], ["六个半", null], ["几", null], ["", null], ["下", null],
+  ];
+  for (const [s, want] of cases) {
+    assert.equal(cnIntToNumber(s), want, `「${s}」折算错了`);
+  }
+});
+
 test("数字白名单：数给过、单位换了，同样是伪精确", async () => {
   // 白名单只做集合成员判定，而事实包里恒有两个小整数是气温与湿度：
   // tempC 的 0~12 段像小时数，humidity 恒在 0~100 像分钟/厘米。模型不必编新数字，

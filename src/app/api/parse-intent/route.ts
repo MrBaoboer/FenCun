@@ -171,7 +171,11 @@ export async function POST(req: NextRequest) {
           { role: "user", content: text },
         ],
         temperature: 0.4,
-        max_tokens: 200,
+        // 与 explain 同因：思考默认开着且推理 token 计入 max_tokens，200 的额度被推理吃光，
+        // 实测每一次都是 `finish=length content=0 reasoning=381~436`——连一个 `{` 都没输出。
+        // 这条路是把一句话归到八个 occasion 之一并填几个受控字段，推理帮不上忙。
+        thinking: { type: "disabled" },
+        max_tokens: 512,
         response_format: { type: "json_object" },
         stream: false,
       }),
