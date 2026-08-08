@@ -42,12 +42,58 @@ export function extractDigits(s: string): Set<string> {
  *
  * 「大半」刻意排除在外（负向环视）：「大半天」「大半个白天」是我们自己的模糊措辞，
  * 本来就不构成伪精确，把它拦下只会让防线静默地把自家的话吃掉。
+ *
+ * ⚠️ 第三类漏网的方向是**反的**——它不是放行了伪精确，而是拦下了我们自己的话。
+ * 「逐字出现在事实里就放行」这条判据，只认字形不认数值：事实里写的是半角
+ * 「喷 2 下」，模型用自然中文复述成「喷两下」，逐字比对接不上，整段丢弃退模板。
+ * 2026-08-08 线上实测这条是 DeepSeek 拿到正文之后的**第二道死门**
+ *（日志：`guard at=invented_numbers detail="两下"` / `"一下"`）。
+ * 修法见 findPseudoPreciseCN：中文整数先折算成阿拉伯数字，再按「数+量词」比对事实，
+ * 放行的仍然只有"我们自己给过的那个量"，红线一寸没松。
  */
 const CN_NUM = "[〇零一二两三四五六七八九十百千]";
 /** 数量部分：六 / 六个 / 六个半 / 一个半 / 半 */
 const CN_QTY = `(?:${CN_NUM}+个?半?|半)`;
 const CN_UNIT = "(?:小时|分钟|钟头|秒|毫升|滴|下|喷|泵|米|厘米|公分|步|天|周|年)";
-const CN_PSEUDO = new RegExp(`(?<!大)${CN_QTY}(?:点${CN_NUM}+)?\\s*个?\\s*${CN_UNIT}`, "g");
+const CN_PSEUDO = new RegExp(
+  `(?<!大)(?<qty>${CN_QTY})(?<frac>点${CN_NUM}+)?\\s*个?\\s*(?<unit>${CN_UNIT})`,
+  "g"
+);
+
+/**
+ * 中文整数 → 数值。折算不出来（含「半」「点」等非整数形态、或压根不是数）就返回 null。
+ *
+ * 只服务于一件事：判断「两下」说的是不是我们给过的那个「2 下」。所以刻意只做整数——
+ * 带「半」「点」的粒度比我们给出的任何档位都细（我们从不说「2.5 下」），折算出来的数
+ * 不可能在事实里，放行它就等于放行伪精确。这条限制在调用处显式表达，见下。
+ *
+ * 导出是为了可测：它是红线上的一个新判据，必须有东西守着。
+ */
+export function cnIntToNumber(s: string): number | null {
+  const DIGIT: Record<string, number> = {
+    〇: 0, 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+  };
+  const UNIT: Record<string, number> = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0;
+  let digit = -1;
+  let seen = false;
+  for (const ch of s) {
+    if (ch in DIGIT) {
+      digit = DIGIT[ch];
+      seen = true;
+    } else if (ch in UNIT) {
+      // 「十五」的十前面没有数字，按 1 算；「二十」的十前面有 2
+      total += (digit >= 0 ? digit : 1) * UNIT[ch];
+      digit = -1;
+      seen = true;
+    } else {
+      return null;
+    }
+  }
+  if (!seen) return null;
+  if (digit >= 0) total += digit;
+  return total;
+}
 
 export function findInventedNumbers(text: string, allowed: Set<string>): string[] {
   const t = normalize(text);
@@ -110,10 +156,26 @@ export function findUnitMismatch(text: string, allowedPairs: Set<string>): strin
 export function findPseudoPreciseCN(text: string, facts: string): string[] {
   const t = normalize(text);
   const f = normalize(facts);
+  // 事实里我们自己给过的「数+量词」组合，与 findUnitMismatch 用的是同一套抽取
+  //（区间按端点展开：给了「2–3 下」，「两下」与「三下」都算我们说过）
+  const pairs = allowedUnitPairs(f);
   const bad: string[] = [];
   for (const m of t.matchAll(CN_PSEUDO)) {
-    // 逐字出现在事实里 = 是我们自己的措辞，不是它编的
-    if (!f.includes(m[0])) bad.push(m[0]);
+    // ① 逐字出现在事实里 = 是我们自己的措辞，不是它编的
+    if (f.includes(m[0])) continue;
+    const g = m.groups;
+    // ② 同一个量的另一种写法，也是我们自己的措辞。事实写「喷 2 下」、模型写「喷两下」，
+    //    说的是同一件事，只是中文里后者才自然——按字形比对会把它判成编造，
+    //    然后整段丢弃退模板，而这正是线上第二道死门。
+    //
+    //    放行面刻意只开到「纯中文整数 + 量词」这一种形态：带「半」「点」的粒度比我们
+    //    给出的任何档位都细（我们从不说「2.5 下」），折算出来的数不可能在事实里，
+    //    所以「六个半小时」「六点五小时」照旧拦——红线一寸没松，只是不再吃掉自家的话。
+    if (g && !g.frac && !g.qty.includes("半")) {
+      const n = cnIntToNumber(g.qty.replace(/个$/, ""));
+      if (n !== null && pairs.has(`${n}${g.unit}`)) continue;
+    }
+    bad.push(m[0]);
   }
   return bad;
 }

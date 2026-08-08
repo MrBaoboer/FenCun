@@ -138,6 +138,32 @@ test("降级模板：无香场合不劝「你要是就想用它」——那句�
   assert.equal(t, "医院、诊所这类场合，很多人对气味格外敏感且无法回避。");
 });
 
+test("无香场合不许劝用：这条此前只有模板守着，LLM 那条路上是空的", async () => {
+  // SYSTEM 铁律 6 给 avoid 的话术是**无条件**的「话锋一转，你要是就想用它…」，
+  // 而 placement 为空时结论是「今天不用香」。这个洞此前看不见，因为 LLM 那条路根本没通；
+  // 一通就现形——预览实测两次，两次都写出了「你要是今天就想用它，那就别喷了」。
+  const { PUSH_TO_USE_RE } = await import("./explain/route");
+  for (const s of [
+    "你这次要是就想用它，那就别喷了，0 下的意思就是不带出门。",
+    "你要是今天就想用它，那就别喷了，带在身边闻闻就好。",
+    "要是想用，可以只在衣物内侧点一点。",
+    "非要用的话，离人远些。",
+  ]) {
+    assert.match(s, PUSH_TO_USE_RE, `劝用没被拦住：${s}`);
+  }
+  // 模板自己在无香场合下必须不触发它——否则回退之后仍然劝用，等于没修
+  const t = template(
+    mkInput({
+      verdict: "avoid",
+      usage: { spraysLabel: "0 下", placement: [], distance: "—", durationHint: "—" },
+      risks: ["医院、诊所这类场合，很多人对气味格外敏感且无法回避。"],
+    })
+  );
+  assert.ok(!PUSH_TO_USE_RE.test(t), `模板自己劝用了：${t}`);
+  // 说清「为什么不合适」本身不算劝用，别把该说的话也拦掉
+  assert.ok(!PUSH_TO_USE_RE.test("今天其实不太建议用这瓶，病房里很多人对气味敏感又躲不开。"));
+});
+
 test("降级模板：只复述给定事实，不得凭空生出数字——反伪精确在兜底路径上同样成立", () => {
   // 白名单口径与路由一致：允许的数字只能来自我们自己算出来的事实。
   const input = mkInput({ risks: ["甜和扩散都偏高，这类场合容易显得用力过猛。"] });
@@ -272,6 +298,165 @@ test("来源校验：一个第三方网页不该能从访客浏览器里调走�
   // 没有 Sec-Fetch-Site 的不拦：curl、老浏览器、自托管的健康检查都在这一类，
   // 那不是这条防线要解决的问题，交给限流
   assert.equal(fromOwnPage(req({ "content-type": "application/json; charset=utf-8" })), true);
+});
+
+// ---------- 降级可观测性 ----------
+
+test("降级分级：上游坏了要吵，按设计降级只记一笔", async () => {
+  // 此前两条 LLM 路由的八个降级分支里只有数字白名单那一条记日志，于是
+  //「线上 DeepSeek 一次都没打通」与「本地没配 key」在外部完全同形——
+  // HTTP 都是 200、body 都带 source: template/heuristic、日志里一片空白。
+  const { levelOf } = await import("@/lib/llmlog");
+  // 需要有人去修的：不修就永远降级，而用户完全无感
+  for (const k of ["upstream_status", "timeout", "upstream_error"] as const) {
+    assert.equal(levelOf(k), "error", `${k} 是上游坏了，必须按 error 记`);
+  }
+  // 系统正在按设计工作：README 明说没有 key 也能跑，限流与闸门是自我保护，
+  // guard 命中恰恰证明防线生效——这几条按 error 记就是在训练所有人忽略告警
+  for (const k of ["no_key", "rate_limited", "budget_exhausted", "bad_shape", "guard"] as const) {
+    assert.equal(levelOf(k), "warn", `${k} 是按设计降级，不该按 error 记`);
+  }
+});
+
+test("降级日志绝不写 key——这条约束要有东西守着，不能靠 review 肉眼扫", async () => {
+  const { degradeLine, redact } = await import("@/lib/llmlog");
+  // 夹具一律**拼**出来，不写成字面量：源码里出现一个长成 key 的串，gitleaks 的
+  // generic-api-key 就会命中（实测这条测试的第一版让全历史扫描红了两条）。
+  // 拼接后每个字面量都短于规则阈值，而运行期拿到的形态与真 key 完全一样。
+  const fakeKey = "sk-" + "0123456789".repeat(2);
+  const opaque = "A1b2C3d4".repeat(3);
+  // DeepSeek 的 401 错误体历来把 key 回显在消息里，而我们要记的正是这条消息
+  const real = `Authentication Fails, Your api key: ${fakeKey} is invalid`;
+  const line = degradeLine("explain", { kind: "upstream_status", status: 401, detail: real }, 312);
+  assert.ok(!line.includes(fakeKey), `key 漏进了日志：${line}`);
+  assert.ok(line.includes("Authentication Fails"), "抹得只剩状态码就失去了排查价值");
+  assert.ok(line.includes("status=401") && line.includes("ms=312"));
+  // 其余凭据形态
+  assert.ok(!redact("Authorization: Bearer abc.def.ghi").includes("abc.def.ghi"));
+  assert.ok(!redact(`token=${opaque}`).includes(opaque));
+  // 兜底截断：任何形态的长文本都进不了日志
+  const long = degradeLine("explain", { kind: "guard", at: "invented_numbers", detail: "9".repeat(500) });
+  assert.ok(long.length < 300, `detail 没截断：${long.length} 字符`);
+});
+
+test("降级日志分得出上游的四种坏法，而不是一句「失败了」", async () => {
+  const { classifyFetchError } = await import("@/lib/llmlog");
+  // ① 我们自己设的 12s / 15s 到了：AbortSignal.timeout() 抛的是 TimeoutError
+  const timeout = Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" });
+  assert.deepEqual(classifyFetchError(timeout), { kind: "timeout" });
+  // ② 根本没连上：undici 统一包成 `TypeError: fetch failed`，真正的原因只在 cause.code。
+  //    只记外层消息等于什么都没记——三种网络失败会写出同一行字。
+  const dns = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  const dnsReason = classifyFetchError(dns);
+  assert.ok(
+    dnsReason.kind === "upstream_error" && dnsReason.detail.includes("ENOTFOUND"),
+    "丢了 cause.code 就定位不到网络层"
+  );
+  // ③ 连上了但响应体不是 JSON（res.json() 抛 SyntaxError）
+  const badBody = classifyFetchError(new SyntaxError("Unexpected token < in JSON"));
+  assert.ok(badBody.kind === "upstream_error" && badBody.detail.includes("SyntaxError"));
+  // ④ 什么都不是的东西扔进来也不许炸——日志代码自己把请求搞崩是最坏的结果
+  assert.equal(classifyFetchError(null).kind, "upstream_error");
+  assert.equal(classifyFetchError("boom").kind, "upstream_error");
+});
+
+test("补日志不许顺手补出一条日志放大路径", async () => {
+  const { shouldLog } = await import("@/lib/llmlog");
+  const t0 = 1_000_000;
+  // no_key / budget_exhausted：KEY 是模块级常量、闸门触顶后当天每个请求都会再撞一次，
+  // 重复一万遍不会比第一遍多告诉你任何事
+  assert.equal(shouldLog("a:no_key", Infinity, t0), true);
+  assert.equal(shouldLog("a:no_key", Infinity, t0 + 86_400_000), false, "每实例只该记一次");
+  // rate_limited：由客户端行为触发、次数无上限，一个脚本就能把日志刷爆
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0), true);
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0 + 59_999), false);
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0 + 60_000), true, "窗口过了要能再记");
+  // 上游坏了与防线拦截：频率本身就是信号，压掉就没了
+  for (let i = 0; i < 5; i++) assert.equal(shouldLog("c:upstream_status", 0, t0), true);
+});
+
+test("降级日志走对 console 通道，且上游错误体只取结构化字段", async (t) => {
+  const { logDegrade, readUpstreamError } = await import("@/lib/llmlog");
+  const warn = t.mock.method(console, "warn", () => {});
+  const error = t.mock.method(console, "error", () => {});
+
+  logDegrade("probe-a", { kind: "upstream_status", status: 402, detail: "Insufficient Balance" }, 480);
+  logDegrade("probe-a", { kind: "guard", at: "avoid_softened" });
+  assert.equal(error.mock.calls.length, 1, "上游坏了要进 error");
+  assert.equal(warn.mock.calls.length, 1, "防线拦截要进 warn");
+  assert.match(String(error.mock.calls[0].arguments[0]), /\[probe-a\] 降级 upstream_status status=402/);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /\[probe-a\] 降级 guard at=avoid_softened/);
+
+  // 401 与 402 的区别（key 无效 / 余额不足）只写在上游的这条消息里，状态码本身分不出，
+  // 而两者的处置一个是轮换密钥、一个是充值
+  const paid = await readUpstreamError(
+    new Response(JSON.stringify({ error: { message: "Insufficient Balance" } }), { status: 402 })
+  );
+  assert.equal(paid, "Insufficient Balance");
+  // 非预期形态一律只记长度：那是唯一可能把请求内容回显进日志的路径，堵死它比事后截断可靠
+  const html = await readUpstreamError(new Response("<html>502 Bad Gateway 今晚和客户吃饭</html>", { status: 502 }));
+  assert.ok(!html.includes("今晚和客户吃饭"), `上游正文被原样搬进了日志：${html}`);
+  assert.match(html, /^非 JSON 错误体 \d+B$/);
+});
+
+test("上游 200 却没给出能用的东西：要分得出是哪一种，且一个字都不许记", async () => {
+  const { describeChoice } = await import("@/lib/llmlog");
+  // 思考型模型把 max_tokens 全花在推理上，正文一个字没轮到——修法是抬 max_tokens
+  // 或关思考，与「网络不通」「key 无效」没有任何关系，而这三者此前记出来是同一句话（没有）
+  const starved = describeChoice({
+    finish_reason: "length",
+    message: { content: "", reasoning_content: "用户说今晚和客户吃饭，包间……" },
+  });
+  assert.equal(starved, "finish=length content=0 reasoning=15");
+  // 模型真的什么都没说，与上面那种要分开
+  assert.equal(describeChoice({ finish_reason: "stop", message: { content: "" } }), "finish=stop content=0 reasoning=-1");
+  // 被上游安全策略挡了
+  assert.match(describeChoice({ finish_reason: "content_filter", message: {} }), /^finish=content_filter/);
+  // 形态不对也不许炸——日志代码自己把请求搞崩是最坏的结果
+  assert.equal(describeChoice(undefined), "finish=? content=-1 reasoning=-1");
+
+  // content 与 reasoning 都由模型对用户原话的转写构成：长度是安全的，内容不是
+  const echo = describeChoice({
+    finish_reason: "stop",
+    message: { content: "今晚和客户吃饭，包间", reasoning_content: "今晚和客户吃饭" },
+  });
+  assert.ok(!echo.includes("客户"), `用户原话经模型转写后漏进了日志：${echo}`);
+});
+
+test("数字白名单：同一个量的中文写法不算编造——防线不许吃掉我们自己给它的话", async () => {
+  // 2026-08-08 线上实测的第二道死门：事实里写半角「喷 2 下」，模型用自然中文复述成
+  // 「喷两下」，按字形逐字比对接不上 → 整段丢弃退模板（日志 guard at=invented_numbers
+  // detail="两下"）。拦下的是我们自己递给它的那个量。
+  const { findPseudoPreciseCN, cnIntToNumber } = await import("@/lib/numguard");
+
+  const facts2 = "喷 2 下，落在手腕；大半天";
+  assert.deepEqual(findPseudoPreciseCN("今天喷两下就够", facts2), [], "「两下」说的就是事实里的 2 下");
+  assert.deepEqual(findPseudoPreciseCN("今天喷一下就够", facts2), ["一下"], "我们说的是 2 下，1 下是它自己加的");
+
+  // 区间按端点展开，与 findUnitMismatch 同一套口径：给了 2–3 下，两下与三下都算我们说过
+  const facts23 = "喷 2–3 下；撑得住大半个白天";
+  assert.deepEqual(findPseudoPreciseCN("喷两下到三下都行", facts23), []);
+  assert.deepEqual(findPseudoPreciseCN("喷五下更稳", facts23), ["五下"], "5 下我们没给过");
+
+  // 红线一寸没松：折算只开给「纯中文整数 + 量词」。带「半」「点」的粒度比我们给出的
+  // 任何档位都细（我们从不说 2.5 下），即便整数部分在事实里也照拦。
+  const facts6h = "留香 6 小时上下；喷 2 下";
+  for (const s of ["大概能撑六个半小时", "差不多六点五小时", "大概能撑半小时", "两个半小时就淡了"]) {
+    assert.ok(findPseudoPreciseCN(s, facts6h).length > 0, `该拦没拦：${s}`);
+  }
+  // 事实里没给过的量词组合，中文写法照样拦——这是防线的主业，没有变
+  assert.deepEqual(findPseudoPreciseCN("扩散半径一米五", facts6h), ["一米"]);
+  assert.deepEqual(findPseudoPreciseCN("间隔三十秒再补", facts6h), ["三十秒"]);
+
+  // 折算本身：只认整数，认不出就返回 null 交回原判据（宁可多退一次模板）
+  const cases: [string, number | null][] = [
+    ["两", 2], ["一", 1], ["六", 6], ["十", 10], ["十五", 15],
+    ["二十", 20], ["二十五", 25], ["一百二十", 120], ["〇", 0],
+    ["半", null], ["六个半", null], ["几", null], ["", null], ["下", null],
+  ];
+  for (const [s, want] of cases) {
+    assert.equal(cnIntToNumber(s), want, `「${s}」折算错了`);
+  }
 });
 
 test("数字白名单：数给过、单位换了，同样是伪精确", async () => {

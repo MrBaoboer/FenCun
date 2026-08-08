@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { allow, clientKey, withinDailyBudget, fromOwnPage } from "@/lib/ratelimit";
+import { classifyFetchError, describeChoice, logDegrade, readUpstreamError } from "@/lib/llmlog";
 import { carriesNumber } from "@/lib/numguard";
 
 export const runtime = "nodejs";
@@ -142,11 +143,23 @@ export async function POST(req: NextRequest) {
   if (text.length > 120) text = text.slice(0, 120); // 输入上限：防超长/成本/注入面
 
   const fallback = { ...heuristic(text), source: "heuristic" as const };
-  // 无 key 或被限流 → 关键词启发式（不打 DeepSeek），仍能给出可用结构
-  if (!KEY || !allow(`parse:${clientKey(req)}`, 8, 10_000) || !withinDailyBudget()) {
+  // 无 key 或被限流 → 关键词启发式（不打 DeepSeek），仍能给出可用结构。
+  // 与 explain 同理，三条拆开只为把原因记准；求值顺序与短路语义逐字保留
+  //（allow() 与 withinDailyBudget() 都会消费计数，换位置就改了口径）。
+  if (!KEY) {
+    logDegrade("parse-intent", { kind: "no_key" });
+    return NextResponse.json(fallback);
+  }
+  if (!allow(`parse:${clientKey(req)}`, 8, 10_000)) {
+    logDegrade("parse-intent", { kind: "rate_limited" });
+    return NextResponse.json(fallback);
+  }
+  if (!withinDailyBudget()) {
+    logDegrade("parse-intent", { kind: "budget_exhausted" });
     return NextResponse.json(fallback);
   }
 
+  const startedAt = Date.now();
   try {
     const res = await fetch(`${BASE}/chat/completions`, {
       method: "POST",
@@ -158,27 +171,79 @@ export async function POST(req: NextRequest) {
           { role: "user", content: text },
         ],
         temperature: 0.4,
-        max_tokens: 200,
+        // 与 explain 同因：思考默认开着且推理 token 计入 max_tokens，200 的额度被推理吃光，
+        // 实测每一次都是 `finish=length content=0 reasoning=381~436`——连一个 `{` 都没输出。
+        // 这条路是把一句话归到八个 occasion 之一并填几个受控字段，推理帮不上忙。
+        thinking: { type: "disabled" },
+        max_tokens: 512,
         response_format: { type: "json_object" },
         stream: false,
       }),
       signal: AbortSignal.timeout(12000),
     });
-    if (!res.ok) return NextResponse.json(fallback);
+    if (!res.ok) {
+      logDegrade(
+        "parse-intent",
+        { kind: "upstream_status", status: res.status, detail: await readUpstreamError(res) },
+        Date.now() - startedAt
+      );
+      return NextResponse.json(fallback);
+    }
     const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content;
+    const choice = data?.choices?.[0];
+    const raw = choice?.message?.content;
     // 容错：模型偶发在 json_object 外带 ```json 围栏或解释文字 → 截取首个 { 到末个 } 再解析，
     // 避免白白丢掉一次本可用的 LLM 结果、降到粗粒度启发式
-    if (typeof raw !== "string") return NextResponse.json(fallback);
-    const s = raw.indexOf("{");
-    const e = raw.lastIndexOf("}");
-    if (s < 0 || e <= s) return NextResponse.json(fallback);
-    const parsed = PatchSchema.safeParse(JSON.parse(raw.slice(s, e + 1)));
-    if (!parsed.success) return NextResponse.json(fallback);
+    if (typeof raw !== "string") {
+      logDegrade(
+        "parse-intent",
+        { kind: "bad_shape", at: "no_content", detail: describeChoice(choice) },
+        Date.now() - startedAt
+      );
+      return NextResponse.json(fallback);
+    }
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start < 0 || end <= start) {
+      // 空字符串也落在这里（indexOf 返回 -1）。finish_reason 与 reasoning 长度是分辨
+      //「思考把 token 吃光了」和「模型没按 json_object 输出」的唯一依据。
+      logDegrade(
+        "parse-intent",
+        { kind: "bad_shape", at: "no_json", detail: describeChoice(choice) },
+        Date.now() - startedAt
+      );
+      return NextResponse.json(fallback);
+    }
+    // JSON.parse 单独包起来，不再让它落到外层 catch。行为不变（同一个 fallback），
+    // 变的是记账：模型写出坏 JSON 是**模型输出不合格**，不是「上游坏了」，
+    // 混进 upstream_error 会让告警指向一个没坏的 DeepSeek。
+    let patch: unknown;
+    try {
+      patch = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      logDegrade("parse-intent", { kind: "bad_shape", at: "json_parse" }, Date.now() - startedAt);
+      return NextResponse.json(fallback);
+    }
+    const parsed = PatchSchema.safeParse(patch);
+    if (!parsed.success) {
+      // 只记**字段路径**，不记 zod 的 received 值——那一侧是模型对用户原话的转写，
+      // 是这条链路上唯一可能把用户写的话带进日志的地方。路径足够定位是哪个字段在漂。
+      logDegrade(
+        "parse-intent",
+        {
+          kind: "bad_shape",
+          at: "schema",
+          detail: parsed.error.issues.map((i) => i.path.join(".") || "(root)").join(","),
+        },
+        Date.now() - startedAt
+      );
+      return NextResponse.json(fallback);
+    }
     const merged = unionFragranceFree(parsed.data, fallback);
     // label 与提示口径对齐（≤12 字），与启发式兜底一致，防超长撑版
     return NextResponse.json({ ...parsed.data, ...merged, label: merged.label.slice(0, 12), source: "deepseek" });
-  } catch {
+  } catch (e) {
+    logDegrade("parse-intent", classifyFetchError(e), Date.now() - startedAt);
     return NextResponse.json(fallback);
   }
 }
