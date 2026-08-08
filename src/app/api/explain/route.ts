@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { allow, clientKey, withinDailyBudget, fromOwnPage } from "@/lib/ratelimit";
+import { classifyFetchError, describeChoice, logDegrade, readUpstreamError } from "@/lib/llmlog";
 import {
   extractDigits,
   findInventedNumbers,
@@ -141,7 +142,21 @@ export async function POST(req: NextRequest) {
   const fallback = template(input);
   // 无 key 或被限流 → 直接返回免费的规则模板（不打 DeepSeek），UX 不断、成本可控。
   // 限流 8 次/10 秒：客户端有 550ms 防抖 + 结果缓存，正常人远用不到；剩下的是脚本。
-  if (!KEY || !allow(`explain:${clientKey(req)}`, 8, 10_000) || !withinDailyBudget()) {
+  //
+  // 三条拆开写只为把降级原因记准：`!KEY || !allow(…) || !withinDailyBudget()` 挤在一行时，
+  // 日志只能说"降级了"，说不出是哪一条——而这三条的处置完全不同（配环境变量 / 有人在刷 /
+  // 当天额度用完了）。求值顺序与短路语义逐字保留：allow() 和 withinDailyBudget() 都会
+  // **消费计数**，把它们提到 !KEY 之前或互换位置都会改变限流与闸门的实际口径。
+  if (!KEY) {
+    logDegrade("explain", { kind: "no_key" });
+    return NextResponse.json({ text: fallback, source: "template" });
+  }
+  if (!allow(`explain:${clientKey(req)}`, 8, 10_000)) {
+    logDegrade("explain", { kind: "rate_limited" });
+    return NextResponse.json({ text: fallback, source: "template" });
+  }
+  if (!withinDailyBudget()) {
+    logDegrade("explain", { kind: "budget_exhausted" });
     return NextResponse.json({ text: fallback, source: "template" });
   }
 
@@ -205,6 +220,9 @@ export async function POST(req: NextRequest) {
     ...input.risks,
   ].join(" ");
 
+  // 上游那一跳的耗时。它是排查时第一眼要看的数：一次快速失败（几百毫秒的 401/402）
+  // 与一次卡到超时（15s）在 body 上完全同形，只有这个数分得开。
+  const startedAt = Date.now();
   try {
     const res = await fetch(`${BASE}/chat/completions`, {
       method: "POST",
@@ -224,13 +242,33 @@ export async function POST(req: NextRequest) {
       }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return NextResponse.json({ text: fallback, source: "template" });
+    if (!res.ok) {
+      // 状态码 + 上游自己的错误消息。401（key 无效）与 402（余额不足）只有后者分得开，
+      // 而这两种的处置一个是轮换密钥、一个是充值——分不出就等于没排查。
+      logDegrade(
+        "explain",
+        { kind: "upstream_status", status: res.status, detail: await readUpstreamError(res) },
+        Date.now() - startedAt
+      );
+      return NextResponse.json({ text: fallback, source: "template" });
+    }
     const data = await res.json();
-    const text: string | undefined = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) return NextResponse.json({ text: fallback, source: "template" });
+    const choice = data?.choices?.[0];
+    const text: string | undefined = choice?.message?.content?.trim();
+    if (!text) {
+      // 上游 200 却拿不到正文，有好几种成因，处置完全不同（见 llmlog.ts:describeChoice）。
+      // 只记 finish_reason 与字符数——正文本身是模型对用户原话的转写，不进日志。
+      logDegrade(
+        "explain",
+        { kind: "bad_shape", at: "empty_text", detail: describeChoice(choice) },
+        Date.now() - startedAt
+      );
+      return NextResponse.json({ text: fallback, source: "template" });
+    }
     // 防线①（铁律 6 的代码级）：avoid 裁决的返回若不含否定语义（LLM 软化/漏说"不建议"），
     // 回退确定性模板（它天然以"说实话，今天不太建议"开头），不让 LLM 把该劝退的场景圆成可用。
     if (input.verdict === "avoid" && !NEGATIVE_VERDICT_RE.test(text)) {
+      logDegrade("explain", { kind: "guard", at: "avoid_softened" });
       return NextResponse.json({ text: fallback, source: "template" });
     }
     // 防线②（铁律 2 的代码级）：数字白名单。"反伪精确"不能只是提示词里的一句拜托。
@@ -244,7 +282,11 @@ export async function POST(req: NextRequest) {
       ...findUnitMismatch(text, allowedPairs),
     ];
     if (invented.length > 0) {
-      console.warn(`[explain] LLM 编造数字被拦截: ${invented.join(",")}`);
+      // 这条原本是全路由唯一记日志的分支，措辞也自成一格（「[explain] LLM 编造数字被拦截」）。
+      // 现在收进统一格式：一个降级面板不该按分支分成两种语法。被拦下的 token 本身
+      // 是数字与量词（"6.2"、"六个小时"），不是用户原话，照旧带上——它是判断
+      // 「防线该不该收紧」的全部依据。
+      logDegrade("explain", { kind: "guard", at: "invented_numbers", detail: invented.join(",") });
       return NextResponse.json({ text: fallback, source: "template" });
     }
     // 防线③：good 也不许被说反。裁决共三档，此前只有 avoid 一档有代码级校验——
@@ -254,10 +296,14 @@ export async function POST(req: NextRequest) {
     // 「同一条」此前只是说说：这里的字面量少了「慎」和「其实不」两个分支，测试里还抄了第三份。
     // 现在真的是同一个符号（NEGATIVE_VERDICT_RE）。
     if (input.verdict === "good" && NEGATIVE_VERDICT_RE.test(text)) {
+      logDegrade("explain", { kind: "guard", at: "good_reversed" });
       return NextResponse.json({ text: fallback, source: "template" });
     }
     return NextResponse.json({ text, source: "deepseek" });
-  } catch {
+  } catch (e) {
+    // 超时 / 连不通 / 200 但响应体不是 JSON——三种在这里分开记，
+    // 否则「我们自己设的 15s 到了」和「根本没连上 DeepSeek」会是同一句话。
+    logDegrade("explain", classifyFetchError(e), Date.now() - startedAt);
     return NextResponse.json({ text: fallback, source: "template" });
   }
 }

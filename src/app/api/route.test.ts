@@ -274,6 +274,129 @@ test("来源校验：一个第三方网页不该能从访客浏览器里调走�
   assert.equal(fromOwnPage(req({ "content-type": "application/json; charset=utf-8" })), true);
 });
 
+// ---------- 降级可观测性 ----------
+
+test("降级分级：上游坏了要吵，按设计降级只记一笔", async () => {
+  // 此前两条 LLM 路由的八个降级分支里只有数字白名单那一条记日志，于是
+  //「线上 DeepSeek 一次都没打通」与「本地没配 key」在外部完全同形——
+  // HTTP 都是 200、body 都带 source: template/heuristic、日志里一片空白。
+  const { levelOf } = await import("@/lib/llmlog");
+  // 需要有人去修的：不修就永远降级，而用户完全无感
+  for (const k of ["upstream_status", "timeout", "upstream_error"] as const) {
+    assert.equal(levelOf(k), "error", `${k} 是上游坏了，必须按 error 记`);
+  }
+  // 系统正在按设计工作：README 明说没有 key 也能跑，限流与闸门是自我保护，
+  // guard 命中恰恰证明防线生效——这几条按 error 记就是在训练所有人忽略告警
+  for (const k of ["no_key", "rate_limited", "budget_exhausted", "bad_shape", "guard"] as const) {
+    assert.equal(levelOf(k), "warn", `${k} 是按设计降级，不该按 error 记`);
+  }
+});
+
+test("降级日志绝不写 key——这条约束要有东西守着，不能靠 review 肉眼扫", async () => {
+  const { degradeLine, redact } = await import("@/lib/llmlog");
+  // 夹具一律**拼**出来，不写成字面量：源码里出现一个长成 key 的串，gitleaks 的
+  // generic-api-key 就会命中（实测这条测试的第一版让全历史扫描红了两条）。
+  // 拼接后每个字面量都短于规则阈值，而运行期拿到的形态与真 key 完全一样。
+  const fakeKey = "sk-" + "0123456789".repeat(2);
+  const opaque = "A1b2C3d4".repeat(3);
+  // DeepSeek 的 401 错误体历来把 key 回显在消息里，而我们要记的正是这条消息
+  const real = `Authentication Fails, Your api key: ${fakeKey} is invalid`;
+  const line = degradeLine("explain", { kind: "upstream_status", status: 401, detail: real }, 312);
+  assert.ok(!line.includes(fakeKey), `key 漏进了日志：${line}`);
+  assert.ok(line.includes("Authentication Fails"), "抹得只剩状态码就失去了排查价值");
+  assert.ok(line.includes("status=401") && line.includes("ms=312"));
+  // 其余凭据形态
+  assert.ok(!redact("Authorization: Bearer abc.def.ghi").includes("abc.def.ghi"));
+  assert.ok(!redact(`token=${opaque}`).includes(opaque));
+  // 兜底截断：任何形态的长文本都进不了日志
+  const long = degradeLine("explain", { kind: "guard", at: "invented_numbers", detail: "9".repeat(500) });
+  assert.ok(long.length < 300, `detail 没截断：${long.length} 字符`);
+});
+
+test("降级日志分得出上游的四种坏法，而不是一句「失败了」", async () => {
+  const { classifyFetchError } = await import("@/lib/llmlog");
+  // ① 我们自己设的 12s / 15s 到了：AbortSignal.timeout() 抛的是 TimeoutError
+  const timeout = Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" });
+  assert.deepEqual(classifyFetchError(timeout), { kind: "timeout" });
+  // ② 根本没连上：undici 统一包成 `TypeError: fetch failed`，真正的原因只在 cause.code。
+  //    只记外层消息等于什么都没记——三种网络失败会写出同一行字。
+  const dns = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  const dnsReason = classifyFetchError(dns);
+  assert.ok(
+    dnsReason.kind === "upstream_error" && dnsReason.detail.includes("ENOTFOUND"),
+    "丢了 cause.code 就定位不到网络层"
+  );
+  // ③ 连上了但响应体不是 JSON（res.json() 抛 SyntaxError）
+  const badBody = classifyFetchError(new SyntaxError("Unexpected token < in JSON"));
+  assert.ok(badBody.kind === "upstream_error" && badBody.detail.includes("SyntaxError"));
+  // ④ 什么都不是的东西扔进来也不许炸——日志代码自己把请求搞崩是最坏的结果
+  assert.equal(classifyFetchError(null).kind, "upstream_error");
+  assert.equal(classifyFetchError("boom").kind, "upstream_error");
+});
+
+test("补日志不许顺手补出一条日志放大路径", async () => {
+  const { shouldLog } = await import("@/lib/llmlog");
+  const t0 = 1_000_000;
+  // no_key / budget_exhausted：KEY 是模块级常量、闸门触顶后当天每个请求都会再撞一次，
+  // 重复一万遍不会比第一遍多告诉你任何事
+  assert.equal(shouldLog("a:no_key", Infinity, t0), true);
+  assert.equal(shouldLog("a:no_key", Infinity, t0 + 86_400_000), false, "每实例只该记一次");
+  // rate_limited：由客户端行为触发、次数无上限，一个脚本就能把日志刷爆
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0), true);
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0 + 59_999), false);
+  assert.equal(shouldLog("b:rate_limited", 60_000, t0 + 60_000), true, "窗口过了要能再记");
+  // 上游坏了与防线拦截：频率本身就是信号，压掉就没了
+  for (let i = 0; i < 5; i++) assert.equal(shouldLog("c:upstream_status", 0, t0), true);
+});
+
+test("降级日志走对 console 通道，且上游错误体只取结构化字段", async (t) => {
+  const { logDegrade, readUpstreamError } = await import("@/lib/llmlog");
+  const warn = t.mock.method(console, "warn", () => {});
+  const error = t.mock.method(console, "error", () => {});
+
+  logDegrade("probe-a", { kind: "upstream_status", status: 402, detail: "Insufficient Balance" }, 480);
+  logDegrade("probe-a", { kind: "guard", at: "avoid_softened" });
+  assert.equal(error.mock.calls.length, 1, "上游坏了要进 error");
+  assert.equal(warn.mock.calls.length, 1, "防线拦截要进 warn");
+  assert.match(String(error.mock.calls[0].arguments[0]), /\[probe-a\] 降级 upstream_status status=402/);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /\[probe-a\] 降级 guard at=avoid_softened/);
+
+  // 401 与 402 的区别（key 无效 / 余额不足）只写在上游的这条消息里，状态码本身分不出，
+  // 而两者的处置一个是轮换密钥、一个是充值
+  const paid = await readUpstreamError(
+    new Response(JSON.stringify({ error: { message: "Insufficient Balance" } }), { status: 402 })
+  );
+  assert.equal(paid, "Insufficient Balance");
+  // 非预期形态一律只记长度：那是唯一可能把请求内容回显进日志的路径，堵死它比事后截断可靠
+  const html = await readUpstreamError(new Response("<html>502 Bad Gateway 今晚和客户吃饭</html>", { status: 502 }));
+  assert.ok(!html.includes("今晚和客户吃饭"), `上游正文被原样搬进了日志：${html}`);
+  assert.match(html, /^非 JSON 错误体 \d+B$/);
+});
+
+test("上游 200 却没给出能用的东西：要分得出是哪一种，且一个字都不许记", async () => {
+  const { describeChoice } = await import("@/lib/llmlog");
+  // 思考型模型把 max_tokens 全花在推理上，正文一个字没轮到——修法是抬 max_tokens
+  // 或关思考，与「网络不通」「key 无效」没有任何关系，而这三者此前记出来是同一句话（没有）
+  const starved = describeChoice({
+    finish_reason: "length",
+    message: { content: "", reasoning_content: "用户说今晚和客户吃饭，包间……" },
+  });
+  assert.equal(starved, "finish=length content=0 reasoning=15");
+  // 模型真的什么都没说，与上面那种要分开
+  assert.equal(describeChoice({ finish_reason: "stop", message: { content: "" } }), "finish=stop content=0 reasoning=-1");
+  // 被上游安全策略挡了
+  assert.match(describeChoice({ finish_reason: "content_filter", message: {} }), /^finish=content_filter/);
+  // 形态不对也不许炸——日志代码自己把请求搞崩是最坏的结果
+  assert.equal(describeChoice(undefined), "finish=? content=-1 reasoning=-1");
+
+  // content 与 reasoning 都由模型对用户原话的转写构成：长度是安全的，内容不是
+  const echo = describeChoice({
+    finish_reason: "stop",
+    message: { content: "今晚和客户吃饭，包间", reasoning_content: "今晚和客户吃饭" },
+  });
+  assert.ok(!echo.includes("客户"), `用户原话经模型转写后漏进了日志：${echo}`);
+});
+
 test("数字白名单：数给过、单位换了，同样是伪精确", async () => {
   // 白名单只做集合成员判定，而事实包里恒有两个小整数是气温与湿度：
   // tempC 的 0~12 段像小时数，humidity 恒在 0~100 像分钟/厘米。模型不必编新数字，
