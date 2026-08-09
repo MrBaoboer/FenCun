@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 发现型钩子的纯函数层：吃灰提醒(S5) + 天气突变预警(S4)——产品自称的价值重心。
 //
 // 单独成文件有两个理由：

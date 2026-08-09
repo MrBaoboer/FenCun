@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 404：Next 的内置页是英文的「404 / This page could not be found.」，
 // 对一个把分享门面（og / manifest / icon 全自制）当卖点的中文产品，那是一张没被接管的界面。
 //

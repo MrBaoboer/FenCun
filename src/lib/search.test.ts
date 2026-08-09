@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 搜索端到端回归（真实构建产物）：主目录 + 扩展集合并重排后，
 // 国货与长尾必须出现在榜单头部——「观夏搜不到」「闻献被折叠到看不见」两个真实事故的守门员。
 // 依赖 public/data/（构建产物已入库），构建 3.6 万条索引约 1–2 秒，可接受。

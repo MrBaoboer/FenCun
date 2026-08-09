@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 用法计算器（规则，产品壁垒层）—— 喷量/部位/距离/留香/风险，全程区间档位
 import type { Perfume, Context, Usage, Bias } from "./types";
 import { durationHint, SEASON_NAME } from "./format";

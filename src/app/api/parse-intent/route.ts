@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 自然语言场景 → 结构化情境补丁（DeepSeek 解析，zod 校验，失败降级关键词启发式）
 // 这是氛寸的差异化：真正理解"去前任婚礼""第一次见投资人"的语义，而非硬套标签
 import { NextRequest, NextResponse } from "next/server";

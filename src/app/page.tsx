@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, type AdoptSnapshot } from "@/lib/store";

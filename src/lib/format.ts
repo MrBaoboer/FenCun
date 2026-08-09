@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 人话化表达 —— 全部区间/档位，绝不伪精确
 import type { Perfume, Season } from "./types";
 

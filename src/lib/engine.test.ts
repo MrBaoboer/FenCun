@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 打分/用法/编排引擎单测 —— 确定性纯函数，锁定权重、乘子方向与边界，防重构悄悄改错。
 // 运行：npm test（node --import tsx --test）
 import { test } from "node:test";

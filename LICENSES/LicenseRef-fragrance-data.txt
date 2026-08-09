@@ -1,0 +1,23 @@
+Fragrance data terms — applies to public/data/**
+
+These files are statistical derivatives of ledecanteur / Fragrantica community
+data: vote counts, averages and category tallies. The build pipeline drops the
+expressive fields at the first step — descriptions, comments, AI summaries and
+similarity carousels are never emitted. The source dataset is not distributed
+in this repository.
+
+Copyright in the underlying data stays with its original sources. This data is
+NOT licensed under AGPL-3.0-only with the rest of the project; it ships here so
+the project can be built and demonstrated. Verify the upstream terms yourself
+before using it for anything else.
+
+---
+
+适用于 public/data/** 的数据条款
+
+这些文件是 ledecanteur / Fragrantica 社区数据的统计派生物：投票计数、均值与
+分类计数。构建管线在第一步就丢弃了描述、评论、AI 摘要与相似轮播等表达性内容，
+原始数据集不在本仓库分发。
+
+底层数据的版权归原始来源，不随代码按 AGPL-3.0-only 授权，随仓库提供仅为让项目
+可构建、可演示。另作他用请自行核实来源许可。

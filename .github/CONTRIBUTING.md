@@ -60,13 +60,7 @@ npm run build   # 确保能构建
   git commit -s -m "fix: ……"
   ```
 
-  `-s` 会附上 `Signed-off-by`，表示你按 [Developer Certificate of Origin](https://developercertificate.org/) 声明自己有权提交这份代码。
-
-  这里此前写的是「请对提交做 DCO 签名」，读起来是硬要求，而 CI 里没有任何东西校验它、
-  仓库自己的历史也基本没有签名。**要么让 CI 拦，要么别把它写成规矩**——
-  一条没人执行的规矩只会让第一次提 PR 的人白紧张一次。选后者：这是个人作品集项目，
-  为一条形式性声明加一道会红的门禁不划算。哪天真的需要（比如接受公司来源的贡献），
-  再把它升成硬要求并同时加上校验。
+  `-s` 会附上 `Signed-off-by`，表示你按 [Developer Certificate of Origin](https://developercertificate.org/) 声明自己有权提交这份代码。CI 不校验它——个人作品集项目，为一条形式性声明加一道会红的门禁不划算。
 
 ## Pull Request 流程
 

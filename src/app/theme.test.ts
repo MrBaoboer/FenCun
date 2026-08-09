@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 默认主题的守卫。
 //
 // 这是一条产品决定，不是实现细节：**默认恒为明韵（浅色）**，既不按时段自动翻，

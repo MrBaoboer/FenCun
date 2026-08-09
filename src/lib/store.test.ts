@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 本机存储层的契约单测。
 // 注意一个有利的巧合：Node 环境没有 window，persist 的 storage 句柄是 undefined，
 // 于是每次 set 都会在 `.setItem` 上抛错——这正好**稳定复现**了浏览器里

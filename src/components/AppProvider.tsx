@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 全局：一次性加载香水目录 + 解析实时情境（定位→和风天气），跨页共享
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";

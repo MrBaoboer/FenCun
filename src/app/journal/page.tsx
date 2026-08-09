@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 香历——被气味标记的生活流水。系统自动生成骨架（哪天·什么天气·喷了什么·感觉如何），
 // 用户零写作负担；留白不谴责：无香的日子也是分寸，绝无「断签」概念。

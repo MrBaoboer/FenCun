@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 用香解释：DeepSeek 只把「规则已算好的事实」翻译成人话。
 // 决策权在规则引擎，这里只负责表达；严禁编造、严禁伪精确数字；失败降级为模板。
 // 三道代码级防线：① avoid 不许被说软、② good 不许被说反（共用同一条否定语义正则）；

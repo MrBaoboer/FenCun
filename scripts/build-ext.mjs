@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 全量扩展索引 + 详情分片（零依赖，node 运行）
 // 流式扫描 ledecanteur/perfumes.jsonl，选取：
 //   (people>=50 且 id 不在 Top1500 集合) OR (brand 含 CJK 字符——国货，不设票数门槛)

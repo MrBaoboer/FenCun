@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 发现型钩子的回归网。它此前长在 hooks.ts 里、被 useApp 的反向 import 关在
 // node --test 够不着的地方——全应用分支最密的一段逻辑只能靠线上发现问题，
 // 历史上「换成你已经拿到的那瓶」就是这么漏出去的。

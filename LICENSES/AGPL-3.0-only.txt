@@ -659,32 +659,3 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
-
-
-================================================================================
-                  ADDITIONAL TERMS UNDER SECTION 7 OF THIS LICENSE
-================================================================================
-
-These terms supplement the GNU Affero General Public License v3.0 above, as
-permitted by section 7(e), and apply to every file in this repository carrying
-the notice `SPDX-License-Identifier: AGPL-3.0-only`.
-
-  Trademarks. No permission is granted, under this License or otherwise, to use
-  the project's names, logos or visual identity — including "氛寸", "FenCun" and
-  "Fēn Cùn" — in original or modified form. If you distribute or deploy a
-  modified version, use your own name and marks.
-
-Files under `public/data/` are not covered by this License. See
-`LICENSES/LicenseRef-fragrance-data.txt`.
-
---------------------------------------------------------------------------------
-
-以下条款依 AGPL-3.0 第 7(e) 条补充于上述许可，适用于本仓库中所有标注
-`SPDX-License-Identifier: AGPL-3.0-only` 的文件。
-
-  商标。本许可不授予对项目名称、标识与视觉形象的任何使用权，包括「氛寸」
-  「FenCun」「Fēn Cùn」，原样或修改后均不授予。分发或部署修改版请使用
-  你自己的名称与标识。
-
-`public/data/` 下的文件不在本许可范围内，见
-`LICENSES/LicenseRef-fragrance-data.txt`。

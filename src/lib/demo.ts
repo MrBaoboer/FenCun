@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 演示香柜（黄金集）——纯函数层，无副作用、无随机、无 Date.now()：给定 now 必得同一份状态。
 //
 // 为什么需要它：氛寸的第一屏是「你的香柜」，而空柜什么也算不出来。

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 情境感知：服务端代理和风天气（保护 key），带 30 分钟网格缓存，失败优雅降级
 import { NextRequest, NextResponse } from "next/server";
 import { allow, clientKey, withinWeatherBudget } from "@/lib/ratelimit";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 根级错误边界。app/error.tsx 只包 page 段，接不住根 layout / AppProvider / SiteChrome
 // 自己抛出的错误——那时落到的是 Next 内置的英文 500 页，连 lang="zh-CN" 都没有，

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 中英文搜索（搜名秒加的引擎）。
 // 目录与分片的取数在 lib/catalog.ts —— 拆开是为了让 MiniSearch 只进用得上它的那一页，
 // 见那个文件的说明。

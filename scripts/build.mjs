@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 数据构建（零依赖，node 运行）
 // 读取 .scratch/_selected.json（extract 产出）+ data/zh-map/*.json（中文映射）
 // → 产出 public/data/perfumes.min.json（前端只读静态资产）
