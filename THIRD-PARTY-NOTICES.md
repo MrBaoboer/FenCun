@@ -4,7 +4,7 @@
 
 ## 字体
 
-字体文件由 `next/font` 在构建时取回并自托管，随站点分发。
+字体文件由 `next/font` 在构建时取回并自托管。
 
 | 字体 | 用途 | 许可 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 
 ## 数据
 
-`public/data/` 下的目录、索引与分片派生自 ledecanteur / Fragrantica 社区数据，条款见 [LicenseRef-fragrance-data](LICENSES/LicenseRef-fragrance-data.txt)。原始数据集不在本仓库分发。
+`public/data/` 下的目录、索引与分片派生自 ledecanteur / Fragrantica 社区数据，条款见 [LicenseRef-fragrance-data](LICENSES/LicenseRef-fragrance-data.txt)。
 
 ## 依赖
 

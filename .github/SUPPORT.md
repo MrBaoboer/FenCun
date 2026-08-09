@@ -7,9 +7,9 @@
 | 你的情况 | 去哪 |
 |---|---|
 | 想了解氛寸是什么、怎么用 | 先看 [README](../README.md) 与在线体验 [fencun.vercel.app](https://fencun.vercel.app) |
-| 想读完整产品思路 / 路线图 | [产品方案](../docs/氛寸-产品方案.md)（路线图在其中，本项目不单独维护 ROADMAP） |
+| 想读完整产品思路 / 路线图 | [产品方案](../docs/氛寸-产品方案.md)（路线图在其中） |
 | 发现 Bug | 开一个 [Bug 报告](https://github.com/MrBaoboer/FenCun/issues/new?template=bug_report.yml) |
-| 有功能建议 | 先确认与产品定位一致，再开 [功能建议](https://github.com/MrBaoboer/FenCun/issues/new?template=feature_request.yml) |
+| 有功能建议 | 开一个 [功能建议](https://github.com/MrBaoboer/FenCun/issues/new?template=feature_request.yml) |
 | 想动手贡献 | 读 [贡献指南](CONTRIBUTING.md)——尤其是四条戒律与治理 |
 | 发现安全漏洞 | **不要开公开 Issue**，走 [安全政策](SECURITY.md) 私密报告 |
 

@@ -20,8 +20,8 @@
 
 1. **不伪精确** —— 留香 / 喷量 / 社交距离只给区间与档位，绝不给「6.2 小时」这类无法验证的假数字。
 2. **不过度设计** —— 不上向量库、不引重后端；规则引擎在浏览器本地毫秒出结果。
-3. **轻冷启动** —— 不逼用户先填问卷；搜名秒加即可用。
-4. **有反馈闭环** —— 新增的推荐 / 判断应当可评价、可修正。
+3. **轻冷启动** —— 搜名秒加建香柜，不逼用户先填问卷。
+4. **有反馈闭环** —— 新增的推荐 / 判断必须可评价、可修正。
 
 ## 架构须知
 
@@ -31,7 +31,7 @@
 
 ## 本地开发
 
-需要 **Node 24**（Active LTS）。版本的唯一事实源是 `package.json` 的 `engines.node`，CI 与 Vercel 都以它为准；用别的大版本装依赖会看到一条 `EBADENGINE` 警告。
+需要 **Node 24**（Active LTS）。版本以 `package.json` 的 `engines.node` 为准——Vercel 直接读它、覆盖面板设置，CI 的 `node-version` 与它保持同一个大版本；用别的大版本装依赖会看到一条 `EBADENGINE` 警告。
 
 ```bash
 git clone https://github.com/MrBaoboer/FenCun.git
@@ -47,7 +47,7 @@ npm run dev                  # http://localhost:3000
 
 ```bash
 npm run lint    # 代码风格
-npm test        # 引擎 / 香历 / 搜索 / 存储单测：改了 scoring / usage / recommend / journal / 搜索或存储逻辑必须让它过，并补相应用例
+npm test        # 单测：改了引擎 / 香历 / 搜索 / 存储 / 钩子 / API 路由的逻辑必须让它过，并补用例
 npm run build   # 确保能构建
 ```
 
@@ -60,20 +60,19 @@ npm run build   # 确保能构建
   git commit -s -m "fix: ……"
   ```
 
-  `-s` 会附上 `Signed-off-by`，表示你按 [Developer Certificate of Origin](https://developercertificate.org/) 声明自己有权提交这份代码。CI 不校验它——个人作品集项目，为一条形式性声明加一道会红的门禁不划算。
+  `-s` 会附上 `Signed-off-by`，表示你按 [Developer Certificate of Origin](https://developercertificate.org/) 声明自己有权提交这份代码。CI 不校验它。
 
 ## Pull Request 流程
 
 1. 从 `main` 开分支，保持提交聚焦、可回溯。
 2. 在 PR 描述里写清楚**动机**与**验证方式**；改了引擎的，请附上前后对比或测试。
 3. 目标分支为 `main`；CI / 构建须通过。
-4. 维护者会尽快审阅。
 
 ## 治理 / Governance
 
 - **谁说了算**：氛寸由 [@MrBaoboer](https://github.com/MrBaoboer) 单人维护。维护者掌握产品边界、部署节奏、域名与合并权，可关闭越界、风险过高或验证不足的 PR。
-- **什么不进主线**（负面清单）：不做导购 / 电商、不做成分百科、不做社交、不加账号体系、不偏离「用香决策 + 传播」主线。这些即使实现得优雅，也不会被合并；另见上文的四条戒律与架构须知。
-- **本节自身也可以通过 PR 修改**。若未来引入长期协作者，会先更新本节、写清职责与交接，再授予权限。
+- **什么不进主线**（负面清单）：不做导购 / 电商、不做成分百科、不做社交、不加账号体系、不偏离「用香决策 + 传播」主线。这些即使实现得优雅，也不会被合并。
+- **本节自身也可以通过 PR 修改**。
 
 ## 授权声明
 

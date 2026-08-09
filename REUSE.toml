@@ -4,8 +4,8 @@ SPDX-PackageSupplier = "MrBaoboer <mr.baoboer@gmail.com>"
 SPDX-PackageDownloadLocation = "https://github.com/MrBaoboer/FenCun"
 
 # 权威声明是每个源文件顶部的 SPDX 头——复制走一个文件，声明跟着走。
-# 这里再声明一遍，是因为 reuse 用前 2 KB 猜编码，中文注释密集的文件会被判成二进制
-# 直接跳过头部；少了这一段，CI 会对十几个明明有头的文件报缺失。
+# 这里再声明一遍，是因为 reuse 只读文件开头一小段来猜编码，中文注释密集的文件会被
+# 判成二进制直接跳过头部；少了这一段，CI 会对十几个明明有头的文件报缺失。
 [[annotations]]
 path = [
   "src/**",
@@ -27,6 +27,13 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 MrBaoboer"
 SPDX-License-Identifier = "AGPL-3.0-only"
+
+# 行为准则改编自 Contributor Covenant 3.0，按其原许可发布，不随代码走 AGPL。
+[[annotations]]
+path = [".github/CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT_EN.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Organization for Ethical Source"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
 
 # 构建产物派生自社区数据，版权归原始来源，不随代码按 AGPL 授权。
 [[annotations]]

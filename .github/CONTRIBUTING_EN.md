@@ -20,18 +20,18 @@ Every contribution must uphold these:
 
 1. **No false precision** — longevity / sprays / social distance are given only as ranges and tiers, never fake numbers like "6.2 hours."
 2. **No over-engineering** — no vector DB, no heavy backend; the rule engine runs locally in the browser in milliseconds.
-3. **Light cold-start** — no mandatory questionnaire; search-and-add a bottle and it just works.
-4. **Closed feedback loop** — new recommendations / judgments should be rate-able and correctable.
+3. **Light cold-start** — search a name to add a bottle; no mandatory questionnaire.
+4. **Closed feedback loop** — users must be able to rate and correct any new recommendation or judgment.
 
 ## Architecture notes
 
-- **The rule engine decides; the LLM only puts it into words.** Matching, sprays / distance / longevity must be deterministic rules (explainable, reproducible, unit-testable); DeepSeek only parses natural-language scenarios and puts the computed facts into human-readable language.
+- **The rule engine decides; the LLM only puts it into words.** Match scoring and the sprays / distance / longevity verdicts must come from deterministic rules (explainable, reproducible, unit-testable); DeepSeek only parses natural-language scenarios and turns the computed facts into plain language.
 - **Weather always comes from the QWeather API — never invented by the LLM.**
 - **Graceful degradation first** — LLM timeouts and geolocation failures must have fallbacks; the product never shows a blank screen.
 
 ## Local development
 
-Requires **Node 24** (Active LTS). The single source of truth is `engines.node` in `package.json` — CI and Vercel both follow it; installing on another major prints an `EBADENGINE` warning.
+Requires **Node 24** (Active LTS). `engines.node` in `package.json` is the source of truth — Vercel reads it directly and it overrides the dashboard setting; CI's `node-version` is kept on the same major. Installing under another major prints an `EBADENGINE` warning.
 
 ```bash
 git clone https://github.com/MrBaoboer/FenCun.git
@@ -41,13 +41,13 @@ cp .env.example .env.local   # add your own QWeather / DeepSeek keys
 npm run dev                  # http://localhost:3000
 ```
 
-See the project layout in the [README's "目录结构" (directory structure) section](../README.md#目录结构).
+See the [directory structure](../README.md#目录结构) section of the README (Chinese).
 
 ## Pre-submit checklist
 
 ```bash
 npm run lint    # code style
-npm test        # engine / journal / search / store unit tests (must pass if you touched the corresponding modules — add cases too)
+npm test        # unit tests — must pass if you touched the engine, journal, search, store, nudges, or the API routes; add cases too
 npm run build   # make sure it builds
 ```
 
@@ -60,28 +60,19 @@ npm run build   # make sure it builds
   git commit -s -m "fix: ……"
   ```
 
-  `-s` adds a `Signed-off-by` line, certifying that you have the right to submit the code under the [Developer Certificate of Origin](https://developercertificate.org/).
-
-  This used to read "please sign off your commits", which sounds mandatory — while CI
-  never checked it and the repository's own history mostly lacks it. **Either enforce it
-  in CI or don't write it as a rule**; an unenforced rule only makes first-time
-  contributors anxious for nothing. This is a personal portfolio project, so a red gate
-  for a formality isn't worth it. If it ever becomes necessary (say, accepting
-  corporate-sourced contributions), it gets promoted to a requirement *and* a check at
-  the same time.
+  `-s` adds a `Signed-off-by` line, certifying under the [Developer Certificate of Origin](https://developercertificate.org/) that you have the right to submit the code. CI does not check it.
 
 ## Pull request flow
 
 1. Branch off `main`; keep commits focused and traceable.
 2. Describe the **motivation** and **how you verified** the change; if you touched the engine, attach a before/after comparison or tests.
 3. Target branch is `main`; CI / build must pass.
-4. A maintainer will review as soon as possible.
 
 ## Governance
 
 - **Who decides**: FenCun is maintained by a single person, [@MrBaoboer](https://github.com/MrBaoboer). The maintainer owns the product scope, deploy cadence, domain, and merge rights, and may close PRs that go out of scope, carry too much risk, or lack verification.
-- **What does not go into `main`** (the "no" list): no shopping / e-commerce, no ingredient encyclopedia, no social features, no account system, and nothing that drifts from the "fragrance-usage decision + distribution" core. Even elegant implementations of these won't be merged; see also the Four Commandments and the Architecture notes above.
-- **This section itself can be changed via PR**. Before a long-term collaborator joins, this section will first be updated to spell out responsibilities and handover — only then will permissions be granted.
+- **What does not go into `main`** (the "no" list): no shopping / e-commerce, no ingredient encyclopedia, no social features, no account system, and nothing that drifts from the "fragrance-usage decision + distribution" core. Even elegant implementations of these won't be merged.
+- **This section itself can be changed via PR**.
 
 ## Licensing of contributions
 

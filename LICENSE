@@ -679,12 +679,12 @@ Files under `public/data/` are not covered by this License. See
 
 --------------------------------------------------------------------------------
 
-以下条款依 AGPL-3.0 第 7(e) 条补充于上述许可，适用于本仓库中所有标注
-`SPDX-License-Identifier: AGPL-3.0-only` 的文件。
+以下条款是对上述许可的补充，依 AGPL-3.0 第 7(e) 条作出，适用于本仓库中所有
+标注 `SPDX-License-Identifier: AGPL-3.0-only` 的文件。
 
-  商标。本许可不授予对项目名称、标识与视觉形象的任何使用权，包括「氛寸」
-  「FenCun」「Fēn Cùn」，原样或修改后均不授予。分发或部署修改版请使用
-  你自己的名称与标识。
+  商标。无论依本许可还是其他途径，均不授予对项目名称、标识与视觉形象的任何
+  使用权，包括「氛寸」「FenCun」「Fēn Cùn」，原样或修改后皆然。分发或部署
+  修改版请使用你自己的名称与标识。
 
 `public/data/` 下的文件不在本许可范围内，见
 `LICENSES/LicenseRef-fragrance-data.txt`。

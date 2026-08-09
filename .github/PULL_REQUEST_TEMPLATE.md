@@ -16,7 +16,7 @@
 
 ## 如何验证 / How verified
 
-<!-- 改引擎请附前后对比或测试 / For engine changes, attach before/after or tests -->
+<!-- 改引擎请附前后对比 / For engine changes, attach a before/after -->
 
 ## 检查清单 / Checklist
 
@@ -24,4 +24,4 @@
 - [ ] `npm run lint` 通过 / passes
 - [ ] `npm test` 通过（改了引擎已补用例）/ passes (added cases for engine changes)
 - [ ] `npm run build` 通过 / passes
-- [ ] （建议，非必需）提交已 DCO 签名 `git commit -s` / signed off (optional)
+- [ ] （可选）提交已 DCO 签名 `git commit -s` / signed off (optional)
