@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 盘被抹掉之后的落盘契约。
 //
 // 单开一个文件是必须的：store.test.ts 刻意跑在**没有 window** 的环境里（见那个文件的头注释），

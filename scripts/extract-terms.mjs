@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 数据抽取（零依赖，可直接 node 运行）
 // 两遍流式扫描 ledecanteur/perfumes.jsonl（~509MB）：
 //   Pass1: 按 people>=50 过滤，收集 {id, popularity}

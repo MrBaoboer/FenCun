@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 简易内存限流（每个 serverless 实例内，无需外部依赖）
 // 用途：挡住单客户端狂刷 / 直接 curl 滥用，保护 DeepSeek 与和风额度。
 // 局限：Vercel 多实例时为"每实例"限流、非全局；若要强一致改用 Upstash Redis 等。

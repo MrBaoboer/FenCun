@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 分享卡片与应用图标的生成器
 //
 // 为什么要生成而不是手绘：卡片上的字体、配色、字距必须和站点本身**同源**，

@@ -13,7 +13,7 @@
 
 ## 数据
 
-`public/data/` 下的目录、索引与分片派生自 ledecanteur / Fragrantica 社区数据，版权归原始来源，不随代码按 AGPL 授权。原始数据集不在本仓库分发。
+`public/data/` 下的目录、索引与分片派生自 ledecanteur / Fragrantica 社区数据，条款见 [LicenseRef-fragrance-data](LICENSES/LicenseRef-fragrance-data.txt)。原始数据集不在本仓库分发。
 
 ## 依赖
 

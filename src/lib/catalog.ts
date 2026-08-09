@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 目录与分片的取数层。**刻意不 import MiniSearch**。
 //
 // 这两个函数原本和搜索住在同一个模块（lib/perfumes.ts），而 AppProvider 只需要

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 读盘失败的止损提示。**只在出错时出现**，正常使用永远看不到它。
 //

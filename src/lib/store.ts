@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 客户端状态（香水库 + 反馈 + 偏好），持久化到 localStorage
 import { create } from "zustand";

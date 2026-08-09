@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 依赖审计门禁：**全树审计 + 逐条具名豁免**。
 //
 // 上一版的门禁是 `npm audit --audit-level=high --omit=dev`。理由当时写得清楚：

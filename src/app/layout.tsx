@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Noto_Serif_SC } from "next/font/google";
 import "./globals.css";

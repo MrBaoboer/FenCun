@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 import type { MetadataRoute } from "next";
 
 // 加到主屏后是 standalone 打开：氛寸是"出门前看一眼"的场景，从主屏一点直达比走浏览器顺手。

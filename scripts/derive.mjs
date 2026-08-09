@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 派生纯函数（零依赖，node 运行）
 // 从 build.mjs 抽出的共享派生逻辑：季节拉普拉斯平滑占比、日夜占比、sillage 四档、
 // 风格标签、以及「原始记录 + 中文映射 → Perfume 形状」的完整装配（toPerfume）。

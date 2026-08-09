@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 演示香柜（黄金集）的不变式。
 // 演示态是初次到访者看到的**全部**产品，它出错等于产品出错——所以这些断言与引擎的同级。
 import { test } from "node:test";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // 手动记一瓶：搜索兜底的最后防线——1500 主目录和 3.6 万扩展集都没有的香（停产、小众、自调），
 // 也要能进柜、能参与推荐。没有社区数据，就按所选香调的典型情况估计，靠反馈校准。

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 规则打分引擎（确定性，可解释）—— 决策权在这里，LLM 不参与
 import type { Perfume, Context, Feel, Season, Bias } from "./types";
 import { OCCASION_WEIGHTS, FAMILY_DISCOUNT, LOUD_PENALTY } from "./occasion-priors";

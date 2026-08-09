@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 香历纯函数单测：日期键、月网格、族群色点、条目快照、备选差异标签
 import { test } from "node:test";
 import assert from "node:assert/strict";

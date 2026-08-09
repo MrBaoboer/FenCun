@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 推荐编排：打分 → 轮换加权 → 排序 → 主推 + 备选，并为每个候选附上用法/风险/理由/裁决
 import type { Perfume, Context, ScoredPick, Verdict, AvoidCause, Bias, Feedback, Occasion, SuccessConfig } from "./types";
 import { score, sweetDominates, stainProneDominates, dataConfidence, WEATHER_CAUTION, type ScoreParts } from "./scoring";

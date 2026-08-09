@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 季节 / 体感 / 时段推断 —— 不只看月份，气温同样参与判断
 import type { Season, Feel, Daypart } from "./types";
 

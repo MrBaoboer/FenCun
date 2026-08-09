@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 路由段的 layout 天然是 server component，可以导出 metadata，而 page.tsx 保持 "use client"。
 // 四个页面此前共用根 layout 的 title 与 canonical："/"，于是浏览器标签页、书签、
 // 分享卡片全是「氛寸 · 帮你用好香水」，分不清哪个是哪个；og:url 也写死首页，

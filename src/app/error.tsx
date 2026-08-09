@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 // App Router 错误边界：页面渲染出错时兜底——绝不白屏，绝不让用户以为香柜数据丢了
 import { useEffect } from "react";

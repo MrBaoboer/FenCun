@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 氛寸 · 可复用截图（系统 Chrome 无头）
 // 能 mock 天气 + 冻结时间：既用来展示最文艺的问候（云淡风轻 / 云影入夜），
 // 也用来压测最长文案是否换行 / 挤温度。产出到 .scratch/shots/。

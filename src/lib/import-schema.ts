@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 备份文件的校验层。**单独一个模块，只为让 zod 离开首屏包**。
 //
 // zod 此前从 store.ts 顶层 import 进来，于是它整个进了客户端共享 chunk：差分构建实测

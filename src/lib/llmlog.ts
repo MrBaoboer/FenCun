@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 降级可观测性：让「按设计降级」与「上游坏了」在日志里分得开。
 //
 // 两条 LLM 路由此前有八个 `return 兜底` 的分支，其中只有数字白名单那一条记日志。

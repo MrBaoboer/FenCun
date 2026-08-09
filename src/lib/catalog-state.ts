@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 目录（主 1500 款 JSON）取数失败时，要不要在页面上告诉用户。
 //
 // 判据原本是 `catalogError && lib.length < userPerfumes.length`——它是为「满柜用户不要被

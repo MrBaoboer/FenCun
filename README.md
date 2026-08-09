@@ -223,14 +223,12 @@ docs/                   产品方案 · 领域规则手册 · 数据工程 · �
 ## 参与 · 许可
 
 - **贡献**：欢迎 Issue 与 PR；动手前请读 [贡献指南](.github/CONTRIBUTING.md)——尤其是四条戒律。
-- **获取帮助**：不知道去哪问？先看 [SUPPORT](.github/SUPPORT.md) 的分流表。
+- **获取帮助**：[SUPPORT](.github/SUPPORT.md) 有分流表。
 - **行为准则**：本项目遵循 [Contributor Covenant](.github/CODE_OF_CONDUCT.md)。
 - **安全**：发现漏洞请按 [安全政策](.github/SECURITY.md) 私下报告，勿开公开 Issue。
 - **治理与路线图**：谁说了算、什么不进主线见[贡献指南 · 治理](.github/CONTRIBUTING.md#治理--governance)；路线图在 [产品方案](docs/氛寸-产品方案.md)。
-- **版权与许可**：Copyright © 2026 MrBaoboer。源代码以 **AGPL-3.0-only** 授权（见 [LICENSE](LICENSE)）；作为网络服务，若你部署修改版，请依 AGPL §13 向使用者提供对应源码。
-- **品牌**：「氛寸」名称、标识与站点文案不在 AGPL 授权范围内，依 §7(e) 保留；分发或部署修改版请使用你自己的名称与标识。
-- **数据出处**：`public/data/` 派生自 **ledecanteur / Fragrantica** 社区数据，版权归原始来源，**不随代码按 AGPL 授权**；仅供学习与展示，另作他用请自行核实来源许可。
-- **第三方**：随产物分发的字体与依赖见 [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md)。
+- **许可**：Copyright © 2026 MrBaoboer。源代码 **AGPL-3.0-only**，附 §7 商标条款——「氛寸」的名称与标识不在授权范围内（见 [LICENSE](LICENSE)）。部署修改版请依 §13 向使用者提供对应源码，并换成你自己的名称。
+- **数据与第三方**：`public/data/` 派生自 ledecanteur / Fragrantica 社区数据，条款单列（[LicenseRef-fragrance-data](LICENSES/LicenseRef-fragrance-data.txt)）；随产物分发的字体与依赖见 [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES.md)。
 
 ---
 

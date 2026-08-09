@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 "use client";
 import { SILLAGE_WORD, durationShort, nameParts } from "@/lib/format";
 import type { Perfume } from "@/lib/types";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 MrBaoboer
+// SPDX-License-Identifier: AGPL-3.0-only
+// Additional terms under AGPL-3.0 §7 — see LICENSE.
+
 // 香历（穿香日历）与备选对比的纯函数层——可单测，无副作用。
 // 香历是这个产品的记录资产：气味 × 日期 = 记忆索引。系统自动生成骨架，用户零写作负担。
 import type { Perfume, Context, WearEntry } from "./types";

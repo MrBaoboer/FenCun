@@ -43,6 +43,18 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 
+  reuse:
+    name: reuse
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # 每个文件都要带版权与许可标注。整站被抄走时能走 GitHub DMCA，前提是「我的声明
+      # 被移除了」拿得出证据；声明只写在根目录 LICENSE 里，复制一个 src/ 就绕开了。
+      # 覆盖规则见 REUSE.toml，数据目录的单独条款见 LICENSES/。
+      - name: REUSE lint
+        uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
+
   secret-scan:
     name: gitleaks
     runs-on: ubuntu-latest
