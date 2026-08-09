@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "AGPL-3.0-only",
+  "author": "MrBaoboer (https://github.com/MrBaoboer)",
   "description": "氛寸 — 基于实时情境的个人用香决策 Agent",
   "_engines注释": "运行时版本的唯一事实源。Vercel 明确规定 engines.node 覆盖项目面板里选的版本，写在这里就不必再去对一个仓库外、谁也审计不了的设置。选 24 的理由：Node 22 已于 2025-10-21 进入维护期，24 自 2025-10-28 起是 Active LTS。改这里要连同 .github/workflows/ci.yml 的 node-version 与 devDependencies 的 @types/node 一起改，三者必须同一个大版本；另有三处面向人的复述要跟上——README 的「本地运行」与两份 CONTRIBUTING 的「本地开发」。",
   "engines": {
