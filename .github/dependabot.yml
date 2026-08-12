@@ -16,26 +16,23 @@ updates:
         patterns:
           ["eslint*", "typescript", "tailwindcss", "@tailwindcss/*", "tsx", "puppeteer-core"]
     ignore:
+      # 只挡 major，minor / patch 照常跟进。
+      #
       # eslint / typescript 的 major 由 eslint-config-next 那串内置插件的 peer 范围决定，
-      # 不是我们自己能选的。每次想解禁，去核这两组声明——达标了就手动升，别等 Dependabot：
-      #   eslint 10  ← eslint-plugin-react 7.37.5 / eslint-plugin-import 2.32.0 /
-      #                eslint-plugin-jsx-a11y 6.10.2 的 peer 都封顶在 9（react 那条是 ^9.7）
+      # 不是我们能选的。想解禁就去核这两组声明，达标了手动升，别等 Dependabot：
+      #   eslint 10    ← eslint-plugin-react 7.37.5 / eslint-plugin-import 2.32.0 /
+      #                  eslint-plugin-jsx-a11y 6.10.2 的 peer 都封顶在 9（react 那条是 ^9.7）
       #   typescript 7 ← typescript-eslint 8.66.0 的 peer 是 >=4.8.4 <6.1.0；7.x 是原生编译器，
-      #                typescript-eslint 在模块加载时就 throw，lint 连启动都做不到。
-      #                现在停在 6.0.3——它落在那条 peer 范围内，四项验证全过。
-      #                ⚠️ 别信 npm 的 dist-tag：typescript 的 `beta` 至今指向 6.0.0-beta，
-      #                看上去像「6.x 还没正式版」，而 6.0.2 / 6.0.3 早已是正式发布。判断可用
-      #                版本要看 `npm view typescript versions`，不是看标签。
-      # minor / patch 仍照常跟进。
+      #                  typescript-eslint 在模块加载时就 throw，lint 连启动都做不到。
+      #   ⚠️ 别信 npm 的 dist-tag：typescript 的 `beta` 至今指向 6.0.0-beta，看上去像「6.x 还没
+      #      正式版」，而 6.0.2 / 6.0.3 早已正式发布。查可用版本用 `npm view typescript versions`。
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
-      # @types/node 跟随 Node 运行时大版本——现在是 24（见 package.json 的 engines.node，
-      # 它同时决定 CI 与 Vercel）。不跳到领先运行时的 26：那会拿到 Node 24 上并不存在的
-      # API 类型，而 Node 26 要到 2026-10-28 才是 LTS。→ 忽略其 major，minor / patch 仍在 24.x 内跟进。
-      # 运行时本身升级时，这三处要一起动：engines.node、ci.yml 的 node-version、这条 ignore；
-      # 再加三处面向人的复述：README 的「本地运行」与两份 CONTRIBUTING 的「本地开发」。
+      # @types/node 跟随运行时大版本，不跳到领先运行时的那一版——那会拿到当前 Node 上并不存在
+      # 的 API 类型。运行时升级要一起动的六处：package.json 的 engines.node、ci.yml 的
+      # node-version、本条 ignore，以及 README「本地运行」与两份 CONTRIBUTING 的「本地开发」。
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
   # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新

@@ -28,11 +28,12 @@ precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 MrBaoboer"
 SPDX-License-Identifier = "AGPL-3.0-only"
 
-# 行为准则改编自 Contributor Covenant 3.0，按其原许可发布，不随代码走 AGPL。
+# 行为准则是 Contributor Covenant 3.0 的删减改编版，按其原许可（CC BY-SA 4.0 的
+# ShareAlike 要求）发布，不随代码走 AGPL；改编部分的著作权归本项目。
 [[annotations]]
 path = [".github/CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT_EN.md"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Organization for Ethical Source"
+SPDX-FileCopyrightText = ["Organization for Ethical Source", "2026 MrBaoboer"]
 SPDX-License-Identifier = "CC-BY-SA-4.0"
 
 # 构建产物派生自社区数据，版权归原始来源，不随代码按 AGPL 授权。

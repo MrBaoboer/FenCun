@@ -48,7 +48,7 @@ export function buildSearch(perfumes: Perfume[]): MiniSearch<Perfume> {
   return ms;
 }
 
-// ===== 扩展目录（Top1500 之外的 3.6 万款，含国货白名单）=====
+// ===== 扩展目录（Top1500 之外的 3.6 万款，含汉字品牌补充放行的低票记录）=====
 // 索引在首次搜索时懒加载一次（gzip ~748KB，此后走内存），详情按 id%64 分片按需取（单片 gzip ≤95KB）。
 // 扩展候选与主目录候选合并成一张榜单（见 rankSearchHits），让"搜名秒加"对长尾香也成立——
 // 搜到英文原名，永远好过搜到一个错误的中文匹配。
