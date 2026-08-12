@@ -7,7 +7,7 @@ body:
     attributes:
       label: 问题描述 / What happened
       description: 发生了什么？你期望的是什么？ / What went wrong, and what did you expect?
-      placeholder: 例如：切到暗色模式后，天气卡的温度角标错位了……
+      placeholder: 例如：切到「暗香」主题后，天气卡的温度角标错位了……
     validations:
       required: true
   - type: textarea
@@ -42,5 +42,5 @@ body:
       options:
         - label: 我已搜索过现有 Issue，没有重复 / I searched existing issues and found no duplicate
           required: true
-        - label: 这不是安全漏洞（安全问题请走安全政策私下报告）/ This is not a security vulnerability
+        - label: 这不是安全漏洞；安全问题我会按安全政策私下报告 / This is not a security vulnerability; security reports follow the private policy
           required: true

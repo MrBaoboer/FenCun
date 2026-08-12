@@ -2,24 +2,13 @@
 
 > 中文版：[SUPPORT.md](SUPPORT.md)
 
-## Where to go
-
-| Your situation | Go to |
+| Need | Channel |
 |---|---|
-| What FenCun is / how to use it | The [README](../README.md) (Chinese) and the live demo [fencun.vercel.app](https://fencun.vercel.app) |
-| Full product write-up / roadmap | The [product doc](../docs/氛寸-产品方案.md) (Chinese; the roadmap lives there) |
-| Found a bug | Open a [Bug report](https://github.com/MrBaoboer/FenCun/issues/new?template=bug_report.yml) |
-| Have a feature idea | Open a [Feature request](https://github.com/MrBaoboer/FenCun/issues/new?template=feature_request.yml) |
-| Want to contribute | Read the [Contributing guide](CONTRIBUTING_EN.md) — especially the Four Commandments and Governance |
-| Found a security vulnerability | **Do not open a public issue** — use the [Security policy](SECURITY_EN.md) for private reporting |
+| Understand the product or run it locally | [README](../README.md) (Chinese) · [live app](https://fencun.vercel.app) |
+| Review product scope and decisions | [Product plan](../docs/氛寸-产品方案.md) (Chinese) |
+| Report a bug | [Bug report](https://github.com/MrBaoboer/FenCun/issues/new?template=bug_report.yml) |
+| Suggest a feature | [Feature request](https://github.com/MrBaoboer/FenCun/issues/new?template=feature_request.yml) |
+| Contribute code or documentation | [Contributing guide](CONTRIBUTING_EN.md) |
+| Report a security vulnerability | [Security policy](SECURITY_EN.md); do not open a public issue |
 
-## Before you ask (web app)
-
-- Browser + version and device (e.g. Chrome 141 · iPhone 15)
-- Steps to reproduce, or a link that reproduces it
-- Which page (Today / Library / Journal / Profile)
-- Expected vs actual result
-
-## About responses
-
-FenCun is maintained by a single independent developer with **no committed response time**; rough priority is: security > reproducible bugs > clear PRs > feature requests. Contact via the email published on the maintainer's profile, [@MrBaoboer](https://github.com/MrBaoboer).
+FenCun is maintained by a single independent developer and does not promise a fixed response time. Security reports, reproducible bugs, pull requests, and feature requests are generally handled in that order. For anything else, use the email published on the maintainer's profile, [@MrBaoboer](https://github.com/MrBaoboer).

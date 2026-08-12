@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        氛寸只解决「今天用哪瓶、怎么用」这一个决策——请先确认你的想法与这个定位一致。
-        FenCun solves only "which bottle today & how to wear it." Please keep suggestions aligned with that.
+        氛寸只解决「今天用哪瓶、怎么用」这一个决策，且只针对你已经拥有的香水——请说明你的想法怎么改善这条流程。
+        FenCun solves only "which bottle today & how to wear it," for perfume you already own. Please explain how the proposal improves that flow.
   - type: textarea
     id: problem
     attributes:

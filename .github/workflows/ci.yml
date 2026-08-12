@@ -30,13 +30,13 @@ jobs:
       - name: Install
         run: npm ci
       - name: Dependency audit
-        # 全树审计 + 逐条具名豁免（清单与理由在 scripts/audit-gate.mjs）。
-        # 上一版是整棵开发依赖树的匿名豁免：理由窄、手段宽——往后 tsx、puppeteer-core、
-        # 任意 eslint 插件里出现新的 high/critical 都会照样绿灯，而且没人会注意到。
+        # 全树审计 + 逐条具名豁免（清单与理由在 scripts/audit-gate.mjs）。不要退回整棵开发
+        # 依赖树的匿名豁免：那样 tsx、puppeteer-core、任意 eslint 插件里新出的 high/critical
+        # 都会照样绿灯，而且没人会注意到。
         run: node scripts/audit-gate.mjs
       - name: Lint
         run: npm run lint
-      - name: Test (engine unit tests)
+      - name: Test
         run: npm test
       - name: Build
         run: npm run build
