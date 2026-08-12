@@ -28,7 +28,7 @@ Every contribution must uphold these (full text and rationale in the [README](..
 - **Graceful degradation first** — DeepSeek timeouts and weather/geolocation failures must have fallbacks; core recommendations still work and the product never shows a blank screen.
 - **Prefer the local rules and static data that already exist**; justify any new infrastructure.
 
-The domain evidence behind the rules is in [领域规则手册](../docs/领域规则手册.md); read [声音与文案](../docs/声音与文案.md) before changing any user-visible wording. Both are in Chinese.
+The domain evidence behind the rules is in [领域规则手册](../docs/领域规则手册.md) — before adding a new criterion, check the [single-entry-point table](../docs/领域规则手册.md#同一概念的单一入口) for an existing equivalent. Read [声音与文案](../docs/声音与文案.md) before changing any user-visible wording. Both are in Chinese.
 
 ## Local development
 
