@@ -81,8 +81,16 @@ export const withinDailyBudget = makeDailyGate("LLM_DAILY_CAP", 3000);
  *
  * 与 LLM 那道一样，诚实说明它的局限：Vercel 多实例时这是「每实例」上限，不是全局上限。
  * 它是纵深防御的一层，真正的硬保险是在和风控制台给账户设配额告警与上限。
+ *
+ * 默认值从 5000 下调到 800，卡的是两条真实存在的线：
+ * · **免费额度**：和风给 5 万次/月，而天气与 GeoAPI 属同一个价格组、共用这 5 万次，
+ *   摊到每天约 1600 次。5000/天/实例意味着不到十天烧穿全月额度，之后按 0.0007 元/次计费。
+ * · **帐号级硬顶**：用 API KEY 认证时，和风自 2027-01-01 起限制 1000 次/天——注意那是
+ *   帐号级、不是每实例，超限返回 403/429，持续超限会封 IP 或冻结帐号。
+ *   （改用 JWT 认证不受这条限制，但那是另一件事，届时把这个默认值调回去即可。）
+ * 多实例会把这个数叠加，所以还要留余量：800 是「同时跑两个实例也不撞 1000」的取值。
  */
-export const withinWeatherBudget = makeDailyGate("WEATHER_DAILY_CAP", 5000);
+export const withinWeatherBudget = makeDailyGate("WEATHER_DAILY_CAP", 800);
 
 /**
  * 这个 POST 是不是本站页面发来的。
