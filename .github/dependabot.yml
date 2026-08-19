@@ -1,20 +1,29 @@
 version: 2
 updates:
-  # npm 依赖：每周检查，按用途分组减少零散 PR
+  # npm 依赖：每周检查，minor / patch 全部收进**一条** PR。
+  #
+  # 分组按「要不要人看」切，不按用途切。上一版分了 framework / types / dev-tooling 三组，
+  # 再加上没被任何 pattern 命中的依赖（zustand、zod、minisearch 各自单开），一次周更能吐出
+  # 四五条 PR——而其中改 package-lock.json 的那几条必然互相顶：先合一条，其余全部待 rebase。
+  #
+  # 现在只有两类：minor / patch 攒成一条，CI 绿了直接点合并；major 不进组，各自单开一条 PR，
+  # 逼你正眼看一遍。原来「Next / React 的 major 需人工审回归，勿盲合」那条纪律没有放松，
+  # 反而从三个包扩到了全部依赖。
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
     groups:
-      # 框架大版本单独一组：Next / React 的 major 需人工审回归，勿盲合
-      framework:
-        patterns: ["next", "react", "react-dom", "eslint-config-next"]
-      types:
-        patterns: ["@types/*"]
-      dev-tooling:
-        patterns:
-          ["eslint*", "typescript", "tailwindcss", "@tailwindcss/*", "tsx", "puppeteer-core"]
+      npm:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      # 安全更新走另一条通道：由公告触发，不看 schedule。不分组的话，同时爆两个公告
+      # 就是两条 PR。
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
     ignore:
       # 只挡 major，minor / patch 照常跟进。
       #
@@ -35,11 +44,19 @@ updates:
       # node-version、本条 ignore，以及 README「本地运行」与两份 CONTRIBUTING 的「本地开发」。
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-  # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新
+  # 保持 CI 里钉了 SHA 的第三方 Action 也能被跟进更新。
+  #
+  # 换成月更是因为它跨不过生态边界：Dependabot 的分组只在单个 updates 条目内生效，npm 与
+  # github-actions 永远是两条 PR。Action 的 SHA 一个月挪一两次，跟 npm 挤在同一周只是白白
+  # 多一条 PR；错开之后，多数周只有一条 npm PR 要点。
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
+        applies-to: version-updates
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
         patterns: ["*"]
