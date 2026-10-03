@@ -23,12 +23,22 @@ import { execSync } from "node:child_process";
  * 具名豁免。每一条都必须写清：为什么无解、什么条件下可以删掉。
  * 加一条之前先问：是真的无解，还是只是升级麻烦？
  *
- * 现在是空的——这是门禁的正常状态，不是机制失效。上一条（brace-expansion 的
+ * 清单为空是门禁的正常状态，不是机制失效。更早的一条（brace-expansion 的
  * GHSA-mh99-v99m-4gvg）当时判定「1.x 到 1.1.16 终结、无补丁版」，后来上游发了
- * 1.1.18，条件达成即删。清单空着的时候门禁行为不变：全树扫描，任何 high/critical
- * 一律红。
+ * 1.1.18，条件达成即删。
  */
-const ALLOW = [];
+const ALLOW = [
+  {
+    id: "GHSA-vfj7-8cjw-p6xm",
+    package: "braces",
+    why: "只在开发链路上（eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces），生产依赖树里没有它。"
+      + "braces 3.0.3 已是最新版，公告没有补丁版本；micromatch 4.0.8、fast-glob 3.3.3 也都是最新版，链上换不掉任何一环，"
+      + "@next/eslint-plugin-next 的 latest 与 canary 都把 fast-glob 精确钉在 3.3.1。"
+      + "唯一调用点 get-root-dirs.js 只展开 ESLint 配置里的 settings.next.rootDir；本仓库没设这一项，默认取 cwd、"
+      + "不进 fast-glob，npm run lint 全程实测 braces 调用 0 次。模式只来自开发者写的配置，不来自用户输入。",
+    until: "braces 发出修复版且 micromatch 能解析到它，或 @next/eslint-plugin-next 不再依赖 fast-glob。",
+  },
+];
 
 const allowIds = new Set(ALLOW.map((a) => a.id));
 const BLOCKING = new Set(["high", "critical"]);
