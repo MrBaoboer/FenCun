@@ -98,6 +98,16 @@ for (const a of ALLOW) {
 if (unexpected.length > 0) {
   console.error(`\n有 ${new Set(unexpected.map((f) => f.id)).size} 条未豁免的 high/critical 公告。`);
   console.error("要么升级依赖，要么在 scripts/audit-gate.mjs 的 ALLOW 里写清为什么无解、什么条件下能删。");
+  // 重跑不会合并新的 main：它检查的仍是当初那个提交（PR 是当初生成的合并提交）。
+  // 实际发生过：修复已经进了 main，旧运行被接连重跑三次，次次照红。
+  const attempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? 1);
+  if (attempt > 1) {
+    const sha = (process.env.GITHUB_SHA ?? "").slice(0, 7);
+    console.error(
+      `\n这是第 ${attempt} 次运行。重跑检查的仍是当初那个提交（${sha}），之后合进 main 的修复不在其中：`
+        + "PR 要基于新的 main 重新触发（Dependabot 的 PR 评论 @dependabot rebase），main 以最新提交的运行为准。",
+    );
+  }
   process.exit(1);
 }
 
