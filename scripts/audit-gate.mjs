@@ -70,8 +70,13 @@ for (const [name, v] of Object.entries(report.vulnerabilities ?? {})) {
     continue;
   }
   for (const a of advisories) {
-    const id = String(a.url ?? "").split("/").pop() ?? a.source;
-    findings.push({ name, id, title: a.title, severity: a.severity ?? v.severity });
+    // 包的 severity 是它名下公告的最高档，只能用来跳过整包。要按公告逐条判：否则同一个包里
+    // 只要有一条 high，旁边的 moderate 也会被拦下，还被算进「high/critical」的条数
+    const severity = a.severity ?? v.severity;
+    if (!BLOCKING.has(severity)) continue;
+    const id = String(a.url ?? "").split("/").pop() || String(a.source);
+    // 同一条公告按受影响的版本段各出一项（比如 1.x 与 5.x 各装了一份），打印时带上版本段
+    findings.push({ name, id, title: a.title, severity, range: a.range ?? "" });
   }
 }
 
@@ -80,7 +85,7 @@ const used = new Set(findings.map((f) => f.id));
 
 for (const f of findings) {
   const mark = allowIds.has(f.id) ? "· 已具名豁免" : "✖ 未豁免";
-  console.log(`${mark}  [${f.severity}] ${f.name}  ${f.id}  ${f.title ?? ""}`);
+  console.log(`${mark}  [${f.severity}] ${f.name} ${f.range}  ${f.id}  ${f.title ?? ""}`);
 }
 
 // 豁免过期也要说出来：留着一条早就不再触发的豁免，等于给未来的漏洞留了一扇没人记得的门
@@ -91,7 +96,7 @@ for (const a of ALLOW) {
 }
 
 if (unexpected.length > 0) {
-  console.error(`\n有 ${unexpected.length} 条未豁免的 high/critical 公告。`);
+  console.error(`\n有 ${new Set(unexpected.map((f) => f.id)).size} 条未豁免的 high/critical 公告。`);
   console.error("要么升级依赖，要么在 scripts/audit-gate.mjs 的 ALLOW 里写清为什么无解、什么条件下能删。");
   process.exit(1);
 }
@@ -99,5 +104,5 @@ if (unexpected.length > 0) {
 console.log(
   findings.length === 0
     ? "\n依赖审计通过：全树扫描，无 high/critical 公告。"
-    : `\n依赖审计通过：全树扫描，${findings.length} 条 high/critical 全部具名豁免。`,
+    : `\n依赖审计通过：全树扫描，${used.size} 条 high/critical 全部具名豁免。`,
 );
