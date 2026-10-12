@@ -100,12 +100,15 @@ if (unexpected.length > 0) {
   console.error("要么升级依赖，要么在 scripts/audit-gate.mjs 的 ALLOW 里写清为什么无解、什么条件下能删。");
   // 重跑不会合并新的 main：它检查的仍是当初那个提交（PR 是当初生成的合并提交）。
   // 实际发生过：修复已经进了 main，旧运行被接连重跑三次，次次照红。
+  // 另一种也发生过（#70）：main 上根本还没有修复时重跑，这时 rebase 同样救不了，
+  // 提示不能只指 rebase 这一条路。
   const attempt = Number(process.env.GITHUB_RUN_ATTEMPT ?? 1);
   if (attempt > 1) {
     const sha = (process.env.GITHUB_SHA ?? "").slice(0, 7);
     console.error(
-      `\n这是第 ${attempt} 次运行。重跑检查的仍是当初那个提交（${sha}），之后合进 main 的修复不在其中：`
-        + "PR 要基于新的 main 重新触发（Dependabot 的 PR 评论 @dependabot rebase），main 以最新提交的运行为准。",
+      `\n这是第 ${attempt} 次运行。重跑检查的仍是当初那个提交（${sha}），之后合进 main 的修复不在其中。\n`
+        + "· 修复已在 main 上：PR 要基于新的 main 重新触发（Dependabot 的 PR 评论 @dependabot rebase），main 以最新提交的运行为准。\n"
+        + "· main 上也还没修：重跑与 rebase 都只会照红，得先升级依赖或写豁免，见 docs/开发与维护.md §8.5。",
     );
   }
   process.exit(1);
