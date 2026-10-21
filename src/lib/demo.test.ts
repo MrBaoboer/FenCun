@@ -92,7 +92,7 @@ test("演示香柜：夏天的今日之选推得出来，且不是「今天不�
     tempC: 31, humidity: 55, windSpeed: 0, weatherText: "晴", city: DEMO_CITY,
     feel: "hot_dry", daypart: "day", season: "summer", occasion: "commute",
   };
-  const rec = recommend(lib, ctx, aggregateBias(d.feedbacks), { now: NOW });
+  const rec = recommend(lib, ctx, aggregateBias(d.feedbacks, NOW), { now: NOW });
   assert.ok(rec.primary, "演示香柜推不出主推");
   assert.notEqual(rec.primary!.verdict, "avoid");
   assert.ok(rec.alternatives.length >= 2, "演示香柜给不出备选对比");
@@ -105,7 +105,7 @@ test("演示香柜：存在吃灰素材（搁置超 21 天、且今天判 good �
     tempC: 31, humidity: 55, windSpeed: 0, weatherText: "晴", city: DEMO_CITY,
     feel: "hot_dry", daypart: "day", season: "summer", occasion: "commute",
   };
-  const bias = aggregateBias(d.feedbacks);
+  const bias = aggregateBias(d.feedbacks, NOW);
   const dusty = d.userPerfumes.filter((u) => u.lastWornAt != null && NOW - u.lastWornAt! > 21 * DAY);
   assert.ok(dusty.length >= 1, "演示香柜里没有吃灰的瓶，吃灰提醒会哑火");
   assert.ok(
@@ -124,7 +124,7 @@ test("演示香柜：最常喷的瓶唯一，天气突变预警走 habit 主线�
 test("演示香柜：反馈序列足以形成用香习惯，画像页不空白", () => {
   const d = buildDemoState(catalog, NOW)!;
   assert.ok(d.feedbacks.length >= 2, "反馈少于 2 条，hasHistory 不成立");
-  const bias = aggregateBias(d.feedbacks);
+  const bias = aggregateBias(d.feedbacks, NOW);
   assert.ok(bias.size >= 2, "反馈没有聚合出任何偏置，壁垒在演示里看不见");
   // 画像页的「氛寸学到的偏好」以 |perceivedStrength| ≥ 0.4 为门槛（profile/page.tsx）。
   // 演示里必须真的越过它——否则最能体现"反馈序列是唯一壁垒"的那一栏是空的，
@@ -197,7 +197,7 @@ test("演示香柜：四季都弹得出两张发现型钩子（产品自称的�
     const d = buildDemoState(catalog, now)!;
     const byId = new Map(catalog.map((p) => [p.id, p]));
     const lib = d.userPerfumes.map((u) => byId.get(u.perfumeId)!);
-    const bias = aggregateBias(d.feedbacks);
+    const bias = aggregateBias(d.feedbacks, now);
     const ctx = ctxFor(now, s.tempC, s.humidity);
     const rec = recommend(lib, ctx, bias, {
       daySeed: Math.floor(now / 86400000),
@@ -236,7 +236,8 @@ test("演示香柜：四季的最常喷瓶都唯一，且反馈足以让壁垒�
     assert.ok(counts[0] > 1, `${s.label}：wornCount 未超过 maxWorn 初值，预警会退回冷启动`);
     // 画像页「氛寸学到的偏好」门槛是 |perceivedStrength| ≥ 0.4：
     // 同一瓶必须凑够两次「太冲了」，单次会被时间衰减吃到够不着。
-    const bias = aggregateBias(d.feedbacks);
+    // 衰减必须按这一季的 now 算：按跑测试那天算，春季那组反馈在 2026-10-18 之后就被衰减到门槛以下了。
+    const bias = aggregateBias(d.feedbacks, now);
     assert.ok(
       [...bias.values()].some((b) => Math.abs(b.perceivedStrength) >= 0.4),
       `${s.label}：没有一瓶跨过画像页门槛，壁垒在演示里是隐形的`

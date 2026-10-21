@@ -25,7 +25,7 @@ export default function ProfilePage() {
   // 待确认的导入：文件已读、已校验，但还没落盘——覆盖必须由用户在看到差额后亲手点下
   const [pending, setPending] = useState<{ raw: string; preview: ImportPreview } | null>(null);
   // 回到初次打开那副样子的入口（示例态不在界面上自报身份——那对初次到访的人是打扰）
-  const { catalog, resolveByCity } = useApp();
+  const { catalog, resolveByCity, nowMinute } = useApp();
   const resetToDemo = useStore((s) => s.resetToDemo);
   const [demoConfirm, setDemoConfirm] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +98,7 @@ export default function ProfilePage() {
 
   // 偏好画像：按"每瓶各自的反馈"聚合（与打分/用法引擎口径一致——偏移是单香维度的，不是全局默认）
   const learned = useMemo(() => {
-    const bias = aggregateBias(feedbacks);
+    const bias = aggregateBias(feedbacks, nowMinute);
     let strongN = 0;
     let weakN = 0;
     for (const b of bias.values()) {
@@ -115,7 +115,7 @@ export default function ProfilePage() {
     if (lines.length === 0)
       lines.push("多答几次「今天，刚好吗」，这里会记下你对每瓶的分寸。");
     return lines;
-  }, [feedbacks]);
+  }, [feedbacks, nowMinute]);
 
   const recent = useMemo(
     () => [...feedbacks].sort((a, b) => b.at - a.at).slice(0, 8),

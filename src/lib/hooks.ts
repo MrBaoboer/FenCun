@@ -100,15 +100,17 @@ export function useRecommendation(ctx: Context | null) {
   const swapAways = useStore((s) => s.swapAways);
   return useMemo(() => {
     if (!ctx || lib.length === 0) return null;
-    const bias = aggregateBias(feedbacks);
+    // 只读一次时钟：偏置衰减、轮换种子与新鲜度用的是同一个「现在」
+    const now = Date.now();
+    const bias = aggregateBias(feedbacks, now);
     // 本地日历日做轮换种子：跨天在本地零点切换，而不是 UTC 零点（北京早上 8 点）——
     // "今日推荐"不能在"今天"进行到 1/3 时换答案
-    const daySeed = Math.floor(dayFloor(Date.now()) / (24 * 3600 * 1000));
+    const daySeed = Math.floor(dayFloor(now) / (24 * 3600 * 1000));
     const lastWornAt = new Map(
       userPerfumes.filter((u) => u.lastWornAt != null).map((u) => [u.perfumeId, u.lastWornAt!])
     );
     const swapMap = new Map(Object.entries(swapAways).map(([k, v]) => [Number(k), v]));
-    return recommend(lib, ctx, bias, { daySeed, lastWornAt, swapAways: swapMap });
+    return recommend(lib, ctx, bias, { daySeed, lastWornAt, swapAways: swapMap, now });
   }, [lib, ctx, feedbacks, userPerfumes, swapAways]);
 }
 
