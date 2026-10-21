@@ -278,7 +278,11 @@ export function recommend(
 // 由反馈聚合为个人偏置（简单、可感、不需大数据）。
 // 设计要点：① 正负双向信号 + 按月轻度衰减（口味会变，偏置不能只增不减、锁死不动）；
 // ② 环境归因过的"淡了"不进喷量校准（那笔算天气的）；③「刚好」沉淀成功配置，供同情境直接复用。
-export function aggregateBias(feedbacks: Feedback[], now = Date.now()): Map<number, Bias> {
+//
+// now 不给默认值。它曾默认取 Date.now()，漏传照样能跑：演示香柜的四季用例漏传过，衰减按
+// 「跑测试的那天」算，2026-10-18 起一行没改就红了；pickNudges 收了 now 却没往下传，同样的
+// 输入换一天就给出不同的卡片。漏传必须是类型错误，而不是一颗定时炸弹。
+export function aggregateBias(feedbacks: Feedback[], now: number): Map<number, Bias> {
   const grouped = new Map<number, Feedback[]>();
   for (const f of feedbacks) {
     if (!grouped.has(f.perfumeId)) grouped.set(f.perfumeId, []);

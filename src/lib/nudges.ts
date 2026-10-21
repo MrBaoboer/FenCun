@@ -47,7 +47,7 @@ export interface NudgeInput {
 }
 
 export function pickNudges({ lib, userPerfumes, feedbacks, ctx, rec, now }: NudgeInput): Nudge[] {
-  const bias = aggregateBias(feedbacks);
+  const bias = aggregateBias(feedbacks, now);
   const primaryId = rec.primary?.perfume.id;
   const byId = new Map(lib.map((p) => [p.id, p]));
   const uById = new Map(userPerfumes.map((u) => [u.perfumeId, u]));

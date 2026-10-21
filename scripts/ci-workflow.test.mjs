@@ -23,19 +23,40 @@ test("gitleaks scans full history without event-derived commit ranges", async ()
   assert.match(workflow, /GIT_CONFIG_VALUE_0:\s+\/github\/workspace/);
 });
 
+const jobBlock = (workflow, name) =>
+  workflow.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:\\n|(?![\\s\\S]))`, "m"))?.[1];
+
 test("CI blocks high-severity vulnerabilities in shipped dependencies", async () => {
   const workflow = (await readFile(workflowUrl, "utf8")).replaceAll("\r\n", "\n");
-  const verifyJob = workflow.match(
-    /^  verify:\n([\s\S]*?)(?=^  [\w-]+:\n|(?![\s\S]))/m,
-  );
+  const auditJob = jobBlock(workflow, "audit");
 
-  assert.ok(verifyJob, "CI workflow must define the verify job");
-  // 允许 run 之前有注释行（记录门禁口径的理由），但 Install → Dependency audit
-  // 的相邻顺序与命令本身仍然锁死
+  assert.ok(auditJob, "CI workflow must define the audit job");
+  // 审计单独成 job、只读提交里的锁文件：不装依赖，中间也就没有任何一步能改动它审的那棵树。
+  // 允许 run 之前有注释行（记录门禁口径的理由），命令本身锁死。
   assert.match(
-    verifyJob[1],
-    /^      - name: Install\n        run: npm ci\n      - name: Dependency audit\n(?:        #[^\n]*\n)*        run: node scripts\/audit-gate\.mjs$/m,
+    auditJob,
+    /^      - name: Dependency audit\n(?:        #[^\n]*\n)*        run: node scripts\/audit-gate\.mjs$/m,
   );
+  assert.doesNotMatch(auditJob, /^\s+run:.*\bnpm (ci|install|i)\b/m);
+  // 门禁不许被条件或 continue-on-error 悄悄架空
+  assert.doesNotMatch(auditJob, /^\s+if:/m);
+  assert.doesNotMatch(workflow, /^\s+continue-on-error:/m);
+});
+
+test("lint、test、build 互不阻断：一轮 CI 就把问题全摆出来", async () => {
+  // PR #73 红在 test，build 根本没跑——依赖升级到底能不能构建，要等下一轮才知道。
+  // 三步都只以「依赖装上了」为前提；装依赖失败时一起跳过，那时它们只会报同一个错。
+  const workflow = (await readFile(workflowUrl, "utf8")).replaceAll("\r\n", "\n");
+  const verifyJob = jobBlock(workflow, "verify");
+  assert.ok(verifyJob, "CI workflow must define the verify job");
+  assert.match(verifyJob, /^      - name: Install\n        id: install\n        run: npm ci$/m);
+  for (const [name, cmd] of [["Lint", "npm run lint"], ["Test", "npm test"], ["Build", "npm run build"]]) {
+    assert.match(
+      verifyJob,
+      new RegExp(`^      - name: ${name}\\n        if: \\$\\{\\{ !cancelled\\(\\) && steps\\.install\\.outcome == 'success' \\}\\}\\n        run: ${cmd}$`, "m"),
+      `${name} 必须在依赖装上之后无条件运行`,
+    );
+  }
 });
 
 test("每一条依赖豁免都必须写清为什么无解、什么条件下能删", async () => {
@@ -84,6 +105,22 @@ test("新增的测试文件不许静默不跑：npm test 的清单必须覆盖�
 
   const missing = found.filter((f) => !script.includes(f));
   assert.deepEqual(missing, [], `这些测试文件不在 npm test 的清单里，永远不会被执行：${missing.join(", ")}`);
+});
+
+test("测试结果只由提交决定：npm test 跑在固定的时钟与时区上", async () => {
+  // 演示香柜的四季用例漏传过 now，衰减按跑测试那天算：同一个提交 2026-10-16 绿、10-18 起红，
+  // 红在一个只动了锁文件的依赖 PR 上。scripts/test-clock.mjs 把时钟钉在 2031 年、时区钉在
+  // Asia/Shanghai；它从 test 脚本里被拿掉，或者装上了却没生效，这条都要红。
+  const root = new URL("../", import.meta.url);
+  const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  assert.match(pkg.scripts.test, / --import \.\/scripts\/test-clock\.mjs /);
+
+  // 只看脚本文本不够：路径写错时字面量照样在。直接量本进程——这个文件就是 npm test 跑起来的。
+  const src = await readFile(new URL("./test-clock.mjs", import.meta.url), "utf8");
+  const iso = src.match(/TEST_EPOCH = Date\.parse\("([^"]+)"\)/)?.[1];
+  assert.ok(iso, "test-clock.mjs 里找不到 TEST_EPOCH");
+  assert.ok(Math.abs(Date.now() - Date.parse(iso)) < 30 * 60_000, "测试进程的时钟没有被固定");
+  assert.equal(new Date().getTimezoneOffset(), -480, "测试进程的时区不是 Asia/Shanghai");
 });
 
 test("源码里不许出现裸控制字符——否则 git 把整个文件判成二进制，评审里就看不见它了", async () => {

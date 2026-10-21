@@ -39,7 +39,7 @@ export default function TodayPage() {
   const recordSwap = useStore((s) => s.recordSwap);
   const recordDustyAdopt = useStore((s) => s.recordDustyAdopt);
   const hydrated = useStore((s) => s.hydrated);
-  const { catalog, catalogError, retryCatalog } = useApp();
+  const { catalog, catalogError, retryCatalog, nowMinute } = useApp();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -55,7 +55,7 @@ export default function TodayPage() {
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
-  const bias = useMemo(() => aggregateBias(feedbacks), [feedbacks]);
+  const bias = useMemo(() => aggregateBias(feedbacks, nowMinute), [feedbacks, nowMinute]);
 
   const activePick = useMemo(() => {
     if (!ctx) return null;

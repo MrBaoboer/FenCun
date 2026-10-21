@@ -14,6 +14,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 审计单独成 job。它红的原因几乎总是「上游新收录了一条公告」而不是这次的改动；
+  # 排在 lint · test · build 前面时，它一红后面三步全被跳过，PR 页面上分不出是改坏了
+  # 还是外面变了。npm audit 只读锁文件，所以这里不装依赖。
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Dependency audit
+        # 全树审计 + 逐条具名豁免（清单与理由在 scripts/audit-gate.mjs）。不要退回整棵开发
+        # 依赖树的匿名豁免：那样 tsx、puppeteer-core、任意 eslint 插件里新出的 high/critical
+        # 都会照样绿灯，而且没人会注意到。
+        run: node scripts/audit-gate.mjs
+
   verify:
     name: lint · test · build
     runs-on: ubuntu-latest
@@ -28,17 +47,18 @@ jobs:
           node-version: 24
           cache: npm
       - name: Install
+        id: install
         run: npm ci
-      - name: Dependency audit
-        # 全树审计 + 逐条具名豁免（清单与理由在 scripts/audit-gate.mjs）。不要退回整棵开发
-        # 依赖树的匿名豁免：那样 tsx、puppeteer-core、任意 eslint 插件里新出的 high/critical
-        # 都会照样绿灯，而且没人会注意到。
-        run: node scripts/audit-gate.mjs
+      # 下面三步互不阻断：test 红了 build 照样跑，一轮就把问题全摆出来，
+      # 不会修好一个、下一轮才冒出下一个。依赖没装上时一起跳过。
       - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run lint
       - name: Test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm test
       - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
